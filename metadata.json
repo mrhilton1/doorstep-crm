@@ -1,0 +1,10 @@
+{
+  "name": "DoorStep CRM",
+  "description": "Mobile-first door-to-door sales CRM with map-centric property tracking and status management.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

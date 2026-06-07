@@ -12,7 +12,7 @@ DoorStep CRM should not be modeled as a lead-first app. The long-term product go
 
 For this build, the primary object is the address.
 
-An address can represent a house, business location, account location, service location, canvassing stop, or future business object anchor. Contacts belong to, relate to, or communicate on behalf of an address, but the address remains the stable CRM record. In future versions, the same platform should be able to support other primary objects such as vehicles, deals, accounts, assets, or any custom object type.
+An address can represent a house, business location, account location, service location, or canvassing stop. Contacts belong to, relate to, or communicate on behalf of that address, but the address remains the stable CRM record. In future versions, the same platform should be able to support other primary objects such as vehicles, deals, accounts, assets, or any custom object type.
 
 Current language should gradually move from:
 
@@ -36,7 +36,7 @@ The refactor should therefore be more than a file split. It should move the app 
 | Build | Vite 6 |
 | Styling | Tailwind CSS v4 |
 | Animation | Motion / Framer Motion |
-| Maps primary | Leaflet / react-lelet |
+| Maps primary | Leaflet / react-leaflet |
 | Maps fallback or optional provider | Google Maps via `@vis.gl/react-google-maps` |
 | Geocoding | Nominatim / OSM plus Google Places API |
 | Icons | lucide-react |

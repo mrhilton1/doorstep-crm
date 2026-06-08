@@ -7,29 +7,58 @@
 create schema if not exists doorstep;
 create extension if not exists pgcrypto with schema extensions;
 
-create type doorstep.workspace_member_status as enum ('invited', 'active', 'disabled');
-create type doorstep.address_type as enum ('residential', 'commercial');
-create type doorstep.address_stage as enum ('prospect', 'lead', 'opportunity', 'customer');
-create type doorstep.address_status as enum ('not_visited', 'knocked', 'no_answer', 'interested', 'follow_up_needed');
-create type doorstep.record_object_type as enum ('address', 'contact', 'quote', 'invoice', 'appointment');
-create type doorstep.activity_type as enum (
-  'note',
-  'knock',
-  'call',
-  'text',
-  'meeting',
-  'status_change',
-  'stage_change',
-  'label_change',
-  'contact_change',
-  'quote_event',
-  'appointment_event',
-  'invoice_event',
-  'payment_event',
-  'system'
-);
+do $$
+begin
+  create type doorstep.workspace_member_status as enum ('invited', 'active', 'disabled');
+exception when duplicate_object then null;
+end $$;
 
-create table doorstep.profiles (
+do $$
+begin
+  create type doorstep.address_type as enum ('residential', 'commercial');
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type doorstep.address_stage as enum ('prospect', 'lead', 'opportunity', 'customer');
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type doorstep.address_status as enum ('not_visited', 'knocked', 'no_answer', 'interested', 'follow_up_needed');
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type doorstep.record_object_type as enum ('address', 'contact', 'quote', 'invoice', 'appointment');
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type doorstep.activity_type as enum (
+    'note',
+    'knock',
+    'call',
+    'text',
+    'meeting',
+    'status_change',
+    'stage_change',
+    'label_change',
+    'contact_change',
+    'quote_event',
+    'appointment_event',
+    'invoice_event',
+    'payment_event',
+    'system'
+  );
+exception when duplicate_object then null;
+end $$;
+
+create table if not exists doorstep.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text unique,
   full_name text,
@@ -40,7 +69,7 @@ create table doorstep.profiles (
   updated_at timestamptz not null default now()
 );
 
-create table doorstep.workspaces (
+create table if not exists doorstep.workspaces (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text unique,
@@ -51,7 +80,7 @@ create table doorstep.workspaces (
   deleted_by uuid references doorstep.profiles(id)
 );
 
-create table doorstep.roles (
+create table if not exists doorstep.roles (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   system_key text not null,
@@ -64,25 +93,25 @@ create table doorstep.roles (
   unique (workspace_id, system_key)
 );
 
-create table doorstep.permissions (
+create table if not exists doorstep.permissions (
   key text primary key,
   description text not null
 );
 
-create table doorstep.role_permissions (
+create table if not exists doorstep.role_permissions (
   role_id uuid not null references doorstep.roles(id) on delete cascade,
   permission_key text not null references doorstep.permissions(key) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (role_id, permission_key)
 );
 
-create table doorstep.entitlements (
+create table if not exists doorstep.entitlements (
   key text primary key,
   description text not null,
   enabled_by_default boolean not null default true
 );
 
-create table doorstep.workspace_entitlements (
+create table if not exists doorstep.workspace_entitlements (
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   entitlement_key text not null references doorstep.entitlements(key) on delete cascade,
   enabled boolean not null default true,
@@ -90,7 +119,7 @@ create table doorstep.workspace_entitlements (
   primary key (workspace_id, entitlement_key)
 );
 
-create table doorstep.workspace_members (
+create table if not exists doorstep.workspace_members (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   user_id uuid not null references doorstep.profiles(id) on delete cascade,
@@ -102,7 +131,7 @@ create table doorstep.workspace_members (
   unique (workspace_id, user_id)
 );
 
-create table doorstep.addresses (
+create table if not exists doorstep.addresses (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   display_address text not null,
@@ -128,11 +157,11 @@ create table doorstep.addresses (
   unique (workspace_id, normalized_address)
 );
 
-create index addresses_workspace_active_idx
+create index if not exists addresses_workspace_active_idx
   on doorstep.addresses (workspace_id, updated_at desc)
   where deleted_at is null;
 
-create table doorstep.contacts (
+create table if not exists doorstep.contacts (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   first_name text,
@@ -153,11 +182,11 @@ create table doorstep.contacts (
   deleted_by uuid references doorstep.profiles(id)
 );
 
-create index contacts_workspace_active_idx
+create index if not exists contacts_workspace_active_idx
   on doorstep.contacts (workspace_id, updated_at desc)
   where deleted_at is null;
 
-create table doorstep.address_contacts (
+create table if not exists doorstep.address_contacts (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   address_id uuid not null references doorstep.addresses(id) on delete cascade,
@@ -168,11 +197,11 @@ create table doorstep.address_contacts (
   unique (address_id, contact_id)
 );
 
-create unique index address_contacts_one_primary_idx
+create unique index if not exists address_contacts_one_primary_idx
   on doorstep.address_contacts (address_id)
   where is_primary;
 
-create table doorstep.labels (
+create table if not exists doorstep.labels (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   object_type doorstep.record_object_type not null,
@@ -187,7 +216,7 @@ create table doorstep.labels (
   unique (workspace_id, object_type, name)
 );
 
-create table doorstep.record_labels (
+create table if not exists doorstep.record_labels (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   label_id uuid not null references doorstep.labels(id) on delete cascade,
@@ -198,7 +227,7 @@ create table doorstep.record_labels (
   unique (label_id, record_type, record_id)
 );
 
-create table doorstep.activities (
+create table if not exists doorstep.activities (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references doorstep.workspaces(id) on delete cascade,
   address_id uuid references doorstep.addresses(id) on delete cascade,
@@ -211,7 +240,7 @@ create table doorstep.activities (
   created_at timestamptz not null default now()
 );
 
-create index activities_address_idx
+create index if not exists activities_address_idx
   on doorstep.activities (address_id, created_at desc);
 
 create or replace function doorstep.set_updated_at()
@@ -224,30 +253,37 @@ begin
 end;
 $$;
 
+drop trigger if exists profiles_set_updated_at on doorstep.profiles;
 create trigger profiles_set_updated_at
 before update on doorstep.profiles
 for each row execute function doorstep.set_updated_at();
 
+drop trigger if exists workspaces_set_updated_at on doorstep.workspaces;
 create trigger workspaces_set_updated_at
 before update on doorstep.workspaces
 for each row execute function doorstep.set_updated_at();
 
+drop trigger if exists roles_set_updated_at on doorstep.roles;
 create trigger roles_set_updated_at
 before update on doorstep.roles
 for each row execute function doorstep.set_updated_at();
 
+drop trigger if exists workspace_members_set_updated_at on doorstep.workspace_members;
 create trigger workspace_members_set_updated_at
 before update on doorstep.workspace_members
 for each row execute function doorstep.set_updated_at();
 
+drop trigger if exists addresses_set_updated_at on doorstep.addresses;
 create trigger addresses_set_updated_at
 before update on doorstep.addresses
 for each row execute function doorstep.set_updated_at();
 
+drop trigger if exists contacts_set_updated_at on doorstep.contacts;
 create trigger contacts_set_updated_at
 before update on doorstep.contacts
 for each row execute function doorstep.set_updated_at();
 
+drop trigger if exists labels_set_updated_at on doorstep.labels;
 create trigger labels_set_updated_at
 before update on doorstep.labels
 for each row execute function doorstep.set_updated_at();
@@ -415,128 +451,156 @@ alter table doorstep.labels enable row level security;
 alter table doorstep.record_labels enable row level security;
 alter table doorstep.activities enable row level security;
 
+drop policy if exists "profiles can read themselves and platform owners read all" on doorstep.profiles;
 create policy "profiles can read themselves and platform owners read all"
 on doorstep.profiles for select
 using (id = auth.uid() or doorstep.is_platform_owner());
 
+drop policy if exists "profiles can update themselves" on doorstep.profiles;
 create policy "profiles can update themselves"
 on doorstep.profiles for update
 using (id = auth.uid())
 with check (id = auth.uid());
 
+drop policy if exists "workspace members can read workspaces" on doorstep.workspaces;
 create policy "workspace members can read workspaces"
 on doorstep.workspaces for select
 using (doorstep.is_workspace_member(id) and deleted_at is null);
 
+drop policy if exists "authenticated users can create workspaces" on doorstep.workspaces;
 create policy "authenticated users can create workspaces"
 on doorstep.workspaces for insert
 to authenticated
 with check (created_by = auth.uid());
 
+drop policy if exists "workspace admins can update workspaces" on doorstep.workspaces;
 create policy "workspace admins can update workspaces"
 on doorstep.workspaces for update
 using (doorstep.has_workspace_permission(id, 'workspace.manage'))
 with check (doorstep.has_workspace_permission(id, 'workspace.manage'));
 
+drop policy if exists "workspace members can read roles" on doorstep.roles;
 create policy "workspace members can read roles"
 on doorstep.roles for select
 using (doorstep.is_workspace_member(workspace_id));
 
+drop policy if exists "workspace admins can manage roles" on doorstep.roles;
 create policy "workspace admins can manage roles"
 on doorstep.roles for all
 using (doorstep.has_workspace_permission(workspace_id, 'roles.manage'))
 with check (doorstep.has_workspace_permission(workspace_id, 'roles.manage'));
 
+drop policy if exists "workspace members can read memberships" on doorstep.workspace_members;
 create policy "workspace members can read memberships"
 on doorstep.workspace_members for select
 using (doorstep.is_workspace_member(workspace_id));
 
+drop policy if exists "workspace admins can manage memberships" on doorstep.workspace_members;
 create policy "workspace admins can manage memberships"
 on doorstep.workspace_members for all
 using (doorstep.has_workspace_permission(workspace_id, 'members.manage'))
 with check (doorstep.has_workspace_permission(workspace_id, 'members.manage'));
 
+drop policy if exists "authenticated users can read permissions" on doorstep.permissions;
 create policy "authenticated users can read permissions"
 on doorstep.permissions for select
 to authenticated
 using (true);
 
+drop policy if exists "authenticated users can read role permissions" on doorstep.role_permissions;
 create policy "authenticated users can read role permissions"
 on doorstep.role_permissions for select
 to authenticated
 using (true);
 
+drop policy if exists "authenticated users can read entitlements" on doorstep.entitlements;
 create policy "authenticated users can read entitlements"
 on doorstep.entitlements for select
 to authenticated
 using (true);
 
+drop policy if exists "workspace members can read workspace entitlements" on doorstep.workspace_entitlements;
 create policy "workspace members can read workspace entitlements"
 on doorstep.workspace_entitlements for select
 using (doorstep.is_workspace_member(workspace_id));
 
+drop policy if exists "platform owners can manage entitlements" on doorstep.workspace_entitlements;
 create policy "platform owners can manage entitlements"
 on doorstep.workspace_entitlements for all
 using (doorstep.is_platform_owner())
 with check (doorstep.is_platform_owner());
 
+drop policy if exists "workspace members can read active addresses" on doorstep.addresses;
 create policy "workspace members can read active addresses"
 on doorstep.addresses for select
 using (doorstep.is_workspace_member(workspace_id) and (deleted_at is null or doorstep.is_platform_owner()));
 
+drop policy if exists "sales users can create addresses" on doorstep.addresses;
 create policy "sales users can create addresses"
 on doorstep.addresses for insert
 with check (doorstep.has_workspace_permission(workspace_id, 'addresses.write') and created_by = auth.uid());
 
+drop policy if exists "sales users can update addresses" on doorstep.addresses;
 create policy "sales users can update addresses"
 on doorstep.addresses for update
 using (doorstep.has_workspace_permission(workspace_id, 'addresses.write'))
 with check (doorstep.has_workspace_permission(workspace_id, 'addresses.write'));
 
+drop policy if exists "workspace members can read active contacts" on doorstep.contacts;
 create policy "workspace members can read active contacts"
 on doorstep.contacts for select
 using (doorstep.is_workspace_member(workspace_id) and (deleted_at is null or doorstep.is_platform_owner()));
 
+drop policy if exists "sales users can create contacts" on doorstep.contacts;
 create policy "sales users can create contacts"
 on doorstep.contacts for insert
 with check (doorstep.has_workspace_permission(workspace_id, 'contacts.write') and created_by = auth.uid());
 
+drop policy if exists "sales users can update contacts" on doorstep.contacts;
 create policy "sales users can update contacts"
 on doorstep.contacts for update
 using (doorstep.has_workspace_permission(workspace_id, 'contacts.write'))
 with check (doorstep.has_workspace_permission(workspace_id, 'contacts.write'));
 
+drop policy if exists "workspace members can read address contacts" on doorstep.address_contacts;
 create policy "workspace members can read address contacts"
 on doorstep.address_contacts for select
 using (doorstep.is_workspace_member(workspace_id));
 
+drop policy if exists "sales users can manage address contacts" on doorstep.address_contacts;
 create policy "sales users can manage address contacts"
 on doorstep.address_contacts for all
 using (doorstep.has_workspace_permission(workspace_id, 'contacts.write'))
 with check (doorstep.has_workspace_permission(workspace_id, 'contacts.write'));
 
+drop policy if exists "workspace members can read active labels" on doorstep.labels;
 create policy "workspace members can read active labels"
 on doorstep.labels for select
 using (doorstep.is_workspace_member(workspace_id) and (deleted_at is null or doorstep.is_platform_owner()));
 
+drop policy if exists "workspace admins can manage labels" on doorstep.labels;
 create policy "workspace admins can manage labels"
 on doorstep.labels for all
 using (doorstep.has_workspace_permission(workspace_id, 'labels.manage'))
 with check (doorstep.has_workspace_permission(workspace_id, 'labels.manage'));
 
+drop policy if exists "workspace members can read record labels" on doorstep.record_labels;
 create policy "workspace members can read record labels"
 on doorstep.record_labels for select
 using (doorstep.is_workspace_member(workspace_id));
 
+drop policy if exists "sales users can manage record labels" on doorstep.record_labels;
 create policy "sales users can manage record labels"
 on doorstep.record_labels for all
 using (doorstep.has_workspace_permission(workspace_id, 'labels.assign'))
 with check (doorstep.has_workspace_permission(workspace_id, 'labels.assign'));
 
+drop policy if exists "workspace members can read activities" on doorstep.activities;
 create policy "workspace members can read activities"
 on doorstep.activities for select
 using (doorstep.is_workspace_member(workspace_id));
 
+drop policy if exists "workspace members can create activities" on doorstep.activities;
 create policy "workspace members can create activities"
 on doorstep.activities for insert
 with check (doorstep.is_workspace_member(workspace_id) and actor_user_id = auth.uid());

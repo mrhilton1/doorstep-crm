@@ -379,6 +379,14 @@ begin
     raise exception 'Authentication is required to create a workspace.';
   end if;
 
+  insert into doorstep.profiles (id, email, username)
+  values (
+    auth.uid(),
+    auth.jwt() ->> 'email',
+    coalesce(auth.jwt() ->> 'email', auth.uid()::text)
+  )
+  on conflict (id) do nothing;
+
   insert into doorstep.workspaces (name, slug, created_by)
   values (workspace_name, workspace_slug, auth.uid())
   returning id into new_workspace_id;

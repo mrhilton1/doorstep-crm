@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { 
   APIProvider, 
   Map as GoogleMap, 
@@ -103,6 +104,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { cn } from './lib/utils';
 import HomeDashboard from './components/HomeDashboard';
 import OverdueInvoicesOverlay from './components/OverdueInvoicesOverlay';
+import { doorstepDb, hasSupabaseConfig, supabase } from './lib/supabase';
 import { 
   PropertyContact, 
   PropertyStatus, 
@@ -169,6 +171,102 @@ const normalizeAddress = (addr: string) => {
 };
 
 const STAGE_ORDER: PropertyStage[] = ['prospect', 'lead', 'opportunity', 'customer'];
+
+type WorkspaceContext = {
+  workspaceId: string | null;
+  workspaceName: string;
+  userId: string | null;
+  userEmail: string | null;
+  onSignOut: () => void;
+};
+
+type WorkspaceMembership = {
+  workspace_id: string;
+  workspaces?: { name?: string | null } | { name?: string | null }[] | null;
+};
+
+const statusToDb: Record<PropertyStatus, string> = {
+  'Not Visited': 'not_visited',
+  'Knocked': 'knocked',
+  'No Answer': 'no_answer',
+  'Interested': 'interested',
+  'Follow-Up Needed': 'follow_up_needed',
+};
+
+const statusFromDb: Record<string, PropertyStatus> = {
+  not_visited: 'Not Visited',
+  knocked: 'Knocked',
+  no_answer: 'No Answer',
+  interested: 'Interested',
+  follow_up_needed: 'Follow-Up Needed',
+};
+
+const propertyToAddressRow = (property: PropertyContact, workspaceId: string, userId: string | null) => ({
+  id: property.id,
+  workspace_id: workspaceId,
+  display_address: property.address,
+  normalized_address: normalizeAddress(property.address),
+  lat: property.lat,
+  lng: property.lng,
+  type: property.type === 'Commercial' ? 'commercial' : 'residential',
+  stage: property.stage,
+  status: statusToDb[property.status] || 'not_visited',
+  business_name: property.businessName || null,
+  notes: property.notes || '',
+  custom_data: {
+    firstName: property.firstName || '',
+    lastName: property.lastName || '',
+    phone: property.phone || '',
+    email: property.email || '',
+    role: property.role || '',
+    isDecisionMaker: Boolean(property.isDecisionMaker),
+    tags: property.tags || [],
+    contacts: property.contacts || [],
+    quotes: property.quotes || [],
+    sales: property.sales || [],
+    interactions: property.interactions || [],
+    appointments: property.appointments || [],
+    invoices: property.invoices || [],
+  },
+  created_by: userId,
+  updated_by: userId,
+});
+
+const addressRowToProperty = (row: any): PropertyContact => {
+  const customData = row.custom_data || {};
+  return {
+    id: row.id,
+    address: row.display_address || '',
+    firstName: customData.firstName || '',
+    lastName: customData.lastName || '',
+    phone: customData.phone || '',
+    email: customData.email || '',
+    role: customData.role || '',
+    isDecisionMaker: Boolean(customData.isDecisionMaker),
+    lat: Number(row.lat || 0),
+    lng: Number(row.lng || 0),
+    status: statusFromDb[row.status] || 'Not Visited',
+    type: row.type === 'commercial' ? 'Commercial' : 'Residential',
+    businessName: row.business_name || '',
+    notes: row.notes || '',
+    tags: Array.isArray(customData.tags) ? customData.tags : [],
+    contacts: Array.isArray(customData.contacts) ? customData.contacts : [],
+    quotes: Array.isArray(customData.quotes) ? customData.quotes : [],
+    sales: Array.isArray(customData.sales) ? customData.sales : [],
+    interactions: Array.isArray(customData.interactions) ? customData.interactions : [],
+    appointments: Array.isArray(customData.appointments) ? customData.appointments : [],
+    invoices: Array.isArray(customData.invoices) ? customData.invoices : [],
+    customData,
+    stage: row.stage || 'prospect',
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+  };
+};
+
+function getWorkspaceName(membership: WorkspaceMembership | null) {
+  const workspace = Array.isArray(membership?.workspaces) ? membership?.workspaces[0] : membership?.workspaces;
+  return workspace?.name || 'DoorStep Workspace';
+}
 
 // --- Helper Components ---
 
@@ -667,6 +765,269 @@ function PromptModal({
 // --- Main App ---
 
 export default function App() {
+  if (!hasSupabaseConfig) {
+    return (
+      <CrmApp
+        workspaceId={null}
+        workspaceName="Local Demo"
+        userId={null}
+        userEmail={null}
+        onSignOut={() => undefined}
+      />
+    );
+  }
+
+  return <SupabaseShell />;
+}
+
+function SupabaseShell() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaceName, setWorkspaceName] = useState('DoorStep Workspace');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      setSession(data.session);
+      setIsLoading(false);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setWorkspaceId(null);
+      setError(null);
+    });
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user) return;
+
+    let isMounted = true;
+
+    const loadWorkspace = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      const membershipQuery = () => doorstepDb
+        .from('workspace_members')
+        .select('workspace_id, workspaces(name)')
+        .eq('user_id', session.user.id)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle();
+
+      let { data: membership, error: membershipError } = await membershipQuery();
+
+      if (membershipError) {
+        if (!isMounted) return;
+        setError(membershipError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!membership) {
+        const { error: createError } = await doorstepDb.rpc('create_workspace', {
+          workspace_name: 'DoorStep Workspace',
+          workspace_slug: `doorstep-${session.user.id.slice(0, 8)}`,
+        });
+
+        if (createError) {
+          if (!isMounted) return;
+          setError(createError.message);
+          setIsLoading(false);
+          return;
+        }
+
+        const retry = await membershipQuery();
+        membership = retry.data;
+        membershipError = retry.error;
+      }
+
+      if (!isMounted) return;
+
+      if (membershipError) {
+        setError(membershipError.message);
+      } else if (membership) {
+        setWorkspaceId(membership.workspace_id);
+        setWorkspaceName(getWorkspaceName(membership as WorkspaceMembership));
+      } else {
+        setError('Workspace creation finished, but no active membership was found.');
+      }
+
+      setIsLoading(false);
+    };
+
+    loadWorkspace();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="h-10 w-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm font-black uppercase tracking-widest text-slate-400">Loading DoorStep</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
+  if (error || !workspaceId) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl p-6 shadow-2xl">
+          <p className="text-xs font-black uppercase tracking-widest text-red-500 mb-2">Supabase Setup Needed</p>
+          <h1 className="text-2xl font-black mb-3">Workspace could not load</h1>
+          <p className="text-sm text-slate-600 mb-6">{error || 'No workspace was found for this user.'}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black text-xs uppercase tracking-widest"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <CrmApp
+      workspaceId={workspaceId}
+      workspaceName={workspaceName}
+      userId={session.user.id}
+      userEmail={session.user.email || null}
+      onSignOut={() => supabase.auth.signOut()}
+    />
+  );
+}
+
+function AuthScreen() {
+  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [identity, setIdentity] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const email = identity.includes('@') ? identity.trim() : `${identity.trim()}@doorstep.local`;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    const result = mode === 'sign-in'
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              username: identity.trim(),
+              full_name: fullName.trim(),
+            },
+          },
+        });
+
+    if (result.error) {
+      setError(result.error.message);
+    }
+
+    setIsSubmitting(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+      <form onSubmit={submit} className="w-full max-w-md bg-white text-slate-900 rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-11 w-11 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+            <MapIcon size={22} />
+          </div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-blue-600">DoorStep CRM</p>
+            <h1 className="text-2xl font-black">{mode === 'sign-in' ? 'Sign In' : 'Create Account'}</h1>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {mode === 'sign-up' && (
+            <input
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Full name"
+              className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
+          <input
+            value={identity}
+            onChange={(event) => setIdentity(event.target.value)}
+            placeholder="Email or username"
+            className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Password"
+            type="password"
+            minLength={6}
+            className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+        </div>
+
+        {error && (
+          <p className="mt-4 text-sm font-bold text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="mt-5 w-full bg-blue-600 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest disabled:opacity-60"
+        >
+          {isSubmitting ? 'Working...' : mode === 'sign-in' ? 'Sign In' : 'Create Account'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
+            setError(null);
+          }}
+          className="mt-4 w-full text-sm font-bold text-slate-500"
+        >
+          {mode === 'sign-in' ? 'Need an account? Create one' : 'Already have an account? Sign in'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: WorkspaceContext) {
   // State
   const [properties, setProperties] = useState<PropertyContact[]>(() => {
     const saved = localStorage.getItem('doorstep_crm_data');
@@ -926,6 +1287,74 @@ export default function App() {
     options?: { label: string, value: string }[];
     onConfirm: (val: string) => void;
   } | null>(null);
+  const [dataStatus, setDataStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(workspaceId ? 'loading' : 'local');
+  const [dataError, setDataError] = useState<string | null>(null);
+  const hasLoadedRemoteAddresses = useRef(!workspaceId);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    let isMounted = true;
+
+    const loadAddresses = async () => {
+      setDataStatus('loading');
+      setDataError(null);
+      hasLoadedRemoteAddresses.current = false;
+
+      const { data, error } = await doorstepDb
+        .from('addresses')
+        .select('*')
+        .is('deleted_at', null)
+        .order('updated_at', { ascending: false });
+
+      if (!isMounted) return;
+
+      if (error) {
+        setDataStatus('error');
+        setDataError(error.message);
+        hasLoadedRemoteAddresses.current = true;
+        return;
+      }
+
+      setProperties((data || []).map(addressRowToProperty));
+      hasLoadedRemoteAddresses.current = true;
+      setDataStatus('synced');
+    };
+
+    loadAddresses();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !hasLoadedRemoteAddresses.current) return;
+
+    const syncAddresses = async () => {
+      setDataError(null);
+
+      if (properties.length === 0) {
+        setDataStatus('synced');
+        return;
+      }
+
+      const rows = properties.map(property => propertyToAddressRow(property, workspaceId, userId));
+      const { error } = await doorstepDb
+        .from('addresses')
+        .upsert(rows, { onConflict: 'id' });
+
+      if (error) {
+        setDataStatus('error');
+        setDataError(error.message);
+      } else {
+        setDataStatus('synced');
+      }
+    };
+
+    const timeout = window.setTimeout(syncAddresses, 700);
+    return () => window.clearTimeout(timeout);
+  }, [properties, userId, workspaceId]);
 
   // Persistence for Map State
   useEffect(() => {
@@ -1100,6 +1529,18 @@ export default function App() {
 
   const handleDeleteProperty = useCallback((id: string) => {
     setProperties(prev => prev.filter(p => p.id !== id));
+    if (workspaceId) {
+      doorstepDb
+        .from('addresses')
+        .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) {
+            setDataStatus('error');
+            setDataError(error.message);
+          }
+        });
+    }
     setRoutes(prev => prev.map(r => ({
       ...r,
       propertyIds: r.propertyIds.filter(pid => pid !== id)
@@ -1108,7 +1549,7 @@ export default function App() {
       setSelectedPropertyId(null);
       setIsDrawerOpen(false);
     }
-  }, [selectedPropertyId]);
+  }, [selectedPropertyId, userId, workspaceId]);
 
   const handleSuggestionSelect = async (suggestion: any) => {
     let lat: number;
@@ -1620,6 +2061,31 @@ export default function App() {
 
   return (
     <div id="top-brand-main" className="flex flex-col h-screen bg-[#F1F5F9] relative overflow-hidden text-[#1E293B]">
+      <div className="absolute top-3 right-3 z-[900] flex items-center gap-2 bg-white/95 border border-slate-200 shadow-lg rounded-xl px-3 py-2">
+        <div className="hidden sm:block text-right">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{workspaceName}</p>
+          <p className="text-xs font-bold text-slate-600 max-w-[180px] truncate">
+            {userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}
+          </p>
+        </div>
+        <div
+          className={cn(
+            'h-2.5 w-2.5 rounded-full',
+            dataStatus === 'error' ? 'bg-red-500' : dataStatus === 'loading' ? 'bg-yellow-400' : workspaceId ? 'bg-green-500' : 'bg-slate-300'
+          )}
+          title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')}
+        />
+        {workspaceId && (
+          <button
+            onClick={onSignOut}
+            title="Sign out"
+            className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors"
+          >
+            <LogOut size={16} />
+          </button>
+        )}
+      </div>
+
       {currentView !== 'map' ? (
         <HomeDashboard 
           properties={properties}

@@ -1293,7 +1293,7 @@ export default function HomeDashboard({
 
                         <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                           {selectedContact.interactions?.length > 0 ? (
-                            selectedContact.interactions.sort((a,b) => b.createdAt - a.createdAt).map((item, idx) => (
+                            [...selectedContact.interactions].sort((a,b) => b.createdAt - a.createdAt).map((item, idx) => (
                               <div key={idx} className="p-3.5 bg-slate-50 border border-slate-150 rounded-xl space-y-1 my-1">
                                 <div className="flex items-center justify-between text-[10px] text-gray-400">
                                   <span className="font-extrabold uppercase text-slate-600 bg-slate-200 px-2 py-0.5 rounded-md">{item.type}</span>

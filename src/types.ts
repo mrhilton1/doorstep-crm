@@ -156,7 +156,7 @@ export interface Invoice {
 
 export interface Interaction {
   id: string;
-  type: 'Note' | 'Call' | 'Text' | 'Meeting';
+  type: 'Note' | 'Call' | 'Text' | 'Meeting' | 'Knock' | 'Conversation';
   content: string;
   createdAt: number;
   authorId: string;

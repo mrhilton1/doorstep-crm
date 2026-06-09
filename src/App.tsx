@@ -3332,8 +3332,28 @@ function PropertyDrawer({
   const [role, setRole] = useState(property.role || '');
   const [isDecisionMaker, setIsDecisionMaker] = useState(property.isDecisionMaker || false);
   const [businessName, setBusinessName] = useState(property.businessName || '');
+  const [activityType, setActivityType] = useState<'Knock' | 'Conversation'>('Knock');
+  const [activityNote, setActivityNote] = useState('');
 
   const statuses: PropertyStatus[] = ['Not Visited', 'Knocked', 'No Answer', 'Interested', 'Follow-Up Needed'];
+  const activityHistory = [...(property.interactions || [])].sort((a, b) => b.createdAt - a.createdAt);
+
+  const handleLogActivity = () => {
+    const content = activityNote.trim() || `${activityType} logged`;
+    updateProperty(property.id, {
+      interactions: [
+        {
+          id: uuidv4(),
+          type: activityType,
+          content,
+          createdAt: Date.now(),
+          authorId: 'current-user'
+        },
+        ...(property.interactions || [])
+      ]
+    });
+    setActivityNote('');
+  };
 
   return (
     <motion.div 
@@ -3424,6 +3444,84 @@ function PropertyDrawer({
                 {s}
               </button>
             ))}
+          </div>
+        </section>
+
+        {/* Repeatable Activity Logging */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                <History className="w-3.5 h-3.5" />
+              </div>
+              <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest leading-none">Log Activity</label>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {activityHistory.length} logged
+            </span>
+          </div>
+
+          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {(['Knock', 'Conversation'] as const).map(type => (
+                <button
+                  key={type}
+                  onClick={() => setActivityType(type)}
+                  className={cn(
+                    "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2",
+                    activityType === type
+                      ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100"
+                      : "bg-white border-slate-200 text-slate-400 hover:border-indigo-200"
+                  )}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              className="w-full bg-white border border-[#E2E8F0] rounded-2xl px-4 py-3 text-xs font-bold min-h-[88px] focus:ring-2 focus:ring-indigo-500/10 outline-none resize-y"
+              placeholder={activityType === 'Knock' ? 'Optional knock note...' : 'Conversation details, objections, next steps...'}
+              value={activityNote}
+              onChange={e => setActivityNote(e.target.value)}
+            />
+
+            <button
+              onClick={handleLogActivity}
+              className="w-full bg-indigo-600 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              Log {activityType}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {activityHistory.length > 0 ? (
+              activityHistory.map(item => (
+                <div key={item.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={cn(
+                      "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                      item.type === 'Knock'
+                        ? "bg-blue-50 text-blue-600"
+                        : item.type === 'Conversation'
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-slate-100 text-slate-600"
+                    )}>
+                      {item.type}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white border border-dashed border-[#CBD5E1] rounded-2xl p-5 text-center">
+                <p className="text-xs font-semibold text-slate-400 italic">No activity logged yet.</p>
+              </div>
+            )}
           </div>
         </section>
 

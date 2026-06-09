@@ -1,6 +1,29 @@
 # Scratchpad
 
 ## 2026-06-09 — Current Objective
+**Task:** Add address-level activity logging so repeated knocks/conversations can be recorded independently from one-time visit status.
+**Target spec:** `/specs/address-activity-logging.spec.md`
+
+## Micro-Steps
+- [x] Read operating docs and relevant address spec.
+- [x] Inspect existing interaction persistence and editor UI.
+- [x] Create focused activity logging spec.
+- [x] Add Knock/Conversation interaction types and editor composer.
+- [x] Run verification.
+- [ ] Commit, push, and deploy if verification passes.
+
+## Assumptions
+- Visit Status remains the latest/current address state.
+- Activity logs are repeated historical events and should not be limited to one per address.
+- MVP can persist activity logs through `doorstep.addresses.custom_data.interactions` before fully normalizing `doorstep.activities`.
+
+## Gotchas Discovered This Session
+- The existing summary drawer already reads `interactions`, but the editor does not provide a way to create Knock/Conversation log entries.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-09 — Current Objective
 **Task:** Remove browser-storage-backed CRM state so Supabase is the app source of truth.
 **Target spec:** `/specs/supabase-workspace-auth.spec.md`
 

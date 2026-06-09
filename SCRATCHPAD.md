@@ -1,6 +1,34 @@
 # Scratchpad
 
 ## 2026-06-09 — Current Objective
+**Task:** Replace Visit Status controls with a Supabase-backed Live Event Logger that supports knock/call/service/admin outcomes and stage movement rules.
+**Target spec:** `/specs/address-activity-logging.spec.md`
+
+## Micro-Steps
+- [x] Read operating docs and current activity spec.
+- [x] Review target-user PRD and user decisions.
+- [x] Inspect existing `doorstep.activities` schema/RLS and editor props.
+- [x] Update activity spec for Live Event Logger.
+- [x] Load/write activities through Supabase.
+- [x] Replace Visit Status area with progressive event logger UI.
+- [x] Run verification.
+- [ ] Commit, push, and deploy if verification passes.
+
+## Assumptions
+- `doorstep.activities` is the canonical event store for this pass.
+- Existing `PropertyStatus` can remain as a derived/latest outcome for filters and cards until we fully remove status-driven UI elsewhere.
+- Quote-request events should open the existing quote builder after successful event write.
+- Referral given will persist event metadata now; auto-creating the referred lead is a follow-up unless a clean existing lead path is available during implementation.
+
+## Gotchas Discovered This Session
+- Existing activities table has a broad `type` enum plus `metadata`; the detailed PRD taxonomy can live in metadata without a schema enum migration.
+- Existing policy allows workspace members to insert activities when `actor_user_id = auth.uid()`.
+- Address loads now merge `doorstep.activities` rows into the visible activity feed; legacy `custom_data.interactions` is only a fallback.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-09 — Current Objective
 **Task:** Add address-level activity logging so repeated knocks/conversations can be recorded independently from one-time visit status.
 **Target spec:** `/specs/address-activity-logging.spec.md`
 

@@ -156,10 +156,12 @@ export interface Invoice {
 
 export interface Interaction {
   id: string;
-  type: 'Note' | 'Call' | 'Text' | 'Meeting' | 'Knock' | 'Conversation';
+  type: 'Note' | 'Call' | 'Text' | 'Meeting' | 'Knock' | 'Conversation' | 'Completed Cleaning' | 'Referral' | 'Quote Requested' | 'Record Event';
   content: string;
   createdAt: number;
   authorId: string;
+  authorName?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface Appointment {

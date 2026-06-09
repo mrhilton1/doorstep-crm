@@ -1299,6 +1299,9 @@ export default function HomeDashboard({
                                   <span className="font-extrabold uppercase text-slate-600 bg-slate-200 px-2 py-0.5 rounded-md">{item.type}</span>
                                   <span className="font-bold">{new Date(item.createdAt).toLocaleString()}</span>
                                 </div>
+                                {item.authorName && (
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Logged by {item.authorName}</p>
+                                )}
                                 <p className="text-xs font-bold text-slate-800 leading-normal">{item.content}</p>
                               </div>
                             ))

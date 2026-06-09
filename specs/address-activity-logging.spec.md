@@ -7,47 +7,56 @@
 ---
 
 ## Goal
-Allow users to log repeated address-level activity events, starting with Knock and Conversation, with an optional note. Activity history must be separate from the address-level visit status because a status such as Knocked can only describe the current/latest state.
+Replace status-first door logging with a Supabase-backed Live Event Logger that lets field reps quickly record what happened at an address, including knock outcomes, calls, completed service, referrals, quote requests, and generic record events. Activity history must be separate from the address-level visit status because a status such as Knocked can only describe the current/latest state.
 
 ## Current Behavior
-The address editor lets the user set a single Visit Status such as Not Visited, Knocked, No Answer, Interested, or Follow-Up Needed. The contact summary drawer displays `interactions`, and other workflows can add message/invoice/appointment interactions, but the address editor does not expose a direct Log Activity action for Knock or Conversation.
+The address editor currently includes Visit Status pills and a simple Knock/Conversation logging panel. Activity entries still use the legacy `interactions` shape in the UI. The Supabase foundation already includes `doorstep.activities`, but the editor is not yet writing door events there.
 
 ## Desired Behavior
-The address editor includes a Log Activity section. The user can choose Knock or Conversation, add a note, and save the activity. Saved activities appear in a chronological activity history and persist with the address record through Supabase.
+The address editor replaces the Visit Status area with a Live Event Logger. Users choose an event path, see only the fields required for that path, and log the event to `doorstep.activities`. The activity feed updates immediately, shows who/what/when, and keeps Active Stage as a separate field while allowing event-based auto movement with manual override.
 
 ## User Flow
 1. User opens an address/contact editor.
-2. User chooses activity type Knock or Conversation.
-3. User optionally enters a note.
-4. User clicks Log Activity.
-5. App appends the activity to the address history.
-6. Activity appears in the editor history and the contact summary Activity Logs tab.
+2. User chooses event type: Knock, Call, Completed Cleaning, or Record Event.
+3. If Knock, user chooses No Answer or Answer; if Answer, user chooses an outcome.
+4. App reveals required fields only for the selected event path.
+5. User clicks Log Event.
+6. App inserts the event into `doorstep.activities`, updates the local feed, and applies stage/status derivation rules where appropriate.
+7. Activity appears in the editor history and the contact summary Activity Logs tab.
 
 ## Business Rules
-- Visit Status is a current-state field, not the activity log.
-- A single address can have many Knock and Conversation activity entries.
-- Activity entries must include type, timestamp, author, and note/content.
-- Empty notes are allowed only if the activity type itself is meaningful.
-- The first MVP implementation can store interactions in `doorstep.addresses.custom_data.interactions`.
+- Event logging is the primary door workflow; Visit Status is demoted to a derived/latest outcome.
+- A single address can have many events per day.
+- Activity entries must include event type, timestamp, actor, address ID, and note/body when supplied.
+- Required notes: Follow-Up Needed and Completed Cleaning.
+- Referral Given requires referral type and referring rep name.
+- Record Event requires a description.
+- Active Stage remains manually editable, but events can auto-move stage: Conversation/answered knock to Lead, Estimate/Quote Requested to Opportunity, Completed Cleaning or payment/job completion to Customer.
+- Email, SMS, quote, invoice, appointment, and future actions should all use the same activity feed pattern.
+- MVP detailed event taxonomy can be stored in `doorstep.activities.metadata`; the high-level `type` enum remains stable.
 
 ## Edge Cases
 - Empty history shows a friendly empty state.
 - Long notes wrap without breaking the drawer layout.
 - Repeated knocks should append new history entries rather than overwrite prior knocks.
-- Logging a Knock should not automatically force the Visit Status unless explicitly designed later.
+- Event write failures show inline retry/error UI and do not fake success.
+- Users can still manually change Active Stage after auto movement.
 
 ## Non-Goals
-- Full normalized `doorstep.activities` UI wiring.
-- Activity deletion/editing.
-- Custom activity types.
+- Activity deletion/editing/archive UI.
+- Full referral-created lead automation if it requires new lead form plumbing beyond metadata capture.
+- Full custom event type administration.
 - Automatic call/SMS/email provider integration.
 
 ## Acceptance Criteria
-- Given an address editor is open, when the user selects Knock and clicks Log Activity, then a new Knock entry is added to the activity history.
-- Given an address editor is open, when the user selects Conversation, enters a note, and clicks Log Activity, then a new Conversation entry with that note is added to the activity history.
-- Given multiple knocks are logged for one address, then all knocks remain visible in reverse chronological order.
-- Given activity is logged, then the data persists through the existing Supabase address sync.
-- Given the contact summary drawer shows Activity Logs, then Knock and Conversation entries appear there.
+- Given an address editor is open, when the user logs Knock -> No Answer, then a new Supabase activity is created and the feed increments.
+- Given the user logs Knock -> Answer -> Follow-Up Needed without a note, then inline validation requires a note.
+- Given the user logs Knock -> Answer -> Estimate / Quote Requested, then the event is saved, the address is promoted to Opportunity, and the existing Quote Builder opens.
+- Given the user logs Knock -> Answer -> Referral Given, then referral type and referring rep name are required and saved in activity metadata.
+- Given the user logs an Outbound or Inbound Call, then a call event is saved with optional note.
+- Given the user logs Completed Cleaning, then a note is required and the address is promoted to Customer.
+- Given multiple events are logged for one address, then all events remain visible in reverse chronological order.
+- Given a second workspace member opens the address, then the Supabase-backed event history is visible.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -56,13 +65,17 @@ The address editor includes a Log Activity section. The user can choose Knock or
 - Manually smoke test logging Knock and Conversation on an address record in production or local configured Supabase.
 
 ## Open Questions
-- [ ] Should logging a Knock optionally update Visit Status to Knocked?
-- [ ] Should activity logs move to normalized `doorstep.activities` in the next Supabase data-model pass?
+- [ ] What are the exact referral type options?
+- [ ] Should Quote Builder return explicit Accepted / Not Accepted follow-on events in this pass or the quote workflow pass?
+- [ ] Which roles can archive activity events when supervisor archive is implemented?
 
 ## Decisions Made
 - 2026-06-09: Keep Visit Status separate from repeatable Activity Logs.
 - 2026-06-09: Use the existing `interactions` bridge for MVP persistence.
+- 2026-06-09: User approved replacing the Visit Status area with a Live Event Logger and wiring events to Supabase.
+- 2026-06-09: Event outcomes can auto-move stage while preserving manual stage edits.
 
 ## Iteration History
 - 2026-06-09: Spec created.
 - 2026-06-09: Added Log Activity composer and editor history for Knock and Conversation entries.
+- 2026-06-09: Replaced Visit Status controls with Live Event Logger, wired event inserts to `doorstep.activities`, and added event-based stage/status derivation.

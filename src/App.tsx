@@ -119,13 +119,13 @@ import {
   Quote,
   Sale,
   CustomField,
+  Interaction,
   Settings as AppSettings,
   STATUS_COLORS, 
   DEFAULT_TAGS,
   AppState,
   Member,
   Goal,
-  Interaction,
   Appointment
 } from './types';
 // @ts-ignore
@@ -186,6 +186,35 @@ type WorkspaceMembership = {
 };
 
 type WorkspaceAppStateKey = 'catalog' | 'settings' | 'team' | 'goals' | 'routes';
+type LiveEventType = 'knock' | 'call' | 'completed_cleaning' | 'record_event';
+type KnockResult = 'answer' | 'no_answer';
+type AnswerOutcome = 'quote_requested' | 'follow_up_needed' | 'referral_given' | 'not_interested';
+type CallDirection = 'outbound' | 'inbound';
+
+type LiveEventPayload = {
+  eventType: LiveEventType;
+  knockResult?: KnockResult;
+  answerOutcome?: AnswerOutcome;
+  callDirection?: CallDirection;
+  note?: string;
+  referralType?: string;
+  referralRepName?: string;
+};
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  knock: 'Knock',
+  call: 'Call',
+  completed_cleaning: 'Completed Cleaning',
+  record_event: 'Record Event',
+  answer: 'Answer',
+  no_answer: 'No Answer',
+  quote_requested: 'Estimate / Quote Requested',
+  follow_up_needed: 'Follow-Up Needed',
+  referral_given: 'Referral Given',
+  not_interested: 'Not Interested',
+  outbound: 'Outbound Call',
+  inbound: 'Inbound Call',
+};
 
 const statusToDb: Record<PropertyStatus, string> = {
   'Not Visited': 'not_visited',
@@ -226,7 +255,6 @@ const propertyToAddressRow = (property: PropertyContact, workspaceId: string, us
     contacts: property.contacts || [],
     quotes: property.quotes || [],
     sales: property.sales || [],
-    interactions: property.interactions || [],
     appointments: property.appointments || [],
     invoices: property.invoices || [],
   },
@@ -263,6 +291,67 @@ const addressRowToProperty = (row: any): PropertyContact => {
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
   };
+};
+
+const activityRowToInteraction = (row: any): Interaction => {
+  const metadata = row.metadata || {};
+  const eventType = metadata.event_type || row.type;
+  const outcome = metadata.outcome || metadata.knock_result || metadata.call_direction;
+  const typeLabel = EVENT_TYPE_LABELS[outcome] || EVENT_TYPE_LABELS[eventType] || row.title || row.type;
+
+  return {
+    id: row.id,
+    type: typeLabel as Interaction['type'],
+    content: row.body || row.title || `${typeLabel} logged`,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    authorId: row.actor_user_id || '',
+    authorName: metadata.actor_email || metadata.actor_name || '',
+    metadata,
+  };
+};
+
+const buildEventTitle = (payload: LiveEventPayload) => {
+  if (payload.eventType === 'knock' && payload.knockResult === 'answer' && payload.answerOutcome) {
+    return `Knock - ${EVENT_TYPE_LABELS[payload.answerOutcome]}`;
+  }
+  if (payload.eventType === 'knock' && payload.knockResult === 'no_answer') {
+    return 'Knock - No Answer';
+  }
+  if (payload.eventType === 'call' && payload.callDirection) {
+    return EVENT_TYPE_LABELS[payload.callDirection];
+  }
+  return EVENT_TYPE_LABELS[payload.eventType] || 'Record Event';
+};
+
+const getActivityDbType = (payload: LiveEventPayload) => {
+  if (payload.eventType === 'knock') return 'knock';
+  if (payload.eventType === 'call') return 'call';
+  if (payload.eventType === 'completed_cleaning') return 'appointment_event';
+  return 'note';
+};
+
+const getStageForEvent = (payload: LiveEventPayload, currentStage: PropertyStage): PropertyStage => {
+  const currentWeight = STAGE_ORDER.indexOf(currentStage);
+  const promoteTo = (stage: PropertyStage) => {
+    const nextWeight = STAGE_ORDER.indexOf(stage);
+    return currentWeight < nextWeight ? stage : currentStage;
+  };
+
+  if (payload.eventType === 'completed_cleaning') return promoteTo('customer');
+  if (payload.answerOutcome === 'quote_requested') return promoteTo('opportunity');
+  if (payload.eventType === 'knock' && payload.knockResult === 'answer') return promoteTo('lead');
+  return currentStage;
+};
+
+const getStatusForEvent = (payload: LiveEventPayload, currentStatus: PropertyStatus): PropertyStatus => {
+  if (payload.eventType === 'knock' && payload.knockResult === 'no_answer') return 'No Answer';
+  if (payload.eventType === 'knock' && payload.knockResult === 'answer') {
+    if (payload.answerOutcome === 'follow_up_needed') return 'Follow-Up Needed';
+    if (payload.answerOutcome === 'quote_requested' || payload.answerOutcome === 'referral_given') return 'Interested';
+    return 'Knocked';
+  }
+  if (payload.eventType === 'completed_cleaning') return 'Interested';
+  return currentStatus;
 };
 
 const createDefaultCatalog = (): { products: Product[], bundles: Bundle[] } => ({
@@ -1356,7 +1445,48 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         return;
       }
 
-      setProperties((data || []).map(addressRowToProperty));
+      const loadedProperties = (data || []).map(addressRowToProperty);
+      const addressIds = loadedProperties.map(property => property.id);
+
+      if (addressIds.length > 0) {
+        const { data: activities, error: activitiesError } = await doorstepDb
+          .from('activities')
+          .select('*')
+          .in('address_id', addressIds)
+          .order('created_at', { ascending: false });
+
+        if (!isMounted) return;
+
+        if (activitiesError) {
+          setDataStatus('error');
+          setDataError(activitiesError.message);
+          hasLoadedRemoteAddresses.current = true;
+          return;
+        }
+
+        const activitiesByAddress = new Map<string, Interaction[]>();
+        (activities || []).forEach((activity: any) => {
+          if (!activity.address_id) return;
+          const list = activitiesByAddress.get(activity.address_id) || [];
+          list.push(activityRowToInteraction(activity));
+          activitiesByAddress.set(activity.address_id, list);
+        });
+
+        setProperties(loadedProperties.map(property => {
+          const remoteInteractions = activitiesByAddress.get(property.id) || [];
+          const legacyInteractions = property.interactions || [];
+          const uniqueInteractions = new Map<string, Interaction>();
+          [...remoteInteractions, ...legacyInteractions].forEach(interaction => uniqueInteractions.set(interaction.id, interaction));
+
+          return {
+            ...property,
+            interactions: Array.from(uniqueInteractions.values()).sort((a, b) => b.createdAt - a.createdAt)
+          };
+        }));
+      } else {
+        setProperties(loadedProperties);
+      }
+
       hasLoadedRemoteAddresses.current = true;
       setDataStatus('synced');
     };
@@ -1951,6 +2081,56 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
   const updateProperty = (id: string, updates: Partial<PropertyContact>) => {
     setProperties(prev => prev.map(p => p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p));
+  };
+
+  const logAddressEvent = async (propertyId: string, payload: LiveEventPayload) => {
+    const property = properties.find(p => p.id === propertyId);
+    if (!property || !workspaceId || !userId) {
+      throw new Error('Workspace session is not ready. Please refresh and try again.');
+    }
+
+    const title = buildEventTitle(payload);
+    const note = payload.note?.trim() || '';
+    const body = note || `${title} logged`;
+    const metadata = {
+      event_type: payload.eventType,
+      knock_result: payload.knockResult || null,
+      outcome: payload.answerOutcome || null,
+      call_direction: payload.callDirection || null,
+      referral_type: payload.referralType || null,
+      referral_rep_name: payload.referralRepName || null,
+      actor_email: userEmail || null,
+    };
+
+    const { data, error } = await doorstepDb
+      .from('activities')
+      .insert({
+        workspace_id: workspaceId,
+        address_id: propertyId,
+        actor_user_id: userId,
+        type: getActivityDbType(payload),
+        title,
+        body,
+        metadata,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const interaction = activityRowToInteraction(data);
+    const nextStage = getStageForEvent(payload, property.stage);
+    const nextStatus = getStatusForEvent(payload, property.status);
+
+    updateProperty(propertyId, {
+      stage: nextStage,
+      status: nextStatus,
+      interactions: [interaction, ...(property.interactions || [])],
+    });
+
+    return interaction;
   };
 
   const stats = useMemo(() => {
@@ -3117,6 +3297,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             property={selectedProperty}
             updateProperty={updateProperty}
             settings={settings}
+            onLogEvent={logAddressEvent}
             onClose={() => setIsDrawerOpen(false)}
             onSchedule={() => {
               setIsDrawerOpen(false);
@@ -3311,6 +3492,7 @@ function PropertyDrawer({
   property, 
   updateProperty, 
   settings,
+  onLogEvent,
   onClose,
   onSchedule,
   onQuote,
@@ -3319,6 +3501,7 @@ function PropertyDrawer({
   property: PropertyContact,
   updateProperty: (id: string, updates: Partial<PropertyContact>) => void,
   settings: AppSettings,
+  onLogEvent: (propertyId: string, payload: LiveEventPayload) => Promise<Interaction>,
   onClose: () => void,
   onSchedule: () => void,
   onQuote: () => void,
@@ -3332,27 +3515,86 @@ function PropertyDrawer({
   const [role, setRole] = useState(property.role || '');
   const [isDecisionMaker, setIsDecisionMaker] = useState(property.isDecisionMaker || false);
   const [businessName, setBusinessName] = useState(property.businessName || '');
-  const [activityType, setActivityType] = useState<'Knock' | 'Conversation'>('Knock');
-  const [activityNote, setActivityNote] = useState('');
+  const [selectedEventType, setSelectedEventType] = useState<LiveEventType | null>(null);
+  const [knockResult, setKnockResult] = useState<KnockResult | null>(null);
+  const [answerOutcome, setAnswerOutcome] = useState<AnswerOutcome | null>(null);
+  const [callDirection, setCallDirection] = useState<CallDirection | null>(null);
+  const [eventNote, setEventNote] = useState('');
+  const [isNoteOpen, setIsNoteOpen] = useState(false);
+  const [referralType, setReferralType] = useState('');
+  const [referralRepName, setReferralRepName] = useState('');
+  const [eventError, setEventError] = useState('');
+  const [isLoggingEvent, setIsLoggingEvent] = useState(false);
+  const [eventLoggedLabel, setEventLoggedLabel] = useState('');
 
-  const statuses: PropertyStatus[] = ['Not Visited', 'Knocked', 'No Answer', 'Interested', 'Follow-Up Needed'];
   const activityHistory = [...(property.interactions || [])].sort((a, b) => b.createdAt - a.createdAt);
+  const latestActivity = activityHistory[0];
 
-  const handleLogActivity = () => {
-    const content = activityNote.trim() || `${activityType} logged`;
-    updateProperty(property.id, {
-      interactions: [
-        {
-          id: uuidv4(),
-          type: activityType,
-          content,
-          createdAt: Date.now(),
-          authorId: 'current-user'
-        },
-        ...(property.interactions || [])
-      ]
-    });
-    setActivityNote('');
+  const resetEventForm = () => {
+    setSelectedEventType(null);
+    setKnockResult(null);
+    setAnswerOutcome(null);
+    setCallDirection(null);
+    setEventNote('');
+    setIsNoteOpen(false);
+    setReferralType('');
+    setReferralRepName('');
+    setEventError('');
+  };
+
+  const validateEvent = () => {
+    if (!selectedEventType) return 'Choose an event type.';
+    if (selectedEventType === 'knock') {
+      if (!knockResult) return 'Choose Answer or No Answer.';
+      if (knockResult === 'answer' && !answerOutcome) return 'Choose what happened after the answer.';
+      if (answerOutcome === 'follow_up_needed' && !eventNote.trim()) return 'A note is required for Follow-Up Needed.';
+      if (answerOutcome === 'referral_given') {
+        if (!referralType.trim()) return 'Referral type is required.';
+        if (!referralRepName.trim()) return 'Referring rep name is required.';
+      }
+    }
+    if (selectedEventType === 'call' && !callDirection) return 'Choose inbound or outbound call.';
+    if (selectedEventType === 'completed_cleaning' && !eventNote.trim()) return 'A note is required for Completed Cleaning.';
+    if (selectedEventType === 'record_event' && !eventNote.trim()) return 'Describe the record event.';
+    return '';
+  };
+
+  const handleLogEvent = async () => {
+    const validationError = validateEvent();
+    if (validationError) {
+      setEventError(validationError);
+      return;
+    }
+
+    const payload: LiveEventPayload = {
+      eventType: selectedEventType!,
+      knockResult: knockResult || undefined,
+      answerOutcome: answerOutcome || undefined,
+      callDirection: callDirection || undefined,
+      note: eventNote,
+      referralType,
+      referralRepName,
+    };
+
+    setIsLoggingEvent(true);
+    setEventError('');
+
+    try {
+      await onLogEvent(property.id, payload);
+      const loggedLabel = buildEventTitle(payload);
+      setEventLoggedLabel(loggedLabel);
+      resetEventForm();
+
+      if (payload.answerOutcome === 'quote_requested') {
+        onQuote();
+      }
+
+      window.setTimeout(() => setEventLoggedLabel(''), 2000);
+    } catch (error: any) {
+      setEventError(error.message || 'Event could not be saved. Please try again.');
+    } finally {
+      setIsLoggingEvent(false);
+    }
   };
 
   return (
@@ -3426,72 +3668,202 @@ function PropertyDrawer({
           </div>
         </section>
 
-        {/* Status Selector */}
-        <section>
-          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-3 block">Visit Status</label>
-          <div className="flex flex-wrap gap-2">
-            {statuses.map(s => (
-              <button
-                key={s}
-                onClick={() => updateProperty(property.id, { status: s })}
-                className={cn(
-                  "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2",
-                  property.status === s 
-                    ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100" 
-                    : "bg-white border-gray-100 text-gray-400 hover:border-blue-200"
-                )}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Repeatable Activity Logging */}
+        {/* Live Event Logger */}
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
                 <History className="w-3.5 h-3.5" />
               </div>
-              <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest leading-none">Log Activity</label>
+              <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest leading-none">Live Event Logger</label>
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              {activityHistory.length} logged
-            </span>
+            <div className="text-right">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                {activityHistory.length} logged
+              </span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-300 block mt-1">
+                Latest: {latestActivity ? latestActivity.type : 'None'}
+              </span>
+            </div>
           </div>
 
           <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4 space-y-3">
             <div className="flex flex-wrap gap-2">
-              {(['Knock', 'Conversation'] as const).map(type => (
+              {([
+                { id: 'knock', label: 'Knock', icon: <MousePointer2 className="w-3.5 h-3.5" /> },
+                { id: 'call', label: 'Call', icon: <Phone className="w-3.5 h-3.5" /> },
+                { id: 'completed_cleaning', label: 'Completed Cleaning', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+                { id: 'record_event', label: 'Record Event', icon: <FileText className="w-3.5 h-3.5" /> },
+              ] as { id: LiveEventType; label: string; icon: React.ReactNode }[]).map(event => (
                 <button
-                  key={type}
-                  onClick={() => setActivityType(type)}
+                  key={event.id}
+                  onClick={() => {
+                    setSelectedEventType(event.id);
+                    setKnockResult(null);
+                    setAnswerOutcome(null);
+                    setCallDirection(null);
+                    setEventError('');
+                    setEventLoggedLabel('');
+                    setIsNoteOpen(event.id === 'completed_cleaning' || event.id === 'record_event');
+                  }}
                   className={cn(
-                    "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2",
-                    activityType === type
+                    "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2 flex items-center gap-1.5",
+                    selectedEventType === event.id
                       ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100"
                       : "bg-white border-slate-200 text-slate-400 hover:border-indigo-200"
                   )}
                 >
-                  {type}
+                  {event.icon}
+                  {event.label}
                 </button>
               ))}
             </div>
 
-            <textarea
-              className="w-full bg-white border border-[#E2E8F0] rounded-2xl px-4 py-3 text-xs font-bold min-h-[88px] focus:ring-2 focus:ring-indigo-500/10 outline-none resize-y"
-              placeholder={activityType === 'Knock' ? 'Optional knock note...' : 'Conversation details, objections, next steps...'}
-              value={activityNote}
-              onChange={e => setActivityNote(e.target.value)}
-            />
+            {selectedEventType === 'knock' && (
+              <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { id: 'answer', label: 'Answer' },
+                    { id: 'no_answer', label: 'No Answer' },
+                  ] as { id: KnockResult; label: string }[]).map(option => (
+                    <button
+                      key={option.id}
+                      onClick={() => {
+                        setKnockResult(option.id);
+                        setAnswerOutcome(null);
+                        setEventError('');
+                      }}
+                      className={cn(
+                        "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2",
+                        knockResult === option.id
+                          ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100"
+                          : "bg-white border-slate-200 text-slate-400 hover:border-blue-200"
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                {knockResult === 'answer' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {([
+                      { id: 'quote_requested', label: 'Estimate / Quote Requested' },
+                      { id: 'follow_up_needed', label: 'Follow-Up Needed' },
+                      { id: 'referral_given', label: 'Referral Given' },
+                      { id: 'not_interested', label: 'Not Interested' },
+                    ] as { id: AnswerOutcome; label: string }[]).map(option => (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          setAnswerOutcome(option.id);
+                          setEventError('');
+                          setIsNoteOpen(option.id === 'follow_up_needed');
+                        }}
+                        className={cn(
+                          "py-2.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2 text-left",
+                          answerOutcome === option.id
+                            ? "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-100"
+                            : "bg-white border-slate-200 text-slate-500 hover:border-emerald-200"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedEventType === 'call' && (
+              <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2">
+                {([
+                  { id: 'outbound', label: 'Outbound Call' },
+                  { id: 'inbound', label: 'Inbound Call' },
+                ] as { id: CallDirection; label: string }[]).map(option => (
+                  <button
+                    key={option.id}
+                    onClick={() => {
+                      setCallDirection(option.id);
+                      setEventError('');
+                    }}
+                    className={cn(
+                      "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2",
+                      callDirection === option.id
+                        ? "bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-100"
+                        : "bg-white border-slate-200 text-slate-400 hover:border-pink-200"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedEventType === 'knock' && answerOutcome === 'referral_given' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
+                <input
+                  className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                  placeholder="Referral type"
+                  value={referralType}
+                  onChange={e => setReferralType(e.target.value)}
+                />
+                <input
+                  className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                  placeholder="Referring rep name"
+                  value={referralRepName}
+                  onChange={e => setReferralRepName(e.target.value)}
+                />
+              </div>
+            )}
+
+            {selectedEventType && !isNoteOpen && (
+              <button
+                onClick={() => setIsNoteOpen(true)}
+                className="text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                Add Note
+              </button>
+            )}
+
+            {selectedEventType && isNoteOpen && (
+              <textarea
+                className="w-full bg-white border border-[#E2E8F0] rounded-2xl px-4 py-3 text-xs font-bold min-h-[88px] focus:ring-2 focus:ring-indigo-500/10 outline-none resize-y"
+                placeholder={
+                  selectedEventType === 'completed_cleaning'
+                    ? 'Cleaning completion note required...'
+                    : selectedEventType === 'record_event'
+                      ? 'Describe the event...'
+                      : answerOutcome === 'follow_up_needed'
+                        ? 'Follow-up note required...'
+                        : 'Optional note...'
+                }
+                value={eventNote}
+                onChange={e => setEventNote(e.target.value)}
+              />
+            )}
+
+            {eventError && (
+              <div className="bg-red-50 border border-red-100 text-red-600 rounded-xl px-4 py-3 text-xs font-black leading-relaxed">
+                {eventError}
+              </div>
+            )}
+
+            {eventLoggedLabel && (
+              <div className="bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                Logged: {eventLoggedLabel}
+              </div>
+            )}
 
             <button
-              onClick={handleLogActivity}
-              className="w-full bg-indigo-600 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center gap-2"
+              onClick={handleLogEvent}
+              disabled={!selectedEventType || isLoggingEvent}
+              className="w-full bg-indigo-600 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <PlusCircle className="w-3.5 h-3.5" />
-              Log {activityType}
+              {isLoggingEvent ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+              {isLoggingEvent ? 'Saving Event...' : 'Log Event'}
             </button>
           </div>
 
@@ -3514,6 +3886,11 @@ function PropertyDrawer({
                       {new Date(item.createdAt).toLocaleString()}
                     </span>
                   </div>
+                  {item.authorName && (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Logged by {item.authorName}
+                    </p>
+                  )}
                   <p className="text-xs font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>
                 </div>
               ))

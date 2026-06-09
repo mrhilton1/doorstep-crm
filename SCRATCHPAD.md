@@ -13,7 +13,7 @@
 - [x] Update spec and agent guardrails.
 - [x] Run verification.
 - [x] Apply migration to Supabase project `vupriscnyrqmibmfowdx`.
-- [ ] Commit and push if appropriate.
+- [x] Commit and push if appropriate.
 
 ## Assumptions
 - MVP can keep nested quotes, invoices, interactions, appointments, tags, and child contacts in `doorstep.addresses.custom_data` until those tables are wired into the UI.

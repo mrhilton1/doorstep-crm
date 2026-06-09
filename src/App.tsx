@@ -2241,6 +2241,10 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             }
           }}
           onOpenMap={() => setCurrentView('map')}
+          onOpenPropertyEditor={(id) => {
+            setSelectedPropertyId(id);
+            setIsDrawerOpen(true);
+          }}
           activeTab={currentView === 'dashboard' ? 'dashboard' : currentView === 'contacts' ? 'contacts' : 'appointments'}
           setActiveTab={(tab) => {
             if (tab === 'map') {

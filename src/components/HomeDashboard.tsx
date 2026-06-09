@@ -21,6 +21,7 @@ import {
   Users, 
   Building,
   ArrowRight,
+  Edit3,
   Sparkles,
   ExternalLink,
   Lock,
@@ -60,6 +61,7 @@ interface HomeDashboardProps {
   onOpenCatalog: () => void;
   onOpenSettings: () => void;
   onAddNewLead: () => void;
+  onOpenPropertyEditor: (id: string) => void;
   settings: Settings;
   onOpenOverdueInvoices?: () => void;
 }
@@ -76,6 +78,7 @@ export default function HomeDashboard({
   onOpenCatalog,
   onOpenSettings,
   onAddNewLead,
+  onOpenPropertyEditor,
   settings,
   onOpenOverdueInvoices
 }: HomeDashboardProps) {
@@ -1128,11 +1131,24 @@ export default function HomeDashboard({
                   >
                     <ArrowRight className="w-4 h-4 rotate-180 text-slate-700" />
                   </button>
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-[9px] font-black uppercase text-indigo-500 tracking-widest block leading-none mb-1">PWA Client Management</span>
-                    <h2 className="text-base font-black text-slate-900 tracking-tight leading-none truncate max-w-[280px] md:max-w-[450px]">
-                      {selectedContact.firstName || selectedContact.lastName ? `${selectedContact.firstName || ''} ${selectedContact.lastName || ''}`.trim() : 'Unnamed Lead'}
-                    </h2>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h2 className="text-base font-black text-slate-900 tracking-tight leading-none truncate max-w-[220px] md:max-w-[390px]">
+                        {selectedContact.firstName || selectedContact.lastName ? `${selectedContact.firstName || ''} ${selectedContact.lastName || ''}`.trim() : 'Unnamed Lead'}
+                      </h2>
+                      <button
+                        onClick={() => {
+                          setSelectedContactId(null);
+                          onOpenPropertyEditor(selectedContact.id);
+                        }}
+                        className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 hover:border-blue-200 transition-all cursor-pointer flex items-center justify-center active:scale-95 shrink-0"
+                        title="Edit status, activity, and contact details"
+                        aria-label="Edit status, activity, and contact details"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

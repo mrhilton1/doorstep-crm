@@ -23,6 +23,29 @@
 ---
 *Wipe entries older than 30 days. This is working memory, not history.*
 
+## 2026-06-09 — Current Objective
+**Task:** Add a direct edit/update action from the contact summary drawer so a rep can change stage, visit status, notes, and contact details without bouncing back to the map.
+**Target spec:** `/specs/contact-summary-quick-edit.spec.md`
+
+## Micro-Steps
+- [x] Read `CLAUDE.md`, `AGENTS.md`, `SCRATCHPAD.md`, and `DO_NOT_TOUCH.md`.
+- [x] Locate current contact summary and existing property editor behavior.
+- [x] Create focused feature spec.
+- [x] Add quick edit action to the summary drawer.
+- [x] Run verification.
+- [ ] Commit and push if appropriate.
+
+## Assumptions
+- The third screenshot is the existing `PropertyDrawer` edit panel.
+- MVP should reuse the existing editor rather than creating a second edit surface.
+- The quick action should close the summary drawer before opening the editor to avoid stacked panels.
+
+## Gotchas Discovered This Session
+- The contact summary drawer renders above the root property editor, so the summary drawer must close when launching edit mode.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-08 — Current Objective
 **Task:** Protect proprietary spec strategy files from Cloudflare deploy artifacts and lock the user's spec workflow decisions.  
 **Target spec:** `/specs/spec-driven-ai-engineering.spec.md`

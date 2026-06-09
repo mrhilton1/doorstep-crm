@@ -13,7 +13,7 @@ Enable DoorStep CRM to operate as a multi-user, multi-workspace app backed by Su
 Production renders a Supabase sign-in/sign-up screen when runtime config is present. On first authenticated load, the app attempts to find an active workspace membership and calls `doorstep.create_workspace` if none exists. Address records are loaded from `doorstep.addresses`. Much of the app still keeps settings, catalog, team, goals, routes, quotes, and invoices in local component/localStorage state.
 
 ## Desired Behavior
-Every authenticated user belongs to one or more workspaces. Workspace membership controls access to address/contact/quote/appointment data through Supabase RLS. Roles are renameable and cloneable later, with MVP defaults for Owner, Admin, Sales Rep, Scheduler, and Technician.
+Every authenticated user belongs to one or more workspaces. Signup is open to anyone for MVP, but users must use real email addresses. Workspace membership controls access to address/contact/quote/appointment data through Supabase RLS. Roles are renameable and cloneable later, with MVP defaults for Owner, Admin, Sales Rep, Scheduler, and Technician.
 
 ## User Flow
 1. User opens `https://app.clearview.win`.
@@ -24,6 +24,8 @@ Every authenticated user belongs to one or more workspaces. Workspace membership
 6. User can sign out from the app chrome.
 
 ## Business Rules
+- Signup is open to anyone for MVP.
+- Auth requires real email addresses; do not create synthetic `@doorstep.local` usernames.
 - Workspace data must be scoped by `workspace_id`.
 - Supabase service-role keys must never be used in browser code.
 - RLS must be enabled on workspace-owned tables.
@@ -46,6 +48,7 @@ Every authenticated user belongs to one or more workspaces. Workspace membership
 
 ## Acceptance Criteria
 - Given Supabase env vars exist, when production loads, then the Supabase auth screen appears for signed-out users.
+- Given a user signs up or signs in, when they enter an identity, then it must be a real email address accepted by the email input.
 - Given an authenticated user has no workspace, when the app loads, then a workspace and Owner membership are created.
 - Given a user is not a workspace member, when they query workspace data, then RLS denies access.
 - Given local env vars are missing, when developing locally, then the app renders local demo mode instead of crashing.
@@ -57,13 +60,15 @@ Every authenticated user belongs to one or more workspaces. Workspace membership
 - Test sign-up/sign-in and first workspace creation with a real user.
 
 ## Open Questions
-- [ ] Should sign-up be open to anyone for MVP or invitation-only before launch?
+- [x] Should sign-up be open to anyone for MVP or invitation-only before launch? Decision: open to anyone.
 - [ ] What should the first workspace name be: user-provided, company name, or default "DoorStep Workspace"?
-- [ ] Should username login remain email-backed with `@doorstep.local`, or should we require real emails?
+- [x] Should username login remain email-backed with `@doorstep.local`, or should we require real emails? Decision: require real emails.
 
 ## Decisions Made
-- 2026-06-08: Use Supabase Auth username/password style via email/password API.
+- 2026-06-08: Use Supabase Auth email/password API with real email addresses.
 - 2026-06-08: Use `doorstep.create_workspace` RPC to bootstrap workspace, roles, role permissions, entitlements, and owner membership.
+- 2026-06-08: Keep signup open for MVP unless abuse or launch constraints require invitation-only later.
 
 ## Iteration History
 - 2026-06-08: Initial auth/workspace bootstrap shipped.
+- 2026-06-08: Replaced username-style auth language with real-email requirement.

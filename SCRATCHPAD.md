@@ -22,3 +22,27 @@
 
 ---
 *Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-08 — Current Objective
+**Task:** Protect proprietary spec strategy files from Cloudflare deploy artifacts and lock the user's spec workflow decisions.  
+**Target spec:** `/specs/spec-driven-ai-engineering.spec.md`
+
+## Micro-Steps
+- [x] Update specs with user decisions.
+- [x] Add deploy artifact verification script.
+- [x] Add npm verification scripts and PR checklist.
+- [x] Align auth UI with real-email requirement.
+- [x] Run build, lint, artifact verification, and inspect `dist`.
+- [ ] Commit and push.
+
+## Assumptions
+- Cloudflare deployment should continue to upload only `dist`.
+- Specs/docs are allowed in GitHub but must never be served by Cloudflare.
+- Real email requirement should be reflected in both spec and auth UI.
+
+## Gotchas Discovered This Session
+- Vite copies everything in `public/` into `dist`, so proprietary docs must never be placed there.
+- `dist` currently contains only `index.html`, one JS asset, one CSS asset, and `config`.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*

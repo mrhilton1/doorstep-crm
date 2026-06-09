@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "verify:deploy-artifact": "node scripts/verify-deploy-artifact.mjs",
+    "verify": "npm run build && npm run lint && npm run verify:deploy-artifact"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

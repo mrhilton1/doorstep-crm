@@ -29,6 +29,9 @@ Agents start with `CLAUDE.md`, use `SCRATCHPAD.md` before code changes, update r
 - `decisions.md` is append-only.
 - Sensitive values must never be written to docs or commits.
 - Stale specs should be updated or deleted, not ignored.
+- GitHub issues should be created from specs only when the team intends to actively work them.
+- Future pull requests must include a "Relevant spec updated or confirmed unchanged" checklist item.
+- Proprietary spec and strategy files must never be included in Cloudflare deploy artifacts.
 
 ## Edge Cases
 - Empty states: If no feature spec exists, create a minimal spec before implementation.
@@ -46,19 +49,23 @@ Agents start with `CLAUDE.md`, use `SCRATCHPAD.md` before code changes, update r
 - Given a new AI agent starts work, when it opens the repo, then it can find standing instructions in `CLAUDE.md`.
 - Given a feature is being changed, when no spec exists, then a minimal `/specs/*.spec.md` is created or the omission is explained.
 - Given a meaningful architecture decision is made, when the work ships, then `decisions.md` has a dated entry.
+- Given a production build is created, when deploy artifact verification runs, then it fails if markdown/spec strategy files are present in `dist`.
 
 ## Validation Plan
 - Confirm expected files exist.
 - Confirm `CLAUDE.md` is concise.
 - Confirm initial MVP specs exist.
-- Run `npm run build` and `npm run lint` to ensure docs did not disturb app build.
+- Run `npm run build`, `npm run lint`, and `npm run verify:deploy-artifact`.
 
 ## Open Questions
-- [ ] Should GitHub issues be created from these specs, or should specs remain repo-only for now?
-- [ ] Should every pull request include a "Spec updated?" checklist item?
+- [x] Should GitHub issues be created from these specs, or should specs remain repo-only for now? Decision: create GitHub issues only when the team will actively solve them from GitHub.
+- [x] Should every pull request include a "Spec updated?" checklist item? Decision: yes.
 
 ## Decisions Made
 - 2026-06-08: Use `CLAUDE.md` as primary operating file and `AGENTS.md` as a pointer to avoid drift.
+- 2026-06-08: Keep spec strategy private from Cloudflare deployments by deploying only `dist` and verifying deploy artifacts before deploy.
+- 2026-06-08: GitHub issues are optional execution artifacts, not automatic mirrors of specs.
 
 ## Iteration History
 - 2026-06-08: Initial spec-driven workflow added.
+- 2026-06-08: Added deploy artifact privacy guard requirement and PR spec checklist decision.

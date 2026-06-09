@@ -39,6 +39,8 @@ List names only. Never commit values.
 ## Deploy Process
 Build with `npm run build`, verify with `npm run lint`, push to GitHub, then deploy `dist` to Cloudflare Pages with Wrangler unless Git-linked deployment is later adopted.
 
+Only deploy `dist`. Never deploy the repository root, because root-level docs and `/specs` contain proprietary product and AI operating strategy.
+
 ## Current URLs
 - Production app: `https://app.clearview.win`
 - Pages domain: `https://doorstep-crm.pages.dev`
@@ -47,5 +49,7 @@ Build with `npm run build`, verify with `npm run lint`, push to GitHub, then dep
 ## Verification Commands
 - `npm run build`
 - `npm run lint`
+- `npm run verify:deploy-artifact`
+- `npm run verify`
 - `curl -I https://app.clearview.win/`
 - `curl -s https://app.clearview.win/config`

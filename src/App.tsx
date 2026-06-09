@@ -927,27 +927,27 @@ function SupabaseShell() {
 
 function AuthScreen() {
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
-  const [identity, setIdentity] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const email = identity.includes('@') ? identity.trim() : `${identity.trim()}@doorstep.local`;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     const result = mode === 'sign-in'
-      ? await supabase.auth.signInWithPassword({ email, password })
+      ? await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
       : await supabase.auth.signUp({
-          email,
+          email: normalizedEmail,
           password,
           options: {
             data: {
-              username: identity.trim(),
+              username: normalizedEmail,
               full_name: fullName.trim(),
             },
           },
@@ -983,9 +983,10 @@ function AuthScreen() {
             />
           )}
           <input
-            value={identity}
-            onChange={(event) => setIdentity(event.target.value)}
-            placeholder="Email or username"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="Email"
+            type="email"
             className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
             required
           />

@@ -29,3 +29,10 @@ Append-only. Never edit past entries except to fix typos that obscure meaning.
 **Rationale:** Runtime config lets manual deploys use Cloudflare env vars reliably without committing public keys into generated bundles.
 **Alternatives considered:** Build locally with env vars; rejected because it is easy to forget and creates inconsistent deploys.
 **Consequences:** `functions/config.ts`, `public/config`, and `src/lib/supabase.ts` are part of the deploy contract.
+
+## 2026-06-08 17:22 MST — Keep Spec Strategy Out Of Cloudflare Artifacts
+**Context:** The spec-driven workflow is proprietary product/operating strategy and should be visible in GitHub only, not served by Cloudflare Pages.
+**Decision:** Deploy only `dist` and add `npm run verify:deploy-artifact` to fail if markdown/spec/strategy files or private markers appear in `dist`.
+**Rationale:** Vite only emits imported app assets and files from `public`; a deploy-time guard prevents accidental future leakage.
+**Alternatives considered:** Keep relying on convention only; rejected because a future agent could accidentally move docs into `public` or deploy the wrong directory.
+**Consequences:** `npm run verify` should be used before deploys, and Cloudflare deploy commands must continue targeting `dist`.

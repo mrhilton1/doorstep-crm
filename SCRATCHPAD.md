@@ -10,7 +10,7 @@
 - [x] Create focused activity logging spec.
 - [x] Add Knock/Conversation interaction types and editor composer.
 - [x] Run verification.
-- [ ] Commit, push, and deploy if verification passes.
+- [x] Commit, push, and deploy if verification passes.
 
 ## Assumptions
 - Visit Status remains the latest/current address state.

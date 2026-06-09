@@ -12,7 +12,7 @@
 - [x] Load/write activities through Supabase.
 - [x] Replace Visit Status area with progressive event logger UI.
 - [x] Run verification.
-- [ ] Commit, push, and deploy if verification passes.
+- [x] Commit, push, and deploy if verification passes.
 
 ## Assumptions
 - `doorstep.activities` is the canonical event store for this pass.

@@ -41,6 +41,8 @@ DoorStep CRM is a multi-user, object-oriented CRM for field sales and service te
 7. Run local verification and record what passed or failed.
 8. Update the spec and append decisions to `decisions.md` when needed.
 
+If you realize you skipped steps 1-3, stop before continuing, update `SCRATCHPAD.md` with the miss and current objective, then update or create the relevant spec before making more code changes.
+
 ## Agent Behavior Expectations
 - Treat specs as source of truth for intent and code as source of truth for current reality.
 - Prefer understanding before coding, but execute once the path is clear.

@@ -33,7 +33,7 @@
 - [x] Add npm verification scripts and PR checklist.
 - [x] Align auth UI with real-email requirement.
 - [x] Run build, lint, artifact verification, and inspect `dist`.
-- [ ] Commit and push.
+- [x] Commit and push.
 
 ## Assumptions
 - Cloudflare deployment should continue to upload only `dist`.
@@ -43,6 +43,28 @@
 ## Gotchas Discovered This Session
 - Vite copies everything in `public/` into `dist`, so proprietary docs must never be placed there.
 - `dist` currently contains only `index.html`, one JS asset, one CSS asset, and `config`.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-08 — Process Correction
+**Task:** Document the password recovery work and tighten the read-first ritual after it was not fully followed before coding.  
+**Target spec:** `/specs/auth-password-recovery.spec.md`
+
+## Micro-Steps
+- [x] Re-read `CLAUDE.md`, `SCRATCHPAD.md`, and the auth spec.
+- [x] Confirm existing auth spec includes password recovery behavior.
+- [x] Add a narrower password recovery feature spec for auditability.
+- [x] Add a process correction rule to `CLAUDE.md`.
+- [x] Run verification.
+- [ ] Commit and push.
+
+## Assumptions
+- The existing `supabase-workspace-auth` spec remains the parent auth/workspace spec.
+- Password recovery deserves its own focused spec because it was a distinct user-facing auth change.
+
+## Gotchas Discovered This Session
+- The password recovery change was implemented after inspecting relevant code/specs, but without first updating `SCRATCHPAD.md`; this is now explicitly recorded as process drift.
 
 ---
 *Wipe entries older than 30 days. This is working memory, not history.*

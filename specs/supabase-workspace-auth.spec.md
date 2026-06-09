@@ -10,7 +10,7 @@
 Enable DoorStep CRM to operate as a multi-user, multi-workspace app backed by Supabase Auth, RLS, roles, permissions, and entitlements.
 
 ## Current Behavior
-Production renders a Supabase sign-in/sign-up screen when runtime config is present. On first authenticated load, the app attempts to find an active workspace membership and calls `doorstep.create_workspace` if none exists. Address records are loaded from `doorstep.addresses`. Much of the app still keeps settings, catalog, team, goals, routes, quotes, and invoices in local component/localStorage state.
+Production renders a Supabase sign-in/sign-up screen when runtime config is present. Users can request a password reset email and set a new password after opening the Supabase recovery link. On first authenticated load, the app attempts to find an active workspace membership and calls `doorstep.create_workspace` if none exists. Address records are loaded from `doorstep.addresses`. Much of the app still keeps settings, catalog, team, goals, routes, quotes, and invoices in local component/localStorage state.
 
 ## Desired Behavior
 Every authenticated user belongs to one or more workspaces. Signup is open to anyone for MVP, but users must use real email addresses. Workspace membership controls access to address/contact/quote/appointment data through Supabase RLS. Roles are renameable and cloneable later, with MVP defaults for Owner, Admin, Sales Rep, Scheduler, and Technician.
@@ -18,14 +18,17 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 ## User Flow
 1. User opens `https://app.clearview.win`.
 2. User signs in or creates an account.
-3. App loads the user's active workspace.
-4. If no workspace exists, app creates one and makes the user Owner.
-5. App loads workspace-scoped CRM data.
-6. User can sign out from the app chrome.
+3. If the user has no password or forgot it, user requests a password reset email.
+4. User opens the recovery link and sets a new password.
+5. App loads the user's active workspace.
+6. If no workspace exists, app creates one and makes the user Owner.
+7. App loads workspace-scoped CRM data.
+8. User can sign out from the app chrome.
 
 ## Business Rules
 - Signup is open to anyone for MVP.
 - Auth requires real email addresses; do not create synthetic `@doorstep.local` usernames.
+- Existing OAuth/email users must be able to set a password through Supabase password recovery.
 - Workspace data must be scoped by `workspace_id`.
 - Supabase service-role keys must never be used in browser code.
 - RLS must be enabled on workspace-owned tables.
@@ -49,6 +52,8 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 ## Acceptance Criteria
 - Given Supabase env vars exist, when production loads, then the Supabase auth screen appears for signed-out users.
 - Given a user signs up or signs in, when they enter an identity, then it must be a real email address accepted by the email input.
+- Given an existing user has no known password, when they request a reset, then Supabase sends a recovery email to their real email address.
+- Given a user opens a valid recovery link, when they enter matching passwords, then their Supabase password is updated.
 - Given an authenticated user has no workspace, when the app loads, then a workspace and Owner membership are created.
 - Given a user is not a workspace member, when they query workspace data, then RLS denies access.
 - Given local env vars are missing, when developing locally, then the app renders local demo mode instead of crashing.
@@ -57,6 +62,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Verify Supabase migrations exist and are listed in Supabase.
 - Verify production `/config` returns public runtime config.
 - Verify production renders sign-in screen.
+- Verify password recovery email sends and recovery link opens the set-password screen.
 - Test sign-up/sign-in and first workspace creation with a real user.
 
 ## Open Questions
@@ -72,3 +78,4 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 ## Iteration History
 - 2026-06-08: Initial auth/workspace bootstrap shipped.
 - 2026-06-08: Replaced username-style auth language with real-email requirement.
+- 2026-06-08: Added password reset and set-new-password flow for existing users.

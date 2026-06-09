@@ -104,7 +104,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { cn } from './lib/utils';
 import HomeDashboard from './components/HomeDashboard';
 import OverdueInvoicesOverlay from './components/OverdueInvoicesOverlay';
-import { doorstepDb, hasSupabaseConfig, supabase } from './lib/supabase';
+import { appUrl, doorstepDb, hasSupabaseConfig, supabase } from './lib/supabase';
 import { 
   PropertyContact, 
   PropertyStatus, 
@@ -786,6 +786,7 @@ function SupabaseShell() {
   const [workspaceName, setWorkspaceName] = useState('DoorStep Workspace');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -796,7 +797,10 @@ function SupabaseShell() {
       setIsLoading(false);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
       setSession(nextSession);
       setWorkspaceId(null);
       setError(null);
@@ -888,6 +892,10 @@ function SupabaseShell() {
     return <AuthScreen />;
   }
 
+  if (isPasswordRecovery) {
+    return <UpdatePasswordScreen onComplete={() => setIsPasswordRecovery(false)} />;
+  }
+
   if (error || !workspaceId) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
@@ -926,19 +934,36 @@ function SupabaseShell() {
 }
 
 function AuthScreen() {
-  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [mode, setMode] = useState<'sign-in' | 'sign-up' | 'reset'>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setMessage(null);
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    if (mode === 'reset') {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: appUrl,
+      });
+
+      if (resetError) {
+        setError(resetError.message);
+      } else {
+        setMessage('Password reset email sent. Open the link in that email to set a new password.');
+      }
+
+      setIsSubmitting(false);
+      return;
+    }
 
     const result = mode === 'sign-in'
       ? await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
@@ -969,7 +994,9 @@ function AuthScreen() {
           </div>
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-blue-600">DoorStep CRM</p>
-            <h1 className="text-2xl font-black">{mode === 'sign-in' ? 'Sign In' : 'Create Account'}</h1>
+            <h1 className="text-2xl font-black">
+              {mode === 'sign-in' ? 'Sign In' : mode === 'sign-up' ? 'Create Account' : 'Reset Password'}
+            </h1>
           </div>
         </div>
 
@@ -990,10 +1017,130 @@ function AuthScreen() {
             className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
+          {mode !== 'reset' && (
+            <input
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Password"
+              type="password"
+              minLength={6}
+              className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          )}
+        </div>
+
+        {error && (
+          <p className="mt-4 text-sm font-bold text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
+        )}
+
+        {message && (
+          <p className="mt-4 text-sm font-bold text-green-700 bg-green-50 rounded-xl p-3">{message}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="mt-5 w-full bg-blue-600 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest disabled:opacity-60"
+        >
+          {isSubmitting ? 'Working...' : mode === 'sign-in' ? 'Sign In' : mode === 'sign-up' ? 'Create Account' : 'Send Reset Email'}
+        </button>
+
+        <div className="mt-4 flex flex-col gap-3 text-sm font-bold text-slate-500">
+          {mode === 'sign-in' && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('reset');
+                setError(null);
+                setMessage(null);
+              }}
+            >
+              Forgot password?
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up');
+              setError(null);
+              setMessage(null);
+            }}
+          >
+            {mode === 'sign-up' ? 'Already have an account? Sign in' : 'Need an account? Create one'}
+          </button>
+          {mode === 'reset' && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('sign-in');
+                setError(null);
+                setMessage(null);
+              }}
+            >
+              Back to sign in
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function UpdatePasswordScreen({ onComplete }: { onComplete: () => void }) {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setIsSubmitting(false);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    onComplete();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+      <form onSubmit={submit} className="w-full max-w-md bg-white text-slate-900 rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-11 w-11 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+            <Lock size={22} />
+          </div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-blue-600">DoorStep CRM</p>
+            <h1 className="text-2xl font-black">Set New Password</h1>
+          </div>
+        </div>
+
+        <div className="space-y-3">
           <input
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Password"
+            placeholder="New password"
+            type="password"
+            minLength={6}
+            className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+          <input
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="Confirm new password"
             type="password"
             minLength={6}
             className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
@@ -1010,18 +1157,7 @@ function AuthScreen() {
           disabled={isSubmitting}
           className="mt-5 w-full bg-blue-600 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest disabled:opacity-60"
         >
-          {isSubmitting ? 'Working...' : mode === 'sign-in' ? 'Sign In' : 'Create Account'}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
-            setError(null);
-          }}
-          className="mt-4 w-full text-sm font-bold text-slate-500"
-        >
-          {mode === 'sign-in' ? 'Need an account? Create one' : 'Already have an account? Sign in'}
+          {isSubmitting ? 'Saving...' : 'Save Password'}
         </button>
       </form>
     </div>

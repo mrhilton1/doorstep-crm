@@ -33,7 +33,7 @@
 - [x] Create focused feature spec.
 - [x] Add quick edit action to the summary drawer.
 - [x] Run verification.
-- [ ] Commit and push if appropriate.
+- [x] Commit and push if appropriate.
 
 ## Assumptions
 - The third screenshot is the existing `PropertyDrawer` edit panel.

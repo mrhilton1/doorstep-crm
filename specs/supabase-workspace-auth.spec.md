@@ -10,7 +10,7 @@
 Enable DoorStep CRM to operate as a multi-user, multi-workspace app backed by Supabase Auth, RLS, roles, permissions, and entitlements.
 
 ## Current Behavior
-Production renders a Supabase sign-in/sign-up screen when runtime config is present. Users can request a password reset email and set a new password after opening the Supabase recovery link. On first authenticated load, the app attempts to find an active workspace membership and calls `doorstep.create_workspace` if none exists. Address records are loaded from `doorstep.addresses`. Much of the app still keeps settings, catalog, team, goals, routes, quotes, and invoices in local component/localStorage state.
+Production renders a Supabase sign-in/sign-up screen when runtime config is present. Users can request a password reset email and set a new password after opening the Supabase recovery link. On first authenticated load, the app attempts to find an active workspace membership and calls `doorstep.create_workspace` if none exists. Address records are loaded from `doorstep.addresses`; nested MVP data such as quotes, invoices, interactions, appointments, tags, and child contacts still rides through the address `custom_data` bridge until those flows are normalized. Workspace-level app state such as catalog, settings, team, goals, and routes persists through `doorstep.workspace_app_state` as a bridge table. Browser storage is not used as a CRM data source.
 
 ## Desired Behavior
 Every authenticated user belongs to one or more workspaces. Signup is open to anyone for MVP, but users must use real email addresses. Workspace membership controls access to address/contact/quote/appointment data through Supabase RLS. Roles are renameable and cloneable later, with MVP defaults for Owner, Admin, Sales Rep, Scheduler, and Technician.
@@ -56,7 +56,9 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Given a user opens a valid recovery link, when they enter matching passwords, then their Supabase password is updated.
 - Given an authenticated user has no workspace, when the app loads, then a workspace and Owner membership are created.
 - Given a user is not a workspace member, when they query workspace data, then RLS denies access.
-- Given local env vars are missing, when developing locally, then the app renders local demo mode instead of crashing.
+- Given Supabase env vars are missing, when the app loads, then it shows a Supabase configuration-required screen instead of running a separate local CRM.
+- Given address CRM data changes in the app, when persistence is needed, then data is written through `doorstep.addresses` rather than browser storage.
+- Given workspace-level app state changes in the app, when persistence is needed, then catalog, settings, team, goals, and routes are written through `doorstep.workspace_app_state` rather than browser storage.
 
 ## Validation Plan
 - Verify Supabase migrations exist and are listed in Supabase.
@@ -74,8 +76,12 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - 2026-06-08: Use Supabase Auth email/password API with real email addresses.
 - 2026-06-08: Use `doorstep.create_workspace` RPC to bootstrap workspace, roles, role permissions, entitlements, and owner membership.
 - 2026-06-08: Keep signup open for MVP unless abuse or launch constraints require invitation-only later.
+- 2026-06-09: Browser storage is not an acceptable source of truth for CRM data; Supabase is required.
+- 2026-06-09: Use `doorstep.workspace_app_state` as a bridge for workspace-level JSON state until normalized tables are implemented.
 
 ## Iteration History
 - 2026-06-08: Initial auth/workspace bootstrap shipped.
 - 2026-06-08: Replaced username-style auth language with real-email requirement.
 - 2026-06-08: Added password reset and set-new-password flow for existing users.
+- 2026-06-09: Removed local CRM persistence and local demo fallback from the live app.
+- 2026-06-09: Added Supabase workspace app-state bridge for catalog, settings, team, goals, and routes.

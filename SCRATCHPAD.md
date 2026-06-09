@@ -1,5 +1,33 @@
 # Scratchpad
 
+## 2026-06-09 — Current Objective
+**Task:** Remove browser-storage-backed CRM state so Supabase is the app source of truth.
+**Target spec:** `/specs/supabase-workspace-auth.spec.md`
+
+## Micro-Steps
+- [x] Stop local smoke-test server.
+- [x] Inventory `localStorage` and `sessionStorage` usage.
+- [x] Remove live app browser-storage reads/writes.
+- [x] Add Supabase bridge table for workspace app state.
+- [x] Remove stale backup file containing old browser-storage behavior.
+- [x] Update spec and agent guardrails.
+- [x] Run verification.
+- [x] Apply migration to Supabase project `vupriscnyrqmibmfowdx`.
+- [ ] Commit and push if appropriate.
+
+## Assumptions
+- MVP can keep nested quotes, invoices, interactions, appointments, tags, and child contacts in `doorstep.addresses.custom_data` until those tables are wired into the UI.
+- Catalog, settings, team, goals, and routes can use `doorstep.workspace_app_state` as a bridge table until they receive normalized tables.
+- Missing Supabase config should be treated as setup-required, not as a separate local CRM mode.
+
+## Gotchas Discovered This Session
+- `src/App.backup.tsx` still contained old browser-storage behavior and was removed to prevent pattern drift.
+- The current address upsert bridge already persists most per-address nested MVP data through Supabase `custom_data`.
+- Migration `005_workspace_app_state.sql` was applied successfully to Supabase project `vupriscnyrqmibmfowdx`.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-08 — Current Objective
 **Task:** Install a spec-driven AI engineering workflow in the DoorStep CRM repo so future deploys become more efficient and higher quality.  
 **Target spec:** `/specs/spec-driven-ai-engineering.spec.md`

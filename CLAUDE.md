@@ -25,7 +25,7 @@ DoorStep CRM is a multi-user, object-oriented CRM for field sales and service te
 
 ## Forbidden Patterns
 - Do not model the product as lead-first; addresses are the MVP primary object.
-- Do not add new persistent localStorage-backed CRM data as the source of truth.
+- Do not use `localStorage` or `sessionStorage` for CRM data, auth tokens, workspace state, settings, routes, catalog, or user-owned records; persist through Supabase-backed APIs/tables instead.
 - Do not put secret values in `.env.example`, docs, commits, or browser code.
 - Do not make destructive database changes without a migration and explicit approval.
 - Do not rename schema/table/column contracts without a migration plan.

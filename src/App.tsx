@@ -185,6 +185,8 @@ type WorkspaceMembership = {
   workspaces?: { name?: string | null } | { name?: string | null }[] | null;
 };
 
+type WorkspaceAppStateKey = 'catalog' | 'settings' | 'team' | 'goals' | 'routes';
+
 const statusToDb: Record<PropertyStatus, string> = {
   'Not Visited': 'not_visited',
   'Knocked': 'knocked',
@@ -262,6 +264,84 @@ const addressRowToProperty = (row: any): PropertyContact => {
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
   };
 };
+
+const createDefaultCatalog = (): { products: Product[], bundles: Bundle[] } => ({
+  products: [
+    { id: 'p1', name: 'Standard Solar Panel', price: 500, description: 'Single efficiency panel', category: 'Solar' },
+    { id: 'p2', name: 'Inverter System', price: 1200, description: 'Power conversion unit', category: 'Electrical' },
+    { id: 'p3', name: 'Roof Inspection', price: 150, description: 'Full safety audit', category: 'Service' },
+    { id: 'p4', name: 'Mounting Hardware', price: 300, description: 'Steel rack system', category: 'Solar' },
+    { id: 'p5', name: 'Backup Battery', price: 4500, description: '10kWh storage capacity', category: 'Energy' }
+  ],
+  bundles: [
+    {
+      id: 'b1',
+      name: 'Silver Solar Bundle',
+      productIds: ['p1', 'p2', 'p4'],
+      description: 'Essential setup for small homes',
+      discountType: 'percentage',
+      discountValue: 10,
+      discountLabel: 'Package Savings'
+    },
+    {
+      id: 'b2',
+      name: 'Energy Independence Bundle',
+      productIds: ['p1', 'p2', 'p4', 'p5'],
+      description: 'Full setup with storage',
+      discountType: 'percentage',
+      discountValue: 20,
+      discountLabel: 'Independence Incentive'
+    }
+  ]
+});
+
+const createDefaultSettings = (): AppSettings => ({
+  tags: DEFAULT_TAGS,
+  contactFields: [
+    { id: 'role', label: 'Role', type: 'text', required: false, visible: true },
+    { id: 'email', label: 'Email', type: 'email', required: false, visible: true },
+    { id: 'phone', label: 'Phone', type: 'tel', required: false, visible: true },
+    { id: 'isDecisionMaker', label: 'Decision Maker', type: 'checkbox', required: false, visible: true }
+  ],
+  discounts: [
+    { id: 'd1', name: 'Early Bird', type: 'percentage', value: 10 },
+    { id: 'd2', name: 'Referral', type: 'fixed', value: 50 }
+  ],
+  labels: {
+    leads: 'Records',
+    quotes: 'Quotes',
+    sales: 'Sales',
+    catalog: 'Catalog',
+    bundles: 'Bundles',
+    discounts: 'Discounts',
+    team: 'Team',
+    goals: 'Goals',
+    firstName: 'First Name',
+    lastName: 'Last Name',
+    phone: 'Phone',
+    email: 'Email',
+    stages: {
+      prospect: 'Prospect',
+      lead: 'Lead',
+      opportunity: 'Opportunity',
+      customer: 'Customer'
+    }
+  },
+  businessInfo: {
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    phone: '',
+    email: ''
+  },
+  operationalTargets: {
+    weeklyKnocks: 40,
+    monthlyConverted: 15,
+    collectionGoal: 3000
+  }
+});
 
 function getWorkspaceName(membership: WorkspaceMembership | null) {
   const workspace = Array.isArray(membership?.workspaces) ? membership?.workspaces[0] : membership?.workspaces;
@@ -766,18 +846,27 @@ function PromptModal({
 
 export default function App() {
   if (!hasSupabaseConfig) {
-    return (
-      <CrmApp
-        workspaceId={null}
-        workspaceName="Local Demo"
-        userId={null}
-        userEmail={null}
-        onSignOut={() => undefined}
-      />
-    );
+    return <SupabaseConfigRequiredScreen />;
   }
 
   return <SupabaseShell />;
+}
+
+function SupabaseConfigRequiredScreen() {
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex items-center justify-center p-6">
+      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
+        <div className="h-12 w-12 rounded-xl bg-blue-600 text-white flex items-center justify-center mb-5">
+          <Lock className="w-6 h-6" />
+        </div>
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">Supabase Required</p>
+        <h1 className="text-2xl font-black tracking-tight mb-3">DoorStep CRM needs runtime config</h1>
+        <p className="text-sm font-semibold text-slate-500 leading-relaxed">
+          Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` before launching the app. Browser local storage is no longer used as a CRM data source.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function SupabaseShell() {
@@ -1166,181 +1255,13 @@ function UpdatePasswordScreen({ onComplete }: { onComplete: () => void }) {
 
 function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: WorkspaceContext) {
   // State
-  const [properties, setProperties] = useState<PropertyContact[]>(() => {
-    const saved = localStorage.getItem('doorstep_crm_data');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [catalog, setCatalog] = useState<{ products: Product[], bundles: Bundle[] }>(() => {
-    const saved = localStorage.getItem('doorstep_crm_catalog');
-    if (saved) return JSON.parse(saved);
-    
-    // Default catalog if empty
-    return {
-      products: [
-        { id: 'p1', name: 'Standard Solar Panel', price: 500, description: 'Single efficiency panel', category: 'Solar' },
-        { id: 'p2', name: 'Inverter System', price: 1200, description: 'Power conversion unit', category: 'Electrical' },
-        { id: 'p3', name: 'Roof Inspection', price: 150, description: 'Full safety audit', category: 'Service' },
-        { id: 'p4', name: 'Mounting Hardware', price: 300, description: 'Steel rack system', category: 'Solar' },
-        { id: 'p5', name: 'Backup Battery', price: 4500, description: '10kWh storage capacity', category: 'Energy' }
-      ],
-      bundles: [
-        { 
-          id: 'b1', 
-          name: 'Silver Solar Bundle', 
-          productIds: ['p1', 'p2', 'p4'], 
-          description: 'Essential setup for small homes',
-          discountType: 'percentage',
-          discountValue: 10,
-          discountLabel: 'Package Savings'
-        },
-        { 
-          id: 'b2', 
-          name: 'Energy Independence Bundle', 
-          productIds: ['p1', 'p2', 'p4', 'p5'], 
-          description: 'Full setup with storage',
-          discountType: 'percentage',
-          discountValue: 20,
-          discountLabel: 'Independence Incentive'
-        }
-      ]
-    };
-  });
-
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('doorstep_crm_settings');
-    const defaultBusinessInfo = {
-      name: '',
-      address: '',
-      city: '',
-      state: '',
-      zip: '',
-      phone: '',
-      email: ''
-    };
-    
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Ensure businessInfo exists
-      if (!parsed.businessInfo) {
-        parsed.businessInfo = defaultBusinessInfo;
-      }
-      // Ensure new fields exist in old data
-      if (!parsed.labels) {
-        parsed.labels = {
-          leads: 'Records',
-          quotes: 'Quotes',
-          sales: 'Sales',
-          catalog: 'Catalog',
-          bundles: 'Bundles',
-          discounts: 'Discounts',
-          team: 'Team',
-          goals: 'Goals',
-          firstName: 'First Name',
-          lastName: 'Last Name',
-          phone: 'Phone',
-          email: 'Email',
-          stages: {
-            prospect: 'Prospect',
-            lead: 'Lead',
-            opportunity: 'Opportunity',
-            customer: 'Customer'
-          }
-        };
-      }
-      if (!parsed.labels.firstName) parsed.labels.firstName = 'First Name';
-      if (!parsed.labels.lastName) parsed.labels.lastName = 'Last Name';
-      if (!parsed.labels.phone) parsed.labels.phone = 'Phone';
-      if (!parsed.labels.email) parsed.labels.email = 'Email';
-      
-      if (!parsed.labels.stages) {
-        parsed.labels.stages = {
-          prospect: 'Prospect',
-          lead: 'Lead',
-          opportunity: 'Opportunity',
-          customer: 'Customer'
-        };
-      }
-      if (!parsed.businessInfo) {
-        parsed.businessInfo = {
-          name: '',
-          address: '',
-          city: '',
-          state: '',
-          zip: '',
-          phone: '',
-          email: ''
-        };
-      }
-      if (!parsed.operationalTargets) {
-        parsed.operationalTargets = {
-          weeklyKnocks: 40,
-          monthlyConverted: 15,
-          collectionGoal: 3000
-        };
-      }
-      parsed.contactFields = parsed.contactFields.map((f: any) => ({ ...f, visible: f.visible !== undefined ? f.visible : true }));
-      return parsed;
-    }
-    return {
-      tags: DEFAULT_TAGS,
-      contactFields: [
-        { id: 'role', label: 'Role', type: 'text', required: false, visible: true },
-        { id: 'email', label: 'Email', type: 'email', required: false, visible: true },
-        { id: 'phone', label: 'Phone', type: 'tel', required: false, visible: true },
-        { id: 'isDecisionMaker', label: 'Decision Maker', type: 'checkbox', required: false, visible: true }
-      ],
-      discounts: [
-        { id: 'd1', name: 'Early Bird', type: 'percentage', value: 10 },
-        { id: 'd2', name: 'Referral', type: 'fixed', value: 50 }
-      ],
-      labels: {
-        leads: 'Records',
-        quotes: 'Quotes',
-        sales: 'Sales',
-        catalog: 'Catalog',
-        bundles: 'Bundles',
-        discounts: 'Discounts',
-        team: 'Team',
-        goals: 'Goals',
-        firstName: 'First Name',
-        lastName: 'Last Name',
-        phone: 'Phone',
-        email: 'Email',
-        stages: {
-          prospect: 'Prospect',
-          lead: 'Lead',
-          opportunity: 'Opportunity',
-          customer: 'Customer'
-        }
-      },
-      businessInfo: {
-        name: '',
-        address: '',
-        city: '',
-        state: '',
-        zip: '',
-        phone: '',
-        email: ''
-      },
-      operationalTargets: {
-        weeklyKnocks: 40,
-        monthlyConverted: 15,
-        collectionGoal: 3000
-      }
-    };
-  });
-
-  const [team, setTeam] = useState<Member[]>(() => {
-    const saved = localStorage.getItem('doorstep_crm_team');
-    return saved ? JSON.parse(saved) : [
-      { id: 'm1', name: 'Mike (Owner)', role: 'Admin', color: '#2563EB' }
-    ];
-  });
-
-  const [goals, setGoals] = useState<Goal[]>(() => {
-    const saved = localStorage.getItem('doorstep_crm_goals');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [properties, setProperties] = useState<PropertyContact[]>([]);
+  const [catalog, setCatalog] = useState<{ products: Product[], bundles: Bundle[] }>(createDefaultCatalog);
+  const [settings, setSettings] = useState<AppSettings>(createDefaultSettings);
+  const [team, setTeam] = useState<Member[]>([
+    { id: 'm1', name: 'Mike (Owner)', role: 'Admin', color: '#2563EB' }
+  ]);
+  const [goals, setGoals] = useState<Goal[]>([]);
 
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -1353,10 +1274,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isOverdueInvoicesOpen, setIsOverdueInvoicesOpen] = useState(false);
   const [settingsActiveTab, setSettingsActiveTab] = useState<'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'>('business');
-  const [routes, setRoutes] = useState<ProspectRoute[]>(() => {
-    const saved = localStorage.getItem('doorstep_crm_routes');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [routes, setRoutes] = useState<ProspectRoute[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1365,24 +1283,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [isRouteActive, setIsRouteActive] = useState(false);
   const [workingRouteId, setWorkingRouteId] = useState<string | null>(null);
   const [selectingStartForRouteId, setSelectingStartForRouteId] = useState<string | null>(null);
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(() => {
-    const saved = localStorage.getItem('doorstep_crm_map_state');
-    if (saved) {
-      const { center } = JSON.parse(saved);
-      return center;
-    }
-    // If no saved state but properties exist, we'll calculate bounds later, 
-    // but for now return null to allow initial city fetch to take priority if needed.
-    return null;
-  });
-  const [mapZoom, setMapZoom] = useState<number>(() => {
-    const saved = localStorage.getItem('doorstep_crm_map_state');
-    if (saved) {
-      const { zoom } = JSON.parse(saved);
-      return zoom;
-    }
-    return 13; // Default to a more context-rich zoom level
-  });
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [mapZoom, setMapZoom] = useState<number>(13);
 
   const [mapMode, setMapMode] = useState<'street' | 'satellite'>('street');
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
@@ -1427,6 +1329,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [dataStatus, setDataStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(workspaceId ? 'loading' : 'local');
   const [dataError, setDataError] = useState<string | null>(null);
   const hasLoadedRemoteAddresses = useRef(!workspaceId);
+  const hasLoadedRemoteAppState = useRef(!workspaceId);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -1493,15 +1396,72 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     return () => window.clearTimeout(timeout);
   }, [properties, userId, workspaceId]);
 
-  // Persistence for Map State
   useEffect(() => {
-    if (mapCenter) {
-      localStorage.setItem('doorstep_crm_map_state', JSON.stringify({
-        center: mapCenter,
-        zoom: mapZoom
-      }));
-    }
-  }, [mapCenter, mapZoom]);
+    if (!workspaceId) return;
+
+    let isMounted = true;
+    hasLoadedRemoteAppState.current = false;
+
+    const loadWorkspaceAppState = async () => {
+      const { data, error } = await doorstepDb
+        .from('workspace_app_state')
+        .select('key,value')
+        .in('key', ['catalog', 'settings', 'team', 'goals', 'routes']);
+
+      if (!isMounted) return;
+
+      if (error) {
+        setDataStatus('error');
+        setDataError(error.message);
+        hasLoadedRemoteAppState.current = true;
+        return;
+      }
+
+      const stateByKey = new Map<WorkspaceAppStateKey, any>(
+        (data || []).map((row: any) => [row.key as WorkspaceAppStateKey, row.value])
+      );
+
+      if (stateByKey.has('catalog')) setCatalog(stateByKey.get('catalog'));
+      if (stateByKey.has('settings')) setSettings(stateByKey.get('settings'));
+      if (stateByKey.has('team')) setTeam(stateByKey.get('team'));
+      if (stateByKey.has('goals')) setGoals(stateByKey.get('goals'));
+      if (stateByKey.has('routes')) setRoutes(stateByKey.get('routes'));
+
+      hasLoadedRemoteAppState.current = true;
+    };
+
+    loadWorkspaceAppState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !hasLoadedRemoteAppState.current) return;
+
+    const syncWorkspaceAppState = async () => {
+      const rows = [
+        { workspace_id: workspaceId, key: 'catalog', value: catalog, updated_by: userId },
+        { workspace_id: workspaceId, key: 'settings', value: settings, updated_by: userId },
+        { workspace_id: workspaceId, key: 'team', value: team, updated_by: userId },
+        { workspace_id: workspaceId, key: 'goals', value: goals, updated_by: userId },
+        { workspace_id: workspaceId, key: 'routes', value: routes, updated_by: userId },
+      ];
+
+      const { error } = await doorstepDb
+        .from('workspace_app_state')
+        .upsert(rows, { onConflict: 'workspace_id,key' });
+
+      if (error) {
+        setDataStatus('error');
+        setDataError(error.message);
+      }
+    };
+
+    const timeout = window.setTimeout(syncWorkspaceAppState, 700);
+    return () => window.clearTimeout(timeout);
+  }, [catalog, goals, routes, settings, team, userId, workspaceId]);
 
   const placesLib = useMapsLibrary('places');
 
@@ -1596,21 +1556,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     if (hasInitializedLocation) return;
 
     const initializeMap = async () => {
-      // 1. Priority: Saved State from LocalStorage
-      const savedState = localStorage.getItem('doorstep_crm_map_state');
-      if (savedState) {
-        try {
-          const { center, zoom } = JSON.parse(savedState);
-          setMapCenter(center);
-          setMapZoom(zoom);
-          setHasInitializedLocation(true);
-          return;
-        } catch (e) {
-          console.error("Failed to parse saved map state", e);
-        }
-      }
-
-      // 2. If we have properties, we should center on them
+      // 1. If we have Supabase-loaded properties, center on the first record.
       if (properties.length > 0) {
         const p = properties[0];
         setMapCenter([p.lat, p.lng]);
@@ -1619,7 +1565,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         return;
       }
 
-      // 2. Try business city position from settings
+      // 2. Try business city position from settings.
       const city = settings.businessInfo.city;
       if (city) {
         try {
@@ -1638,7 +1584,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         }
       }
 
-      // 3. Fallback to geolocation ONLY if map is totally fresh
+      // 3. Fallback to geolocation only if map is totally fresh.
       if (navigator.geolocation && !mapCenter) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
@@ -1770,32 +1716,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     setIsDrawerOpen(true);
   };
 
-  // Persistence
-  useEffect(() => {
-    localStorage.setItem('doorstep_crm_data', JSON.stringify(properties));
-  }, [properties]);
-
-  useEffect(() => {
-    localStorage.setItem('doorstep_crm_catalog', JSON.stringify(catalog));
-  }, [catalog]);
-
-  useEffect(() => {
-    localStorage.setItem('doorstep_crm_settings', JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
-    localStorage.setItem('doorstep_crm_team', JSON.stringify(team));
-  }, [team]);
-
-  useEffect(() => {
-    localStorage.setItem('doorstep_crm_goals', JSON.stringify(goals));
-  }, [goals]);
-
-  useEffect(() => {
-    localStorage.setItem('doorstep_crm_routes', JSON.stringify(routes));
-  }, [routes]);
-
-  // Redundant initial location removed as it's now handled by hasInitializedLocation logic.
+  // Address persistence is handled by the Supabase sync effect above.
 
   const selectedProperty = useMemo(() => 
     properties.find(p => p.id === selectedPropertyId), 
@@ -2069,22 +1990,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   // Google Calendar Integration State
-  const [googleTokens, setGoogleTokens] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem('doorstep_crm_google_tokens');
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('doorstep_crm_google_tokens', JSON.stringify(googleTokens));
-  }, [googleTokens]);
+  const [googleTokens, setGoogleTokens] = useState<Record<string, string>>({});
 
   const connectGoogle = async (memberId: string) => {
     // This is a placeholder for real OAuth flow since set_up_oauth tool is not available 
-    // and we are in a client-side SPA. In a real app, this would trigger GIS.
-    // For now, we'll simulate a successful connection for the demo.
-    const mockToken = 'mock_token_' + Math.random().toString(36).substring(7);
-    setGoogleTokens(prev => ({ ...prev, [memberId]: mockToken }));
-    alert(`Google Account connected for member!`);
+    // and we are in a client-side SPA. OAuth tokens must be stored server-side.
+    setGoogleTokens(prev => ({ ...prev, [memberId]: 'connected_this_session' }));
+    alert(`Google Account marked connected for this session only.`);
   };
 
   const scheduleAppointment = async (propertyId: string, memberId: string, details: any) => {

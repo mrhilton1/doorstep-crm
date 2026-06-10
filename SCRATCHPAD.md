@@ -1,6 +1,27 @@
 # Scratchpad
 
 ## 2026-06-10 — Current Objective
+**Task:** Tighten Leaflet map click selection so neighboring houses do not accidentally open an existing nearby address record.
+**Target spec:** `/specs/address-crm-core.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and map/address specs.
+- [x] Inspect map click, marker click, and reverse-geocode behavior.
+- [x] Replace broad degree threshold with meter-based address hit radius.
+- [x] Prevent reverse-geocode address matching from opening an existing record when the click is too far from that record's pin.
+- [x] Update spec notes about click precision limits and parcel boundaries.
+- [x] Run verification.
+- [x] Commit, push, and deploy if verification passes.
+
+## Assumptions
+- Leaflet tile imagery does not provide parcel polygons; precise property boundaries require parcel data or a provider API, not just switching map rendering libraries.
+- Marker clicks should still open existing records immediately.
+- Blank map clicks should prefer creating/searching the clicked address instead of snapping to a nearby existing record.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-10 — Current Objective
 **Task:** Replace the top-right floating workspace pill with a shared hamburger navigation menu that does not cover page actions.
 **Target spec:** `/specs/unified-address-record.spec.md`
 

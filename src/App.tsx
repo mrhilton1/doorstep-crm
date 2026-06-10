@@ -170,6 +170,38 @@ const normalizeAddress = (addr: string) => {
     .trim();
 };
 
+const ADDRESS_CLICK_HIT_RADIUS_METERS = 8;
+const ROUTE_SELECTION_HIT_RADIUS_METERS = 12;
+
+const distanceMeters = (a: [number, number], b: [number, number]) => {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+  const dLat = toRad(b[0] - a[0]);
+  const dLng = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+};
+
+const findClosestAddressRecord = (properties: PropertyContact[], lat: number, lng: number) => {
+  let existing: PropertyContact | null = null;
+  let minDistanceMeters = Infinity;
+
+  for (const property of properties) {
+    const distance = distanceMeters([property.lat, property.lng], [lat, lng]);
+    if (distance < minDistanceMeters) {
+      minDistanceMeters = distance;
+      existing = property;
+    }
+  }
+
+  return { existing, minDistanceMeters };
+};
+
 const STAGE_ORDER: PropertyStage[] = ['prospect', 'lead', 'opportunity', 'customer'];
 
 type WorkspaceContext = {
@@ -2076,20 +2108,10 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
   // Handlers
   const handleMapClick = async (lat: number, lng: number) => {
-    // Find closest property within a generous but localized touch threshold (~40 meters)
-    const threshold = 0.00045; 
-    let existing = null;
-    let minDistance = Infinity;
-
-    for (const p of properties) {
-      const dist = Math.sqrt(Math.pow(p.lat - lat, 2) + Math.pow(p.lng - lng, 2));
-      if (dist < threshold && dist < minDistance) {
-        minDistance = dist;
-        existing = p;
-      }
-    }
+    const { existing, minDistanceMeters } = findClosestAddressRecord(properties, lat, lng);
+    const hitRadius = isSelectionMode ? ROUTE_SELECTION_HIT_RADIUS_METERS : ADDRESS_CLICK_HIT_RADIUS_METERS;
     
-    if (existing) {
+    if (existing && minDistanceMeters <= hitRadius) {
       if (isSelectionMode) {
         setNewRoute(prev => ({
           ...prev,
@@ -2112,7 +2134,10 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       return;
     }
 
-    // Secondary check: search by address prefix if we can't find by proximity easily
+    if (isSelectionMode) {
+      return;
+    }
+
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`;
       const res = await fetch(url, {
@@ -2135,11 +2160,12 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         const fullAddrPrefix = `${houseNumber} ${street}`;
         const existingByAddr = properties.find(p => p.address.toLowerCase().startsWith(fullAddrPrefix.toLowerCase()));
         if (existingByAddr) {
-          if (!isSelectionMode) {
+          const existingAddressDistance = distanceMeters([existingByAddr.lat, existingByAddr.lng], [lat, lng]);
+          if (existingAddressDistance <= ADDRESS_CLICK_HIT_RADIUS_METERS) {
             setSelectedPropertyId(existingByAddr.id);
             setIsDrawerOpen(true);
+            return;
           }
-          return;
         }
       }
 
@@ -2938,7 +2964,12 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                     iconAnchor: [12, 12]
                   })}
                 />
-                <LeafletCircle center={userLocation} radius={100} pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15, weight: 1 }} />
+                <LeafletCircle
+                  center={userLocation}
+                  radius={100}
+                  interactive={false}
+                  pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15, weight: 1 }}
+                />
               </>
             )}
 

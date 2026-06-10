@@ -6,13 +6,13 @@
 
 ## Micro-Steps
 - [x] Re-read operating docs and current scratchpad.
-- [ ] Inspect map click, selected address, and activity logging code.
-- [ ] Implement draft address selection for non-route map clicks.
-- [ ] Persist draft address only when logging activity.
-- [ ] Verify route creation still creates route/prospect records while in route mode.
-- [ ] Run verification.
-- [ ] Push to GitHub and deploy to Cloudflare first.
-- [ ] Update docs after deploy.
+- [x] Inspect map click, selected address, and activity logging code.
+- [x] Implement draft address selection for non-route map clicks.
+- [x] Persist draft address only when logging activity.
+- [x] Verify route creation still creates route/prospect records while in route mode.
+- [x] Run verification.
+- [x] Push to GitHub and deploy to Cloudflare first.
+- [x] Update docs after deploy.
 
 ## Assumptions
 - Existing address marker clicks should still open the existing record.

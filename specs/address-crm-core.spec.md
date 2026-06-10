@@ -1,7 +1,7 @@
 # Feature: Address CRM Core
 
-**Status:** In Progress  
-**Last updated:** 2026-06-09  
+**Status:** In Progress
+**Last updated:** 2026-06-10
 **Owner:** Mike Hilton
 
 ---
@@ -18,7 +18,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 
 ## User Flow
 1. User views dashboard or map.
-2. User adds an address from map click, search, or manual entry.
+2. User opens an address from an existing marker, or taps a new house to start a draft activity session.
 3. User updates status, stage, notes, contacts, labels, quotes, appointments, and activities.
 4. App persists changes to Supabase for the active workspace.
 5. Deleted records disappear from normal views but remain available for platform investigation.
@@ -40,10 +40,14 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Activity and notes should be Supabase-backed, not browser/local nested state.
 - Contacts should be normalized into `doorstep.contacts` before implementing higher-risk contact move/merge flows.
 - Map clicks should only open an existing address when the click is within a tight, meter-based hit radius of that address pin; nearby blank-map clicks should not snap to a neighboring record.
+- Default non-route map clicks on an untracked house open the Unified Address Record as a draft activity session, not the Add Lead form and not an immediate persisted address.
+- Draft map-click addresses become real `doorstep.addresses` rows only after the user logs an activity. If the user closes the drawer without logging activity, no address is created.
+- Opening an existing address marker must not auto-promote Prospect to Lead; stage movement should come from activity/contact/quote/payment rules.
 - Leaflet/OpenStreetMap tiles do not provide parcel boundaries. True parcel-level boundary selection requires parcel data or a provider/API that exposes property polygons.
 - Map-view chrome must reserve space for the shared hamburger navigation so stats/actions are not hidden underneath it.
 - Map control buttons must intercept click/pointer events and never trigger address selection, reverse geocoding, or route point changes on the map behind them.
 - Route-builder mode must be easy to enter and exit directly from the map view with a visible active state.
+- Route Creation mode is the exception to draft activity behavior: route taps may create Prospect address records immediately so routes can be planned before contact attempts.
 
 ## Edge Cases
 - Empty states: Dashboard and map must handle zero address records.
@@ -63,6 +67,9 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 ## Acceptance Criteria
 - Given a signed-in user has a workspace, when addresses exist in Supabase, then the app loads them.
 - Given a user creates an address in the UI, when sync succeeds, then `doorstep.addresses` has the record.
+- Given a user taps an untracked house in normal map mode, then the Unified Address Record opens for activity logging without persisting the address yet.
+- Given the user logs an activity from that draft record, then the address is persisted as a Prospect and the activity is saved against it.
+- Given the user closes the draft record without logging activity, then no address row is created.
 - Given a user deletes an address, when sync succeeds, then `deleted_at` is set and normal views hide it.
 - Given local mode is active, when the user adds records, then the local demo still behaves.
 
@@ -87,8 +94,10 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - 2026-06-10: Keep address as primary object while normalizing contacts for contact editing, idempotent add-contact, and address move/merge.
 - 2026-06-10: Active Stage system keys are locked in application logic, while admin settings can still manage labels, colors, and descriptions.
 - 2026-06-10: Appointment scheduling should set Scheduled sub-status when valid.
+- 2026-06-10: Normal map taps should open activity logging first and only create a prospect address after activity is logged; Route Creation mode still creates route/prospect records immediately.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.
 - 2026-06-09: Unified Address Record direction added.
 - 2026-06-10: Map click selection changed from broad degree-based nearest-record matching to tight meter-based hit testing.
+- 2026-06-10: Changed untracked house taps from Add Lead prompt/immediate creation to draft activity logging before persistence.

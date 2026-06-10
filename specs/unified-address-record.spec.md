@@ -43,6 +43,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Residential/Commercial designation should move out of the top header badge and become inline address metadata below the address line; it is only tappable in edit mode.
 - Add Contact requires immediate disabled/loading feedback and backend idempotency so double taps cannot create duplicate contacts.
 - Admin Settings include default premises type for new address creation, defaulting to Residential.
+- The Unified Address Record can open for a draft map-tapped address. In that state, activity logging is the creation action; closing without logging discards the draft.
 
 ## Edge Cases
 - Mobile: header/logger/feed should be attempted above the fold; if cramped, iterate.
@@ -71,6 +72,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given Activity Feed Notes Only is active, then only human-entered note/message events are shown and the filter resets on next record open.
 - Given Add Contact is used, then the UI creates a `doorstep.contacts` row, links it through `doorstep.address_contacts`, and records an idempotency key in `doorstep.contact_idempotency_keys`.
 - Given the optional `create_address_contact_idempotent` RPC is available, then Add Contact uses that RPC; otherwise the deployed frontend falls back to table-level idempotency until migration 008 is applied.
+- Given the record is opened from an untracked normal map tap, then logging an activity creates the address and closing without logging does not.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -99,6 +101,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-10: Notes Only filter means human-entered notes/messages only.
 - 2026-06-10: Add Contact requires backend idempotency, not only frontend debounce/spinner.
 - 2026-06-10: Add Contact now writes normalized contacts and address links. Migration 008 adds the preferred one-call RPC, while the frontend also supports a table-backed fallback.
+- 2026-06-10: Untracked normal map taps open the Unified Address Record as a draft activity session and do not persist until the first activity is logged.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.
@@ -106,3 +109,4 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-10: Corrected quick-action placement from bottom sticky bar to top-right icon cluster.
 - 2026-06-10: Added shared shell hamburger nav and reserved page-header space to avoid top-right collisions.
 - 2026-06-10: Wired normalized contact loading, Supabase-backed Add Contact idempotency, and Move to New Address access from Contact Info edit mode.
+- 2026-06-10: Added draft address support so normal map taps go directly to activity logging instead of the Add Lead form.

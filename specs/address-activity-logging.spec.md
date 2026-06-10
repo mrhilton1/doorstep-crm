@@ -1,7 +1,7 @@
 # Feature: Address Activity Logging
 
-**Status:** Implemented  
-**Last updated:** 2026-06-09  
+**Status:** Implemented
+**Last updated:** 2026-06-10
 **Owner:** Mike Hilton
 
 ---
@@ -13,7 +13,7 @@ Replace status-first door logging with a Supabase-backed Live Event Logger that 
 The address editor currently includes Visit Status pills and a simple Knock/Conversation logging panel. Activity entries still use the legacy `interactions` shape in the UI. The Supabase foundation already includes `doorstep.activities`, but the editor is not yet writing door events there.
 
 ## Desired Behavior
-The address editor replaces the Visit Status area with a Live Event Logger. Users choose an event path, see only the fields required for that path, and log the event to `doorstep.activities`. The activity feed updates immediately, shows who/what/when, and keeps Active Stage as a separate field while allowing event-based auto movement with manual override.
+The address editor replaces the Visit Status area with a Live Event Logger. Users choose an event path, see only the fields required for that path, and log the event to `doorstep.activities`. The activity feed updates immediately, shows who/what/when, and keeps Active Stage as a separate field while allowing event-based auto movement with manual override. For untracked houses tapped from the map, the logger opens on a draft address and persists the address only after an activity is logged.
 
 ## User Flow
 1. User opens an address/contact editor.
@@ -23,6 +23,7 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 5. User clicks Log Event.
 6. App inserts the event into `doorstep.activities`, updates the local feed, and applies stage/status derivation rules where appropriate.
 7. Activity appears in the editor history and the contact summary Activity Logs tab.
+8. If the address was a draft from a normal map tap, the address is created as a Prospect only after the activity save succeeds.
 
 ## Business Rules
 - Event logging is the primary door workflow; Visit Status is demoted to a derived/latest outcome.
@@ -38,6 +39,8 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - "Notes Only" filters in address/contact activity feeds should include only human-entered notes/messages and exclude system-generated logs such as automatic stage changes or audit events.
 - A route-created address should not gain contact records until an attempted contact is logged through Knock, Call, Conversation, or another human outreach event.
 - Logging an attempted contact against a route address confirms the Prospect route address and may advance stage according to the central stage rules.
+- Normal map taps on untracked houses should start a draft activity session. Draft addresses do not persist unless the rep logs an activity.
+- Contact fields may be filled while the draft activity session is open, but the address/contact bridge is not persisted until the activity creates the address.
 
 ## Edge Cases
 - Empty history shows a friendly empty state.
@@ -63,6 +66,8 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - Given multiple events are logged for one address, then all events remain visible in reverse chronological order.
 - Given a second workspace member opens the address, then the Supabase-backed event history is visible.
 - Given a route-created address has no contact records, when a rep logs a knock/call/activity, then the event is saved against the address and contact creation is handled by the contact flow only when actual contact data is captured.
+- Given a rep taps an untracked house in normal map mode, when the activity drawer opens and the rep closes it without logging, then no address or activity is created.
+- Given a rep taps an untracked house and logs Knock/Call/Record Event, then the address is created as a Prospect and the activity is saved to that address.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -84,8 +89,10 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - 2026-06-09: Notes should be queryable from a dedicated notes table and reflected in activities.
 - 2026-06-10: Notes Only means human-entered notes/messages only.
 - 2026-06-10: Route Creation addresses do not create contact records until an attempted contact is logged and contact data is captured.
+- 2026-06-10: Normal untracked house taps open a draft activity session and persist the address only after the first logged activity.
 
 ## Iteration History
 - 2026-06-09: Spec created.
 - 2026-06-09: Added Log Activity composer and editor history for Knock and Conversation entries.
 - 2026-06-09: Replaced Visit Status controls with Live Event Logger, wired event inserts to `doorstep.activities`, and added event-based stage/status derivation.
+- 2026-06-10: Changed default untracked map taps to activity-first draft addresses instead of the Add Lead prompt.

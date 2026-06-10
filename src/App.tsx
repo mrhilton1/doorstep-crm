@@ -3732,16 +3732,62 @@ function PropertyDrawer({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-4 space-y-6 pb-32">
+      <div className="flex-1 overflow-y-auto px-8 py-4 space-y-6 pb-8">
         {/* Stage Selector */}
         {sectionPermissions.stageControls.visible && (
         <section>
           <div className="flex items-center justify-between mb-3">
              <label className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Active Stage</label>
-             <div className="flex gap-1">
-               {['prospect', 'lead', 'opportunity', 'customer'].map((s, idx) => (
-                 <div key={s} className={cn("w-2 h-1 rounded-full transition-all", idx <= ['prospect', 'lead', 'opportunity', 'customer'].indexOf(property.stage) ? "bg-blue-600" : "bg-gray-100")} />
-               ))}
+             <div className="flex items-center gap-3">
+               {(sectionPermissions.scheduleCTA.visible || sectionPermissions.createQuoteCTA.visible || sectionPermissions.recordTransactionCTA.visible) && (
+                 <div className="flex items-center gap-1.5">
+                   {sectionPermissions.scheduleCTA.visible && (
+                     <button
+                       type="button"
+                       onClick={onSchedule}
+                       disabled={!sectionPermissions.scheduleCTA.editable}
+                       title="Schedule"
+                       aria-label="Schedule"
+                       className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center hover:bg-amber-500 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                       <Calendar className="w-4 h-4" />
+                     </button>
+                   )}
+                   {sectionPermissions.createQuoteCTA.visible && (
+                     <button
+                       type="button"
+                       onClick={() => {
+                         if (!sectionPermissions.createQuoteCTA.editable) return;
+                         onClose();
+                         onQuote();
+                       }}
+                       disabled={!sectionPermissions.createQuoteCTA.editable}
+                       title="Create Quote"
+                       aria-label="Create Quote"
+                       className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                       <FileText className="w-4 h-4" />
+                     </button>
+                   )}
+                   {sectionPermissions.recordTransactionCTA.visible && (
+                     <button
+                       type="button"
+                       onClick={onSale}
+                       disabled={!sectionPermissions.recordTransactionCTA.editable}
+                       title="Record Transaction"
+                       aria-label="Record Transaction"
+                       className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                       <DollarSign className="w-4 h-4" />
+                     </button>
+                   )}
+                 </div>
+               )}
+               <div className="flex gap-1">
+                 {['prospect', 'lead', 'opportunity', 'customer'].map((s, idx) => (
+                   <div key={s} className={cn("w-2 h-1 rounded-full transition-all", idx <= ['prospect', 'lead', 'opportunity', 'customer'].indexOf(property.stage) ? "bg-blue-600" : "bg-gray-100")} />
+                 ))}
+               </div>
              </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -4432,47 +4478,6 @@ function PropertyDrawer({
           </section>
         )}
 
-        {/* Action Buttons */}
-        {(sectionPermissions.scheduleCTA.visible || sectionPermissions.createQuoteCTA.visible || sectionPermissions.recordTransactionCTA.visible) && (
-        <div className="sticky bottom-0 z-20 -mx-2 pt-3 pb-1 bg-gradient-to-t from-white via-white to-white/80">
-          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl shadow-slate-200/60 backdrop-blur">
-            {sectionPermissions.scheduleCTA.visible && (
-            <button 
-              onClick={onSchedule}
-              disabled={!sectionPermissions.scheduleCTA.editable}
-              className="min-h-12 bg-amber-500 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-            >
-              <Calendar className="w-4 h-4" />
-              Schedule
-            </button>
-            )}
-            {sectionPermissions.createQuoteCTA.visible && (
-            <button 
-              onClick={() => {
-                if (!sectionPermissions.createQuoteCTA.editable) return;
-                onClose();
-                onQuote();
-              }}
-              disabled={!sectionPermissions.createQuoteCTA.editable}
-              className="min-h-12 bg-blue-600 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-            >
-              <FileText className="w-4 h-4" />
-              Quote
-            </button>
-            )}
-          {sectionPermissions.recordTransactionCTA.visible && (
-          <button 
-            onClick={onSale}
-            disabled={!sectionPermissions.recordTransactionCTA.editable}
-            className="min-h-12 bg-emerald-600 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            <DollarSign className="w-4 h-4" />
-            Transaction
-          </button>
-          )}
-          </div>
-        </div>
-        )}
       </div>
     </motion.div>
   );

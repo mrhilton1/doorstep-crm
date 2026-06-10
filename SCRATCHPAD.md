@@ -1,5 +1,25 @@
 # Scratchpad
 
+## 2026-06-10 — Current Objective
+**Task:** Move Unified Address Record quick actions out of the floating footer and into top-right icon buttons beside the stage progress dots.
+**Target spec:** `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and unified address record spec.
+- [x] Update spec/scratchpad with top-right action placement decision.
+- [x] Move Schedule, Quote, and Transaction actions to icon buttons by stage dots.
+- [x] Remove bottom floating action bar.
+- [x] Run verification.
+- [x] Commit, push, and deploy if verification passes.
+
+## Assumptions
+- The three icons should preserve the same actions: Schedule, Quote, and Record Transaction.
+- Icon-only buttons need `title` and `aria-label` because their purpose is not always obvious.
+- The previous sticky footer should be fully removed to avoid covering content.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-09 — Current Objective
 **Task:** Implement the first Unified Address Record slice: replace duplicate drawers, add role-ready section config, create Supabase notes/quote/invoice/transaction schema, and route notes through notes + activities.
 **Target spec:** `/specs/unified-address-record.spec.md`

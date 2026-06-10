@@ -31,8 +31,8 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Notes are stored in `doorstep.notes`; related timeline entries are stored in `doorstep.activities`.
 - Quotes use dedicated tables, not generic activity payloads.
 - Invoices use dedicated tables with JSON adjustment/line data for MVP.
-- Record Transaction remains the action label.
-- Compact floating action menu is preferred over a bulky sticky footer.
+- Record Transaction remains the action label when text is shown.
+- Compact action controls should sit in the top-right stage/header area beside the stage progress dots; do not use a bottom floating footer that covers record content.
 - All sections and CTAs must be role-ready via a config object, defaulting visible/editable for MVP.
 
 ## Edge Cases
@@ -67,7 +67,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 ## Open Questions
 - [ ] Exact referral type options.
 - [ ] Which roles can archive notes/activities in the future.
-- [ ] Whether compact action menu should be bottom-right floating or bottom dock after mobile testing.
+- [x] Whether compact action menu should be bottom-right floating or bottom dock after mobile testing.
 
 ## Decisions Made
 - 2026-06-09: Replace both duplicate address views immediately.
@@ -77,7 +77,9 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-09: Digital invoice is a real send flow; Stripe payment is stubbed and not customer-visible yet.
 - 2026-06-09: Keep Record Transaction action.
 - 2026-06-09: Notes use dedicated `doorstep.notes` with related `doorstep.activities` feed entries.
+- 2026-06-10: Move Schedule, Quote, and Transaction actions to top-right icon buttons beside the stage progress dots; remove the bottom floating action bar.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.
 - 2026-06-09: First implementation slice added role-ready section config, normalized schema foundation, unified dashboard entry routing, event-note persistence, and compact sticky address actions.
+- 2026-06-10: Corrected quick-action placement from bottom sticky bar to top-right icon cluster.

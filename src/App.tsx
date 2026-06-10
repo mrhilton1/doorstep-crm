@@ -6598,8 +6598,15 @@ function CatalogOverlay({
                     value={newProduct.category || ''}
                     onChange={e => setNewProduct({...newProduct, category: e.target.value})}
                   />
+                  <textarea
+                    className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    placeholder="Product description"
+                    rows={3}
+                    value={newProduct.description || ''}
+                    onChange={e => setNewProduct({...newProduct, description: e.target.value})}
+                  />
                   <div className="flex gap-2">
-                    <button onClick={() => { setIsAddingProduct(false); setEditingProductId(null); setNewProduct({name:'', price:0}); }} className="flex-1 py-3 text-xs font-bold text-gray-500">Cancel</button>
+                    <button onClick={() => { setIsAddingProduct(false); setEditingProductId(null); setNewProduct({name:'', price:0, description: '', category: ''}); }} className="flex-1 py-3 text-xs font-bold text-gray-500">Cancel</button>
                     <button onClick={addProduct} className="flex-2 bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-100">{editingProductId ? 'Update' : 'Save'} Product</button>
                   </div>
                 </div>
@@ -6615,7 +6622,12 @@ function CatalogOverlay({
                     </div>
                     <div>
                       <p className="text-sm font-black text-[#1E293B]">{p.name}</p>
-                      <p className="text-[10px] font-bold text-gray-400">${p.price.toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-gray-400">
+                        ${p.price.toLocaleString()}{p.category ? ` • ${p.category}` : ''}
+                      </p>
+                      {p.description && (
+                        <p className="text-[10px] font-bold text-slate-300 max-w-sm line-clamp-1">{p.description}</p>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -6630,7 +6642,13 @@ function CatalogOverlay({
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => setCatalog(prev => ({ ...prev, products: prev.products.filter(i => i.id !== p.id) }))}
+                      onClick={() => setCatalog(prev => ({
+                        ...prev,
+                        products: prev.products.filter(i => i.id !== p.id),
+                        bundles: prev.bundles
+                          .map(bundle => ({ ...bundle, productIds: bundle.productIds.filter(productId => productId !== p.id) }))
+                          .filter(bundle => bundle.productIds.length > 0)
+                      }))}
                       className="p-2 text-gray-300 hover:text-red-500 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -7469,7 +7487,24 @@ function SettingsOverlay({
                                     onConfirm: (valStr) => {
                                       const value = parseFloat(valStr || '0');
                                       if (!isNaN(value)) {
-                                        setSettings(prev => ({...prev, discounts: prev.discounts.map(item => item.id === d.id ? {...item, name, value} : item)}));
+                                        setPromptConfig({
+                                          title: 'Discount Type',
+                                          message: 'Should this discount be percentage-based or a fixed amount?',
+                                          type: 'select',
+                                          options: [
+                                            { label: 'Percentage (%)', value: 'percentage' },
+                                            { label: 'Fixed Amount ($)', value: 'fixed' }
+                                          ],
+                                          defaultValue: d.type,
+                                          onConfirm: (type) => {
+                                            setSettings(prev => ({
+                                              ...prev,
+                                              discounts: prev.discounts.map(item =>
+                                                item.id === d.id ? { ...item, name, value, type: type as Discount['type'] } : item
+                                              )
+                                            }));
+                                          }
+                                        });
                                       }
                                     }
                                   });

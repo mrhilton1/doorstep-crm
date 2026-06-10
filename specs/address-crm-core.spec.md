@@ -28,10 +28,17 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - `normalized_address` is used for duplicate prevention within a workspace.
 - Deletes are soft deletes when persisted to Supabase.
 - Stage and status are separate concepts.
+- Active Stage system keys are locked to `prospect`, `lead`, `opportunity`, and `customer`; admin label settings may control display labels/descriptions/colors, but implementation logic must use the locked keys.
+- Automatic stage advancement is forward-only: address with no contact data is Prospect, address plus any contact data is Lead, issued quote is Opportunity, and logged payment is Customer.
+- Manual stage override remains allowed for MVP; future permissions should allow Sales Reps to override records they can edit and Owner/Admin to override all records.
+- Sub-status is optional and separate from Active Stage. It can be manually set to stage-compatible values such as Not Interested, Loss, or Scheduled, and when present its color overrides the parent stage color on the map.
+- Creating or rescheduling an appointment through the Schedule CTA should set sub-status to Scheduled when that sub-status is valid for the address stage.
 - Residential and commercial address types must both be supported.
+- Default premises type for new address creation comes from workspace settings, defaulting to Residential, and can be changed later in address edit mode.
 - Address data must be workspace-scoped.
 - The Unified Address Record is the only address-level detail surface.
 - Activity and notes should be Supabase-backed, not browser/local nested state.
+- Contacts should be normalized into `doorstep.contacts` before implementing higher-risk contact move/merge flows.
 - Map clicks should only open an existing address when the click is within a tight, meter-based hit radius of that address pin; nearby blank-map clicks should not snap to a neighboring record.
 - Leaflet/OpenStreetMap tiles do not provide parcel boundaries. True parcel-level boundary selection requires parcel data or a provider/API that exposes property polygons.
 - Map-view chrome must reserve space for the shared hamburger navigation so stats/actions are not hidden underneath it.
@@ -45,6 +52,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Duplicate data: Same normalized address cannot exist twice in one workspace.
 - Dependency failures: Geocoding failure should still allow manual address creation.
 - Dense neighborhoods: adjacent houses may be only a few meters apart, so map-click hit testing must not use broad nearest-record tolerances.
+- Stage colors: sub-status color overrides parent stage color; admin color edits should propagate to active sessions within 60 seconds.
 
 ## Non-Goals
 - Full custom object builder.
@@ -76,6 +84,9 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - 2026-06-09: Add dedicated notes/quotes/invoices/transactions schema as the next normalization step.
 - 2026-06-10: Keep Leaflet/OpenStreetMap for MVP and tighten map click hit testing before reconsidering Google Maps.
 - 2026-06-10: Keep global navigation in the shared hamburger and use the map's right-side control rail for map-specific route-builder toggling.
+- 2026-06-10: Keep address as primary object while normalizing contacts for contact editing, idempotent add-contact, and address move/merge.
+- 2026-06-10: Active Stage system keys are locked in application logic, while admin settings can still manage labels, colors, and descriptions.
+- 2026-06-10: Appointment scheduling should set Scheduled sub-status when valid.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.

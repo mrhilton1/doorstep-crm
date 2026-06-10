@@ -34,12 +34,15 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - Additional charges/discounts can be added during/after visit before invoice finalization.
 - Record Transaction remains a first-class action label.
 - Quote/invoice/transaction actions should create related `doorstep.activities` feed entries.
+- If all contacts move to a new address through the approved move flow, invoices follow the moved contacts to the destination address while quotes remain attached to the original address.
+- Invoice reassociation during contact/address move must happen inside the atomic move/merge RPC described in `/specs/contact-address-move-and-merge.spec.md`.
 
 ## Edge Cases
 - Empty states: Address can have no quotes.
 - Error states: Quote acceptance failure must not create duplicate invoices.
 - Permissions: Sales Rep can edit/send quotes; invoice/payment management may require Admin/Owner or configured entitlement.
 - Duplicate data: A quote should create at most one invoice.
+- Move/merge failures: invoice reassociation must never partially commit without the related contact/address move.
 - Dependency failures: Stripe outage should not block manual paid/unpaid status tracking in MVP.
 
 ## Non-Goals
@@ -54,11 +57,13 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - Given a quote is accepted, when conversion runs, then one invoice is created.
 - Given Stripe is not configured, when invoice status changes, then manual status works.
 - Given quote, invoice, or transaction records exist, when the unified address record opens, then history can query dedicated tables instead of parsing generic activity JSON.
+- Given contacts are moved to a new address, when the move succeeds, then invoices are associated to the new address and quotes remain with the original address.
 
 ## Validation Plan
 - Add Supabase quote/invoice migrations before wiring UI.
 - Verify accepted quote lock with role permissions.
 - Verify hosted URL slug/hash is not sequential or human-readable.
+- Verify invoice reassociation rollback through move/merge RPC failure tests before enabling in production.
 
 ## Open Questions
 - [ ] What quote fields are required for MVP besides line items, discounts, notes, subtotal, total, hosted slug, and status?
@@ -70,6 +75,7 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - 2026-06-09: Use dedicated quotes table, dedicated invoices table, and transactions table.
 - 2026-06-09: Invoice line/adjustment detail can be JSON for MVP.
 - 2026-06-09: Keep Record Transaction as the action label.
+- 2026-06-10: During address move, invoices follow moved contacts and quotes stay with the original address.
 
 ## Iteration History
 - 2026-06-08: Initial spec created.

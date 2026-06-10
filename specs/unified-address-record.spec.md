@@ -13,7 +13,7 @@ Replace the separate PWA Client Management summary drawer and CRM Canvassing edi
 The app has two address-level surfaces: a summary drawer in the contacts/dashboard experience and a detailed address editor from the map flow. They show overlapping but different data, creating uncertainty about where address data lives and where activity should be logged.
 
 ## Desired Behavior
-Every address opens into the Unified Address Record. The first implementation may use the existing address editor as the canonical shell while the UI is consolidated, but all entry points should route to the same screen. The layout is role-ready and organized in this order: Address Header, Live Event Logger, Activity Feed, Address/Property Details, Quote & Transaction History, Contacts at Address, compact action menu.
+Every address opens into the Unified Address Record. The first implementation may use the existing address editor as the canonical shell while the UI is consolidated, but all entry points should route to the same screen. The layout is role-ready and organized in this order: Address Header, Live Event Logger, Activity Feed, Address/Property Details, Quote & Transaction History, Contacts at Address, compact action menu. Contact-record PRDs should be interpreted as changes to the contact/address sections inside this unified address record, not as a move away from address-first CRM.
 
 ## User Flow
 1. User opens an address from the contact directory, recent activity, appointment list, map, route, or dashboard.
@@ -35,6 +35,14 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Compact action controls should sit in the top-right stage/header area beside the stage progress dots; do not use a bottom floating footer that covers record content.
 - App-level navigation should be a shared shell-level hamburger menu, not separate floating account/nav controls per page.
 - All sections and CTAs must be role-ready via a config object, defaulting visible/editable for MVP.
+- The Unified Address Record opens in read-only mode by default. Fields render as static text until a section-level Edit button is activated.
+- Contact Info and Job Info have independent edit modes; editing one section must not switch the other section into edit mode.
+- Contact Info edit mode exposes "Move to New Address" and delegates safe move/merge behavior to `/specs/contact-address-move-and-merge.spec.md`.
+- Activity Feed edit controls render behind a permission flag that defaults visible/editable for MVP.
+- Activity Feed includes a session-only "Notes Only" filter that shows only human-entered note/message events, not system-generated stage or audit logs.
+- Residential/Commercial designation should move out of the top header badge and become inline address metadata below the address line; it is only tappable in edit mode.
+- Add Contact requires immediate disabled/loading feedback and backend idempotency so double taps cannot create duplicate contacts.
+- Admin Settings include default premises type for new address creation, defaulting to Residential.
 
 ## Edge Cases
 - Mobile: header/logger/feed should be attempted above the fold; if cramped, iterate.
@@ -42,6 +50,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Failed autosave/event write: show visible error and do not fake success.
 - Inline contact edits should not lose partially typed data.
 - Existing legacy nested quote/invoice/contact data may need bridge display until normalized UI migration is complete.
+- Duplicate add-contact submissions must create at most one contact even when two requests reach the backend.
 
 ## Non-Goals
 - Full role/permission enforcement in v1.
@@ -57,6 +66,9 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a user logs an event note, then the note body persists to `doorstep.notes` and the related event appears in `doorstep.activities`.
 - Given the role config is evaluated in MVP, then all sections return visible/editable true.
 - Given quote/invoice/transaction schema is needed, then dedicated Supabase tables exist before deeper UI wiring.
+- Given an address record opens, then Contact Info and Job Info fields are read-only until their section Edit button is tapped.
+- Given a user double-taps Add Contact, then only one normalized contact is created.
+- Given Activity Feed Notes Only is active, then only human-entered note/message events are shown and the filter resets on next record open.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -69,6 +81,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - [ ] Exact referral type options.
 - [ ] Which roles can archive notes/activities in the future.
 - [x] Whether compact action menu should be bottom-right floating or bottom dock after mobile testing.
+- [ ] Should the read-only default be introduced in one pass for all sections or start with Contact Info and Job Info?
 
 ## Decisions Made
 - 2026-06-09: Replace both duplicate address views immediately.
@@ -80,6 +93,9 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-09: Notes use dedicated `doorstep.notes` with related `doorstep.activities` feed entries.
 - 2026-06-10: Move Schedule, Quote, and Transaction actions to top-right icon buttons beside the stage progress dots; remove the bottom floating action bar.
 - 2026-06-10: Replace the oversized floating workspace pill with a shared hamburger navigation menu in the app shell.
+- 2026-06-10: Contact-record redesign keeps the address as the canonical object and adds read-only default with section-level edit modes.
+- 2026-06-10: Notes Only filter means human-entered notes/messages only.
+- 2026-06-10: Add Contact requires backend idempotency, not only frontend debounce/spinner.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

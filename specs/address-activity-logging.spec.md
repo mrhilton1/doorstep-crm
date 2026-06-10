@@ -35,6 +35,9 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - Email, SMS, quote, invoice, appointment, and future actions should all use the same activity feed pattern.
 - Notes use `doorstep.notes` as source of truth and `doorstep.activities` as the timeline entry.
 - MVP detailed event taxonomy can be stored in `doorstep.activities.metadata`; the high-level `type` enum remains stable.
+- "Notes Only" filters in address/contact activity feeds should include only human-entered notes/messages and exclude system-generated logs such as automatic stage changes or audit events.
+- A route-created address should not gain contact records until an attempted contact is logged through Knock, Call, Conversation, or another human outreach event.
+- Logging an attempted contact against a route address confirms the Prospect route address and may advance stage according to the central stage rules.
 
 ## Edge Cases
 - Empty history shows a friendly empty state.
@@ -42,6 +45,7 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - Repeated knocks should append new history entries rather than overwrite prior knocks.
 - Event write failures show inline retry/error UI and do not fake success.
 - Users can still manually change Active Stage after auto movement.
+- Route-created addresses may have no contacts; activity logging should handle address-only records gracefully.
 
 ## Non-Goals
 - Activity deletion/editing/archive UI.
@@ -58,6 +62,7 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - Given the user logs Completed Cleaning, then a note is required and the address is promoted to Customer.
 - Given multiple events are logged for one address, then all events remain visible in reverse chronological order.
 - Given a second workspace member opens the address, then the Supabase-backed event history is visible.
+- Given a route-created address has no contact records, when a rep logs a knock/call/activity, then the event is saved against the address and contact creation is handled by the contact flow only when actual contact data is captured.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -69,6 +74,7 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - [ ] What are the exact referral type options?
 - [ ] Should Quote Builder return explicit Accepted / Not Accepted follow-on events in this pass or the quote workflow pass?
 - [ ] Which roles can archive activity events when supervisor archive is implemented?
+- [x] Should Notes Only include system-generated notes? Decision: no; human-entered notes/messages only.
 
 ## Decisions Made
 - 2026-06-09: Keep Visit Status separate from repeatable Activity Logs.
@@ -76,6 +82,8 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - 2026-06-09: User approved replacing the Visit Status area with a Live Event Logger and wiring events to Supabase.
 - 2026-06-09: Event outcomes can auto-move stage while preserving manual stage edits.
 - 2026-06-09: Notes should be queryable from a dedicated notes table and reflected in activities.
+- 2026-06-10: Notes Only means human-entered notes/messages only.
+- 2026-06-10: Route Creation addresses do not create contact records until an attempted contact is logged and contact data is captured.
 
 ## Iteration History
 - 2026-06-09: Spec created.

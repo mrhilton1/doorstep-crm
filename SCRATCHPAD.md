@@ -1,6 +1,27 @@
 # Scratchpad
 
 ## 2026-06-10 — Current Objective
+**Task:** Convert the Contact Record Redesign / Stage System / Address Move / Route Fixes PRD decisions into implementation-ready specs before coding.
+**Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-crm-core.spec.md`, `/specs/scheduling-routes.spec.md`, `/specs/contact-address-move-and-merge.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and impacted specs.
+- [x] Read the new PRD and cautions.
+- [x] Ask alignment questions for spec-changing behavior.
+- [x] Capture user decisions on address primacy, move scope, stage labels, route creation, satellite maps, and idempotency.
+- [x] Create/update specs with the approved decisions and implementation guardrails.
+- [x] Validate docs-only changes.
+- [ ] Commit and push if appropriate.
+
+## Assumptions
+- "Contact Record" in the PRD means the contact/address section of the Unified Address Record; the address remains the primary CRM object.
+- Route Creation creates route-address/prospect records without creating contacts until an attempted contact is logged.
+- The dangerous address move/merge path must be implemented as a Supabase RPC transaction, not a frontend sequence of updates.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-10 — Current Objective
 **Task:** Fix map-view header/menu overlap and add an easy route-builder toggle that does not select addresses behind map controls.
 **Target spec:** `/specs/address-crm-core.spec.md`
 

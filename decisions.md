@@ -36,3 +36,17 @@ Append-only. Never edit past entries except to fix typos that obscure meaning.
 **Rationale:** Vite only emits imported app assets and files from `public`; a deploy-time guard prevents accidental future leakage.
 **Alternatives considered:** Keep relying on convention only; rejected because a future agent could accidentally move docs into `public` or deploy the wrong directory.
 **Consequences:** `npm run verify` should be used before deploys, and Cloudflare deploy commands must continue targeting `dist`.
+
+## 2026-06-10 20:35 MST — Normalize Contacts Before Address Move/Merge
+**Context:** The Contact Record Redesign and Address Move Flow PRD introduces moving all contacts from one address to another, displacing destination contacts, re-associating invoices, and preserving quotes at the original address.
+**Decision:** Implement contact move/merge only after or as part of normalizing contacts into `doorstep.contacts`; the move/merge itself must be a single Supabase RPC/database transaction with audit logging and idempotency protection.
+**Rationale:** Moving nested contact JSON through frontend state would risk silent data loss, partial invoice reassociation, and unrecoverable displaced contacts. The operation touches customer data and financial history, so it needs database-level atomicity.
+**Alternatives considered:** Implement move/merge as frontend updates against `doorstep.addresses.custom_data`; rejected as too fragile. Move one contact at a time; rejected because the product decision is to move all contacts at the address.
+**Consequences:** A new migration/RPC is required before move/merge UI ships. Contacts Without Address is admin/owner-visible for MVP. Gate-side notes stay with the original address; invoices follow moved contacts; quotes stay with the original address.
+
+## 2026-06-10 20:35 MST — Route Creation Creates Addresses, Not Contacts
+**Context:** Route Creation is used before a rep has visited homes and before any contact information exists. The route tap workflow needs to create routeable CRM units without inventing people.
+**Decision:** Rename user-facing Rapid Mode to Route Creation. Route Creation taps create or confirm address/prospect records and add them to the active route, but they do not create contact records. Contact records are created only when attempted contact is logged and actual contact data is captured.
+**Rationale:** Addresses are the canvassing unit; premature contact records pollute the CRM and make route-created prospects look more qualified than they are.
+**Alternatives considered:** Create placeholder contacts for every route tap; rejected because the rep has not contacted anyone yet.
+**Consequences:** Route address markers need to support address-only records. Unvisited route addresses use square markers; once activity is logged, they use normal colored teardrop/pin markers based on the resulting stage/status.

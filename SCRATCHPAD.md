@@ -1,6 +1,35 @@
 # Scratchpad
 
 ## 2026-06-09 — Current Objective
+**Task:** Implement the first Unified Address Record slice: replace duplicate drawers, add role-ready section config, create Supabase notes/quote/invoice/transaction schema, and route notes through notes + activities.
+**Target spec:** `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and impacted specs.
+- [x] Capture user decisions for unified address record, quote/invoice model, notes, and compact actions.
+- [x] Create unified address record spec and update impacted specs.
+- [x] Add Supabase migration for notes, quotes, invoices, transactions.
+- [x] Route old summary-drawer opens to the unified editor.
+- [x] Add notes insert behavior for event notes.
+- [x] Run verification.
+- [x] Apply Supabase migration and verify new tables/RLS.
+- [ ] Commit, push, deploy if verification passes.
+
+## Assumptions
+- The existing `PropertyDrawer` becomes the first version of Unified Address Record while the monolith is refactored.
+- Old summary drawer code can remain temporarily if no longer reachable, to keep this first slice lower-risk.
+- Notes table is source of truth for note bodies; `doorstep.activities` remains the timeline/audit feed and references notes via metadata.
+- Quote/invoice/transaction tables are added now, but deep UI migration can follow after the unified screen shell.
+
+## Gotchas Discovered This Session
+- `HomeDashboard` still has its own selected-contact summary drawer and action state; contact cards/recent events/appointments currently open that duplicate drawer.
+- Supabase migration apply succeeded; `notes`, `quotes`, `invoices`, and `transactions` exist with RLS enabled.
+- Local browser smoke test reached the expected Supabase-required setup screen without runtime errors; authenticated UI smoke should happen after Cloudflare deployment because runtime env vars live there.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-09 — Current Objective
 **Task:** Replace Visit Status controls with a Supabase-backed Live Event Logger that supports knock/call/service/admin outcomes and stage movement rules.
 **Target spec:** `/specs/address-activity-logging.spec.md`
 

@@ -201,6 +201,36 @@ type LiveEventPayload = {
   referralRepName?: string;
 };
 
+type AddressRecordSectionKey =
+  | 'addressHeader'
+  | 'stageControls'
+  | 'liveEventLogger'
+  | 'activityFeed'
+  | 'addressDetails'
+  | 'propertyHistory'
+  | 'contactsAtAddress'
+  | 'scheduleCTA'
+  | 'createQuoteCTA'
+  | 'recordTransactionCTA';
+
+type AddressRecordSectionPermission = {
+  visible: boolean;
+  editable: boolean;
+};
+
+const DEFAULT_ADDRESS_RECORD_PERMISSIONS: Record<AddressRecordSectionKey, AddressRecordSectionPermission> = {
+  addressHeader: { visible: true, editable: true },
+  stageControls: { visible: true, editable: true },
+  liveEventLogger: { visible: true, editable: true },
+  activityFeed: { visible: true, editable: false },
+  addressDetails: { visible: true, editable: true },
+  propertyHistory: { visible: true, editable: false },
+  contactsAtAddress: { visible: true, editable: true },
+  scheduleCTA: { visible: true, editable: true },
+  createQuoteCTA: { visible: true, editable: true },
+  recordTransactionCTA: { visible: true, editable: true },
+};
+
 const EVENT_TYPE_LABELS: Record<string, string> = {
   knock: 'Knock',
   call: 'Call',
@@ -2092,6 +2122,33 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     const title = buildEventTitle(payload);
     const note = payload.note?.trim() || '';
     const body = note || `${title} logged`;
+    let sourceNoteId: string | null = null;
+
+    if (note) {
+      const { data: noteRow, error: noteError } = await doorstepDb
+        .from('notes')
+        .insert({
+          workspace_id: workspaceId,
+          address_id: propertyId,
+          body: note,
+          note_type: payload.eventType === 'record_event' ? 'record_event' : 'event_note',
+          metadata: {
+            event_type: payload.eventType,
+            outcome: payload.answerOutcome || payload.knockResult || payload.callDirection || null,
+          },
+          created_by: userId,
+          updated_by: userId,
+        })
+        .select('id')
+        .single();
+
+      if (noteError) {
+        throw new Error(noteError.message);
+      }
+
+      sourceNoteId = noteRow?.id || null;
+    }
+
     const metadata = {
       event_type: payload.eventType,
       knock_result: payload.knockResult || null,
@@ -2099,6 +2156,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       call_direction: payload.callDirection || null,
       referral_type: payload.referralType || null,
       referral_rep_name: payload.referralRepName || null,
+      note_id: sourceNoteId,
       actor_email: userEmail || null,
     };
 
@@ -2118,6 +2176,20 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    if (sourceNoteId) {
+      const { error: noteLinkError } = await doorstepDb
+        .from('notes')
+        .update({
+          source_activity_id: data.id,
+          updated_by: userId,
+        })
+        .eq('id', sourceNoteId);
+
+      if (noteLinkError) {
+        throw new Error(noteLinkError.message);
+      }
     }
 
     const interaction = activityRowToInteraction(data);
@@ -3526,9 +3598,32 @@ function PropertyDrawer({
   const [eventError, setEventError] = useState('');
   const [isLoggingEvent, setIsLoggingEvent] = useState(false);
   const [eventLoggedLabel, setEventLoggedLabel] = useState('');
+  const sectionPermissions = DEFAULT_ADDRESS_RECORD_PERMISSIONS;
+  const lastSavedNotesRef = useRef(property.notes || '');
 
   const activityHistory = [...(property.interactions || [])].sort((a, b) => b.createdAt - a.createdAt);
   const latestActivity = activityHistory[0];
+
+  useEffect(() => {
+    const nextNotes = property.notes || '';
+    setNotes(nextNotes);
+    lastSavedNotesRef.current = nextNotes;
+  }, [property.id, property.notes]);
+
+  const saveAddressNotes = useCallback((nextNotes: string) => {
+    if (nextNotes === lastSavedNotesRef.current) return;
+    lastSavedNotesRef.current = nextNotes;
+    updateProperty(property.id, { notes: nextNotes });
+  }, [property.id, updateProperty]);
+
+  useEffect(() => {
+    if (notes === lastSavedNotesRef.current) return;
+    const timer = window.setTimeout(() => {
+      saveAddressNotes(notes);
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [notes, saveAddressNotes]);
 
   const resetEventForm = () => {
     setSelectedEventType(null);
@@ -3617,12 +3712,15 @@ function PropertyDrawer({
         <div className="flex gap-2">
           <button 
             onClick={() => {
+              if (!sectionPermissions.addressHeader.editable) return;
               const newType = property.type === 'Residential' ? 'Commercial' : 'Residential';
               updateProperty(property.id, { type: newType as PropertyType });
             }}
+            disabled={!sectionPermissions.addressHeader.editable}
             className={cn(
               "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all flex items-center gap-1.5",
-              property.type === 'Commercial' ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+              property.type === 'Commercial' ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700",
+              !sectionPermissions.addressHeader.editable && "opacity-70 cursor-not-allowed"
             )}
           >
             {property.type === 'Commercial' ? <Building2 className="w-3.5 h-3.5" /> : <Home className="w-3.5 h-3.5" />}
@@ -3636,6 +3734,7 @@ function PropertyDrawer({
 
       <div className="flex-1 overflow-y-auto px-8 py-4 space-y-6 pb-32">
         {/* Stage Selector */}
+        {sectionPermissions.stageControls.visible && (
         <section>
           <div className="flex items-center justify-between mb-3">
              <label className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Active Stage</label>
@@ -3649,12 +3748,17 @@ function PropertyDrawer({
             {(['prospect', 'lead', 'opportunity', 'customer'] as const).map(s => (
               <button
                 key={s}
-                onClick={() => updateProperty(property.id, { stage: s })}
+                onClick={() => {
+                  if (!sectionPermissions.stageControls.editable) return;
+                  updateProperty(property.id, { stage: s });
+                }}
+                disabled={!sectionPermissions.stageControls.editable}
                 className={cn(
                   "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2",
                   property.stage === s 
                     ? "text-white shadow-lg" 
-                    : "bg-white border-gray-100 text-gray-400 hover:border-blue-200"
+                    : "bg-white border-gray-100 text-gray-400 hover:border-blue-200",
+                  !sectionPermissions.stageControls.editable && "cursor-not-allowed opacity-70"
                 )}
                 style={{
                   backgroundColor: property.stage === s ? STAGE_COLORS[s] : undefined,
@@ -3667,8 +3771,10 @@ function PropertyDrawer({
             ))}
           </div>
         </section>
+        )}
 
         {/* Live Event Logger */}
+        {(sectionPermissions.liveEventLogger.visible || sectionPermissions.activityFeed.visible) && (
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -3687,6 +3793,7 @@ function PropertyDrawer({
             </div>
           </div>
 
+          {sectionPermissions.liveEventLogger.visible && (
           <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4 space-y-3">
             <div className="flex flex-wrap gap-2">
               {([
@@ -3859,14 +3966,16 @@ function PropertyDrawer({
 
             <button
               onClick={handleLogEvent}
-              disabled={!selectedEventType || isLoggingEvent}
+              disabled={!selectedEventType || isLoggingEvent || !sectionPermissions.liveEventLogger.editable}
               className="w-full bg-indigo-600 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoggingEvent ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
               {isLoggingEvent ? 'Saving Event...' : 'Log Event'}
             </button>
           </div>
+          )}
 
+          {sectionPermissions.activityFeed.visible && (
           <div className="space-y-2">
             {activityHistory.length > 0 ? (
               activityHistory.map(item => (
@@ -3900,9 +4009,12 @@ function PropertyDrawer({
               </div>
             )}
           </div>
+          )}
         </section>
+        )}
 
         {/* Address Level Details & Custom Fields */}
+        {sectionPermissions.addressDetails.visible && (
         <section className="space-y-4">
           <div className="flex items-center gap-2">
              <div className="w-6 h-6 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
@@ -3920,12 +4032,15 @@ function PropertyDrawer({
                     {field.type === 'checkbox' ? (
                       <button 
                         onClick={() => {
+                          if (!sectionPermissions.addressDetails.editable) return;
                           const current = property.customData?.[field.id] || false;
                           updateProperty(property.id, { customData: { ...(property.customData || {}), [field.id]: !current } });
                         }}
+                        disabled={!sectionPermissions.addressDetails.editable}
                         className={cn(
                           "w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border",
-                          property.customData?.[field.id] ? "bg-amber-50 text-amber-600 border-amber-100 shadow-sm" : "bg-white text-gray-400 border-[#E2E8F0]"
+                          property.customData?.[field.id] ? "bg-amber-50 text-amber-600 border-amber-100 shadow-sm" : "bg-white text-gray-400 border-[#E2E8F0]",
+                          !sectionPermissions.addressDetails.editable && "opacity-70 cursor-not-allowed"
                         )}
                       >
                         <CheckCircle2 className={cn("w-3.5 h-3.5", property.customData?.[field.id] ? "opacity-100" : "opacity-30")} />
@@ -3941,6 +4056,7 @@ function PropertyDrawer({
                           )}
                           placeholder={`${field.label}${field.required ? '*' : ''}`}
                           value={property.customData?.[field.id] || ''}
+                          disabled={!sectionPermissions.addressDetails.editable}
                           onChange={e => {
                             updateProperty(property.id, { customData: { ...(property.customData || {}), [field.id]: e.target.value } });
                           }}
@@ -3955,17 +4071,19 @@ function PropertyDrawer({
                   className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl px-4 py-3 text-xs font-bold min-h-[100px] focus:ring-2 focus:ring-blue-500/10"
                   placeholder="Gate-side notes, key info, next actions..."
                   value={notes}
+                  disabled={!sectionPermissions.addressDetails.editable}
                   onChange={e => {
                     setNotes(e.target.value);
-                    updateProperty(property.id, { notes: e.target.value });
                   }}
+                  onBlur={() => saveAddressNotes(notes)}
                 />
              </div>
           </div>
         </section>
+        )}
 
         {/* History Section: Quotes & Sales */}
-        {(property.quotes?.length > 0 || property.sales?.length > 0) && (
+        {sectionPermissions.propertyHistory.visible && (property.quotes?.length > 0 || property.sales?.length > 0) && (
           <section className="space-y-4 animate-in slide-in-from-top-4">
             <div className="flex items-center gap-2">
                <div className="w-6 h-6 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
@@ -4007,6 +4125,7 @@ function PropertyDrawer({
         )}
 
         {/* Note: Multi-contact support */}
+        {sectionPermissions.contactsAtAddress.visible && (
         <section className="space-y-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
@@ -4017,6 +4136,7 @@ function PropertyDrawer({
             </div>
             <button 
               onClick={() => {
+                if (!sectionPermissions.contactsAtAddress.editable) return;
                 const newContact: Contact = {
                   id: uuidv4(),
                   firstName: '',
@@ -4028,6 +4148,7 @@ function PropertyDrawer({
                 });
               }}
               className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1"
+              disabled={!sectionPermissions.contactsAtAddress.editable}
             >
               <PlusCircle className="w-3.5 h-3.5" />
               Add Contact
@@ -4051,8 +4172,11 @@ function PropertyDrawer({
                   value={firstName}
                   onChange={e => {
                     setFirstName(e.target.value);
-                    updateProperty(property.id, { firstName: e.target.value });
+                    if (sectionPermissions.contactsAtAddress.editable) {
+                      updateProperty(property.id, { firstName: e.target.value });
+                    }
                   }}
+                  disabled={!sectionPermissions.contactsAtAddress.editable}
                 />
                 <input 
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
@@ -4060,8 +4184,11 @@ function PropertyDrawer({
                   value={lastName}
                   onChange={e => {
                     setLastName(e.target.value);
-                    updateProperty(property.id, { lastName: e.target.value });
+                    if (sectionPermissions.contactsAtAddress.editable) {
+                      updateProperty(property.id, { lastName: e.target.value });
+                    }
                   }}
+                  disabled={!sectionPermissions.contactsAtAddress.editable}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3 mb-3">
@@ -4073,8 +4200,11 @@ function PropertyDrawer({
                     value={phone}
                     onChange={e => {
                       setPhone(e.target.value);
-                      updateProperty(property.id, { phone: e.target.value });
+                      if (sectionPermissions.contactsAtAddress.editable) {
+                        updateProperty(property.id, { phone: e.target.value });
+                      }
                     }}
+                    disabled={!sectionPermissions.contactsAtAddress.editable}
                   />
                 </div>
                 <div className="relative">
@@ -4085,8 +4215,11 @@ function PropertyDrawer({
                     value={email}
                     onChange={e => {
                       setEmail(e.target.value);
-                      updateProperty(property.id, { email: e.target.value });
+                      if (sectionPermissions.contactsAtAddress.editable) {
+                        updateProperty(property.id, { email: e.target.value });
+                      }
                     }}
+                    disabled={!sectionPermissions.contactsAtAddress.editable}
                   />
                 </div>
               </div>
@@ -4121,8 +4254,11 @@ function PropertyDrawer({
                             )}
                             placeholder={`${field.label}${field.required ? '*' : ''}`}
                             value={property.customData?.[field.id] || ''}
+                            disabled={!sectionPermissions.contactsAtAddress.editable}
                             onChange={e => {
-                              updateProperty(property.id, { customData: { ...(property.customData || {}), [field.id]: e.target.value } });
+                              if (sectionPermissions.contactsAtAddress.editable) {
+                                updateProperty(property.id, { customData: { ...(property.customData || {}), [field.id]: e.target.value } });
+                              }
                             }}
                           />
                         </div>
@@ -4138,15 +4274,20 @@ function PropertyDrawer({
                   value={role}
                   onChange={e => {
                     setRole(e.target.value);
-                    updateProperty(property.id, { role: e.target.value });
+                    if (sectionPermissions.contactsAtAddress.editable) {
+                      updateProperty(property.id, { role: e.target.value });
+                    }
                   }}
+                  disabled={!sectionPermissions.contactsAtAddress.editable}
                 />
                 <button 
                   onClick={() => {
+                    if (!sectionPermissions.contactsAtAddress.editable) return;
                     const newVal = !isDecisionMaker;
                     setIsDecisionMaker(newVal);
                     updateProperty(property.id, { isDecisionMaker: newVal });
                   }}
+                  disabled={!sectionPermissions.contactsAtAddress.editable}
                   className={cn(
                     "w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border",
                     isDecisionMaker ? "bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm shadow-emerald-50" : "bg-white text-gray-400 border-[#E2E8F0]"
@@ -4170,9 +4311,11 @@ function PropertyDrawer({
                   </div>
                   <button 
                     onClick={() => {
+                      if (!sectionPermissions.contactsAtAddress.editable) return;
                       const updated = property.contacts.filter(c => c.id !== contact.id);
                       updateProperty(property.id, { contacts: updated });
                     }}
+                    disabled={!sectionPermissions.contactsAtAddress.editable}
                     className="text-gray-300 hover:text-red-500 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -4187,8 +4330,11 @@ function PropertyDrawer({
                       value={contact.firstName || ''}
                       onChange={e => {
                         const updated = property.contacts.map(c => c.id === contact.id ? { ...c, firstName: e.target.value } : c);
-                        updateProperty(property.id, { contacts: updated });
+                        if (sectionPermissions.contactsAtAddress.editable) {
+                          updateProperty(property.id, { contacts: updated });
+                        }
                       }}
+                      disabled={!sectionPermissions.contactsAtAddress.editable}
                     />
                     <input 
                       className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
@@ -4196,8 +4342,11 @@ function PropertyDrawer({
                       value={contact.lastName || ''}
                       onChange={e => {
                         const updated = property.contacts.map(c => c.id === contact.id ? { ...c, lastName: e.target.value } : c);
-                        updateProperty(property.id, { contacts: updated });
+                        if (sectionPermissions.contactsAtAddress.editable) {
+                          updateProperty(property.id, { contacts: updated });
+                        }
                       }}
+                      disabled={!sectionPermissions.contactsAtAddress.editable}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -4209,8 +4358,11 @@ function PropertyDrawer({
                         value={contact.phone || ''}
                         onChange={e => {
                           const updated = property.contacts.map(c => c.id === contact.id ? { ...c, phone: e.target.value } : c);
-                          updateProperty(property.id, { contacts: updated });
+                          if (sectionPermissions.contactsAtAddress.editable) {
+                            updateProperty(property.id, { contacts: updated });
+                          }
                         }}
+                        disabled={!sectionPermissions.contactsAtAddress.editable}
                       />
                     </div>
                     <div className="relative">
@@ -4221,8 +4373,11 @@ function PropertyDrawer({
                         value={contact.email || ''}
                         onChange={e => {
                           const updated = property.contacts.map(c => c.id === contact.id ? { ...c, email: e.target.value } : c);
-                          updateProperty(property.id, { contacts: updated });
+                          if (sectionPermissions.contactsAtAddress.editable) {
+                            updateProperty(property.id, { contacts: updated });
+                          }
                         }}
+                        disabled={!sectionPermissions.contactsAtAddress.editable}
                       />
                     </div>
                   </div>
@@ -4233,14 +4388,19 @@ function PropertyDrawer({
                       value={contact.role || ''}
                       onChange={e => {
                         const updated = property.contacts.map(c => c.id === contact.id ? { ...c, role: e.target.value } : c);
-                        updateProperty(property.id, { contacts: updated });
+                        if (sectionPermissions.contactsAtAddress.editable) {
+                          updateProperty(property.id, { contacts: updated });
+                        }
                       }}
+                      disabled={!sectionPermissions.contactsAtAddress.editable}
                     />
                     <button 
                       onClick={() => {
+                        if (!sectionPermissions.contactsAtAddress.editable) return;
                         const updated = property.contacts.map(c => c.id === contact.id ? { ...c, isDecisionMaker: !c.isDecisionMaker } : c);
                         updateProperty(property.id, { contacts: updated });
                       }}
+                      disabled={!sectionPermissions.contactsAtAddress.editable}
                       className={cn(
                         "w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border",
                         contact.isDecisionMaker ? "bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm shadow-emerald-50" : "bg-[#F8FAFC] text-gray-400 border-[#E2E8F0]"
@@ -4255,6 +4415,7 @@ function PropertyDrawer({
             ))}
           </div>
         </section>
+        )}
 
         {property.type === 'Commercial' && (
           <section className="animate-in slide-in-from-top-2">
@@ -4271,49 +4432,47 @@ function PropertyDrawer({
           </section>
         )}
 
-        {/* Notes */}
-        <section>
-          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-2 block">Gate-Side Notes</label>
-          <textarea 
-            className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold min-h-[100px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-            placeholder="Gate code, dog info, owner preferences..."
-            value={notes}
-            onChange={(e) => {
-              setNotes(e.target.value);
-              updateProperty(property.id, { notes: e.target.value });
-            }}
-          />
-        </section>
-
         {/* Action Buttons */}
-        <div className="flex flex-col gap-3">
-          <div className="flex gap-3">
+        {(sectionPermissions.scheduleCTA.visible || sectionPermissions.createQuoteCTA.visible || sectionPermissions.recordTransactionCTA.visible) && (
+        <div className="sticky bottom-0 z-20 -mx-2 pt-3 pb-1 bg-gradient-to-t from-white via-white to-white/80">
+          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl shadow-slate-200/60 backdrop-blur">
+            {sectionPermissions.scheduleCTA.visible && (
             <button 
               onClick={onSchedule}
-              className="flex-1 bg-amber-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-amber-100 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              disabled={!sectionPermissions.scheduleCTA.editable}
+              className="min-h-12 bg-amber-500 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
             >
               <Calendar className="w-4 h-4" />
               Schedule
             </button>
+            )}
+            {sectionPermissions.createQuoteCTA.visible && (
             <button 
               onClick={() => {
+                if (!sectionPermissions.createQuoteCTA.editable) return;
                 onClose();
                 onQuote();
               }}
-              className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-100 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              disabled={!sectionPermissions.createQuoteCTA.editable}
+              className="min-h-12 bg-blue-600 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
             >
               <FileText className="w-4 h-4" />
-              Create Quote
+              Quote
             </button>
-          </div>
+            )}
+          {sectionPermissions.recordTransactionCTA.visible && (
           <button 
             onClick={onSale}
-            className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-emerald-100/30 hover:scale-[1.01] active:scale-[0.99] transition-all"
+            disabled={!sectionPermissions.recordTransactionCTA.editable}
+            className="min-h-12 bg-emerald-600 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
           >
             <DollarSign className="w-4 h-4" />
-            Record Transaction
+            Transaction
           </button>
+          )}
+          </div>
         </div>
+        )}
       </div>
     </motion.div>
   );

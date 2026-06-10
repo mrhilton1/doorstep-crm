@@ -1,7 +1,7 @@
 # Feature: Address CRM Core
 
 **Status:** In Progress  
-**Last updated:** 2026-06-08  
+**Last updated:** 2026-06-09  
 **Owner:** Mike Hilton
 
 ---
@@ -10,10 +10,11 @@
 Make address records the primary MVP CRM object for field sales, route planning, contacts, quotes, appointments, activities, and future object-oriented CRM expansion.
 
 ## Current Behavior
-The UI still uses mixed language such as property, lead, prospect, and pin. Supabase has `doorstep.addresses`, and production syncs basic address records plus legacy UI fields in `custom_data`. Contacts and other child objects are still largely stored inside the address `custom_data` bridge instead of fully normalized app flows.
+The UI still uses mixed language such as property, lead, prospect, and pin. Supabase has `doorstep.addresses`, and production syncs basic address records plus legacy UI fields in `custom_data`. The app has had two address surfaces: a summary drawer and an editor drawer. Activities are now moving to `doorstep.activities`; notes, quotes, invoices, and transactions need dedicated tables.
 
 ## Desired Behavior
 Address records are the stable unit of work. Contacts, labels, quotes, invoices, activities, appointments, and routes relate to addresses. The UI should gradually rename "property" and "lead" concepts into address/object CRM language without breaking MVP workflows.
+The Unified Address Record is the canonical address view and replaces duplicate address drawers.
 
 ## User Flow
 1. User views dashboard or map.
@@ -29,6 +30,8 @@ Address records are the stable unit of work. Contacts, labels, quotes, invoices,
 - Stage and status are separate concepts.
 - Residential and commercial address types must both be supported.
 - Address data must be workspace-scoped.
+- The Unified Address Record is the only address-level detail surface.
+- Activity and notes should be Supabase-backed, not browser/local nested state.
 
 ## Edge Cases
 - Empty states: Dashboard and map must handle zero address records.
@@ -62,6 +65,9 @@ Address records are the stable unit of work. Contacts, labels, quotes, invoices,
 ## Decisions Made
 - 2026-06-08: Use `doorstep.addresses` as first Supabase-backed CRM table.
 - 2026-06-08: Keep legacy nested UI data in `custom_data` as a bridge while the monolithic app is refactored.
+- 2026-06-09: Replace duplicate address screens with a Unified Address Record.
+- 2026-06-09: Add dedicated notes/quotes/invoices/transactions schema as the next normalization step.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.
+- 2026-06-09: Unified Address Record direction added.

@@ -33,6 +33,7 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - Record Event requires a description.
 - Active Stage remains manually editable, but events can auto-move stage: Conversation/answered knock to Lead, Estimate/Quote Requested to Opportunity, Completed Cleaning or payment/job completion to Customer.
 - Email, SMS, quote, invoice, appointment, and future actions should all use the same activity feed pattern.
+- Notes use `doorstep.notes` as source of truth and `doorstep.activities` as the timeline entry.
 - MVP detailed event taxonomy can be stored in `doorstep.activities.metadata`; the high-level `type` enum remains stable.
 
 ## Edge Cases
@@ -74,6 +75,7 @@ The address editor replaces the Visit Status area with a Live Event Logger. User
 - 2026-06-09: Use the existing `interactions` bridge for MVP persistence.
 - 2026-06-09: User approved replacing the Visit Status area with a Live Event Logger and wiring events to Supabase.
 - 2026-06-09: Event outcomes can auto-move stage while preserving manual stage edits.
+- 2026-06-09: Notes should be queryable from a dedicated notes table and reflected in activities.
 
 ## Iteration History
 - 2026-06-09: Spec created.

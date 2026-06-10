@@ -688,7 +688,7 @@ export default function HomeDashboard({
                         <div 
                           key={ev.id} 
                           onClick={() => {
-                            setSelectedContactId(ev.propertyId);
+                            onOpenPropertyEditor(ev.propertyId);
                           }}
                           className="flex gap-4 items-start hover:bg-slate-50 p-2 rounded-xl transition-all cursor-pointer group text-left"
                         >
@@ -918,7 +918,7 @@ export default function HomeDashboard({
                     return (
                       <div 
                         key={p.id}
-                        onClick={() => setSelectedContactId(p.id)}
+                        onClick={() => onOpenPropertyEditor(p.id)}
                         className="bg-white border border-slate-200 rounded-2xl hover:border-slate-350 p-5 shadow-sm hover:shadow-md cursor-pointer text-left flex flex-col justify-between transition-all group relative overflow-hidden active:scale-[0.98]"
                       >
                         {/* Status colored ribbon */}
@@ -980,7 +980,7 @@ export default function HomeDashboard({
                               </span>
                             )}
                             <span className="text-[9.5px] font-black text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider group-hover:translate-x-0.5 transition-transform">
-                              Spotlight Focus &rarr;
+                              Open Record &rarr;
                             </span>
                           </div>
                         </div>
@@ -1040,7 +1040,7 @@ export default function HomeDashboard({
                     <div 
                       key={appt.id}
                       onClick={() => {
-                        setSelectedContactId(appt.property.id);
+                        onOpenPropertyEditor(appt.property.id);
                       }}
                       className="group border border-slate-200 rounded-2xl hover:border-blue-400 hover:bg-blue-50/10 p-5 transition-all text-left cursor-pointer flex flex-col justify-between relative overflow-hidden bg-white shadow-sm hover:shadow active:scale-[0.98]"
                     >

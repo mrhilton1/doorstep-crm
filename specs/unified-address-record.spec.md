@@ -1,7 +1,7 @@
 # Feature: Unified Address Record
 
 **Status:** In Progress  
-**Last updated:** 2026-06-09  
+**Last updated:** 2026-06-10
 **Owner:** Mike Hilton
 
 ---
@@ -10,7 +10,7 @@
 Replace the separate PWA Client Management summary drawer and CRM Canvassing editor with one canonical, mobile-first address record screen. The unified record must support the door workflow in one place: orient, log, review history, edit address context, manage contacts, and take follow-up actions.
 
 ## Current Behavior
-The app has two address-level surfaces: a summary drawer in the contacts/dashboard experience and a detailed address editor from the map flow. They show overlapping but different data, creating uncertainty about where address data lives and where activity should be logged.
+The Unified Address Record is the canonical surface for address detail work. It supports Live Event Logger, read-only-by-default Contact Info and Job Info, top-right quick actions, notes filtering, normalized Add Contact creation, and Move to New Address entry points. Some deeper quote/invoice and reassignment workflows still need later passes.
 
 ## Desired Behavior
 Every address opens into the Unified Address Record. The first implementation may use the existing address editor as the canonical shell while the UI is consolidated, but all entry points should route to the same screen. The layout is role-ready and organized in this order: Address Header, Live Event Logger, Activity Feed, Address/Property Details, Quote & Transaction History, Contacts at Address, compact action menu. Contact-record PRDs should be interpreted as changes to the contact/address sections inside this unified address record, not as a move away from address-first CRM.
@@ -69,6 +69,8 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given an address record opens, then Contact Info and Job Info fields are read-only until their section Edit button is tapped.
 - Given a user double-taps Add Contact, then only one normalized contact is created.
 - Given Activity Feed Notes Only is active, then only human-entered note/message events are shown and the filter resets on next record open.
+- Given Add Contact is used, then the UI creates a `doorstep.contacts` row, links it through `doorstep.address_contacts`, and records an idempotency key in `doorstep.contact_idempotency_keys`.
+- Given the optional `create_address_contact_idempotent` RPC is available, then Add Contact uses that RPC; otherwise the deployed frontend falls back to table-level idempotency until migration 008 is applied.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -96,9 +98,11 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-10: Contact-record redesign keeps the address as the canonical object and adds read-only default with section-level edit modes.
 - 2026-06-10: Notes Only filter means human-entered notes/messages only.
 - 2026-06-10: Add Contact requires backend idempotency, not only frontend debounce/spinner.
+- 2026-06-10: Add Contact now writes normalized contacts and address links. Migration 008 adds the preferred one-call RPC, while the frontend also supports a table-backed fallback.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.
 - 2026-06-09: First implementation slice added role-ready section config, normalized schema foundation, unified dashboard entry routing, event-note persistence, and compact sticky address actions.
 - 2026-06-10: Corrected quick-action placement from bottom sticky bar to top-right icon cluster.
 - 2026-06-10: Added shared shell hamburger nav and reserved page-header space to avoid top-right collisions.
+- 2026-06-10: Wired normalized contact loading, Supabase-backed Add Contact idempotency, and Move to New Address access from Contact Info edit mode.

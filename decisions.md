@@ -50,3 +50,10 @@ Append-only. Never edit past entries except to fix typos that obscure meaning.
 **Rationale:** Addresses are the canvassing unit; premature contact records pollute the CRM and make route-created prospects look more qualified than they are.
 **Alternatives considered:** Create placeholder contacts for every route tap; rejected because the rep has not contacted anyone yet.
 **Consequences:** Route address markers need to support address-only records. Unvisited route addresses use square markers; once activity is logged, they use normal colored teardrop/pin markers based on the resulting stage/status.
+
+## 2026-06-10 23:18 MST — Add Contact Uses Normalized Rows With Idempotency
+**Context:** The Unified Address Record needs Add Contact to create real Supabase contacts and avoid duplicates from double-taps or repeated requests.
+**Decision:** Create additional contacts in `doorstep.contacts`, link them with `doorstep.address_contacts`, and record idempotency through `doorstep.contact_idempotency_keys`. Add migration 008 for a preferred single-call `doorstep.create_address_contact_idempotent(...)` RPC while keeping a frontend table-backed fallback until the migration is applied.
+**Rationale:** Idempotency belongs in the database because UI spinners cannot prevent concurrent duplicate requests. The fallback lets the deployed UI keep working if Supabase MCP auth is expired and migration 008 has not been applied yet.
+**Alternatives considered:** Keep only the frontend spinner; rejected because it does not satisfy the accepted duplicate-submit guardrail. Block deployment until MCP auth refresh; rejected because the fallback still uses Supabase tables and preserves the user testing path.
+**Consequences:** Migration 008 should be applied when Supabase MCP/auth is available. Future contact edit/delete flows should continue writing normalized contact rows rather than only `addresses.custom_data`.

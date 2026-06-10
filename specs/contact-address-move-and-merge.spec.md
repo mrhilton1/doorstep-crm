@@ -1,6 +1,6 @@
 # Feature: Contact Address Move And Merge
 
-**Status:** Draft  
+**Status:** In Progress
 **Last updated:** 2026-06-10  
 **Owner:** Mike Hilton
 
@@ -10,7 +10,7 @@
 Let a workspace user move all contacts from one address record to a new address record without losing customer history, corrupting destination data, or hiding displaced contacts from admin recovery workflows.
 
 ## Current Behavior
-Contacts still ride partly through address-level UI state and `doorstep.addresses.custom_data`. There is no safe move flow for when every contact at an address moves to a different address. Dedicated quote, invoice, transaction, activity, and notes tables exist as a foundation, but contact move/merge is not yet implemented as an atomic backend operation.
+Contacts still ride partly through address-level UI state and `doorstep.addresses.custom_data`, but normalized `doorstep.contacts` and `doorstep.address_contacts` are now hydrated into the Unified Address Record. Migration 007 provides the atomic `doorstep.move_address_contacts(...)` RPC, and the UI exposes Move Address from Contact Info edit mode.
 
 ## Desired Behavior
 From the Unified Address Record, a user with contact edit access can start "Move to New Address" from Contact Info edit mode. The move applies to all contacts at the source address. If the destination is empty, contacts move there, invoices follow the contacts, quotes stay with the original address, and the original address resets to Prospect without contact data. If the destination already has contact data, the existing destination contacts are displaced into an admin-only "Contacts Without Address" queue before the incoming contacts populate the destination.
@@ -60,9 +60,13 @@ From the Unified Address Record, a user with contact edit access can start "Move
 - Given a move/merge completes, then admins can inspect an audit trail with actor, timestamp, source, destination, moved contacts, displaced contacts, and invoice reassociations.
 - Given a normal rep opens Contacts, then displaced contacts are not shown in normal contact/address lists.
 - Given an Owner/Admin opens the admin contacts area, then unresolved displaced contacts are visible for follow-up and reassociation.
+- Given Move Address is triggered from Contact Info edit mode, then the app normalizes any legacy primary/additional contacts before calling the atomic move RPC.
+- Given the move RPC displaces destination contacts, then the hamburger menu exposes an admin recovery queue when RLS returns unresolved displaced contacts.
 
 ## Validation Plan
 - Add a new Supabase migration for normalized contacts, displaced contacts, idempotency/move operation tracking if needed, and move/merge RPC.
+- Apply migration 007 before using Move Address.
+- Apply migration 008 to enable the preferred one-call idempotent Add Contact RPC.
 - Add transaction tests or SQL verification cases for empty destination, populated destination, RPC failure rollback, and duplicate submission.
 - Verify RLS keeps displaced contacts admin/owner visible and rep hidden.
 - Run `npm run verify`.
@@ -70,7 +74,7 @@ From the Unified Address Record, a user with contact edit access can start "Move
 
 ## Open Questions
 - [ ] Should Scheduler have access to the Contacts Without Address queue, or Owner/Admin only for first launch?
-- [ ] Should displaced contacts queue show a passive count badge in the hamburger/admin menu?
+- [x] Should displaced contacts queue show a passive count badge in the hamburger/admin menu?
 - [ ] Should move operation require an additional typed confirmation for populated-destination merges?
 
 ## Decisions Made
@@ -80,6 +84,9 @@ From the Unified Address Record, a user with contact edit access can start "Move
 - 2026-06-10: Contacts Without Address queue is admin/owner accessible for MVP.
 - 2026-06-10: Backend idempotency and atomic RPC transaction are required for move/merge.
 - 2026-06-10: Contacts should be normalized into `doorstep.contacts` before or as part of move/merge.
+- 2026-06-10: Contacts Without Address appears in the shared hamburger only when unresolved displaced contacts are visible to the signed-in user through Supabase RLS.
+- 2026-06-10: First queue implementation is read/recovery visibility only; reassignment/resolution workflows are later passes.
 
 ## Iteration History
 - 2026-06-10: Spec created from PRD and user alignment decisions.
+- 2026-06-10: Implemented first UI pass for Move Address, legacy contact normalization before move, normalized contact hydration, and admin displaced contacts queue visibility.

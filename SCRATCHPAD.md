@@ -1,6 +1,30 @@
 # Scratchpad
 
 ## 2026-06-10 — Current Objective
+**Task:** Finish the remaining PRD implementation after migration 007 succeeded: wire normalized Add Contact idempotency, Move to New Address RPC flow, and admin displaced contacts visibility.
+**Target specs:** `/specs/unified-address-record.spec.md`, `/specs/contact-address-move-and-merge.spec.md`, `/specs/address-crm-core.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and impacted specs.
+- [x] Inspect current contact, address, Supabase bridge, and navigation code.
+- [x] Implement Supabase-backed Add Contact idempotency and address contact linking.
+- [x] Implement Move to New Address UI using the atomic RPC.
+- [x] Add admin/owner displaced contacts queue visibility.
+- [x] Update specs/scratchpad decisions if implementation reality changes.
+- [x] Run verification.
+- [x] Deploy verified build to Cloudflare Pages.
+- [ ] Commit and push implementation/docs.
+
+## Assumptions
+- Migration 007 is now applied in Supabase, so frontend code can call `doorstep.move_address_contacts`.
+- Existing nested `custom_data.contacts` remains a display bridge, but new Add Contact should create normalized `doorstep.contacts` rows and `doorstep.address_contacts` links.
+- The first displaced queue can be a visibility/recovery list, not full reassignment tooling.
+- Supabase MCP auth expired while applying migration 008, so `008_contact_idempotent_create_rpc.sql` is committed locally and the frontend includes an idempotency-table fallback until 008 is applied.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-10 — Current Objective
 **Task:** Implement the approved PRD slices for Route Creation, stage/sub-status, contact read/edit/idempotency foundation, and safe move/merge database foundation.
 **Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-crm-core.spec.md`, `/specs/scheduling-routes.spec.md`, `/specs/contact-address-move-and-merge.spec.md`
 

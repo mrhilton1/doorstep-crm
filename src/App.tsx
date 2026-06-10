@@ -251,6 +251,16 @@ type KnockResult = 'answer' | 'no_answer';
 type AnswerOutcome = 'quote_requested' | 'follow_up_needed' | 'referral_given' | 'not_interested';
 type CallDirection = 'outbound' | 'inbound';
 
+type DisplacedContactRow = {
+  id: string;
+  original_address_id: string | null;
+  destination_address_id: string | null;
+  contact_id: string | null;
+  contact_snapshot: Record<string, any>;
+  displaced_at: string;
+  resolved: boolean;
+};
+
 type LiveEventPayload = {
   eventType: LiveEventType;
   knockResult?: KnockResult;
@@ -416,6 +426,64 @@ const addressRowToProperty = (row: any): PropertyContact => {
   };
 };
 
+const contactRowToContact = (row: any): Contact => ({
+  id: row.id,
+  firstName: row.first_name || '',
+  lastName: row.last_name || '',
+  role: row.role_title || '',
+  email: row.email || '',
+  phone: row.phone || '',
+  isDecisionMaker: Boolean(row.is_decision_maker),
+  customData: row.custom_data || {},
+});
+
+const mergeNormalizedContactsIntoProperties = (
+  properties: PropertyContact[],
+  addressContactRows: any[]
+): PropertyContact[] => {
+  const byAddress = new Map<string, { contact: Contact; isPrimary: boolean }[]>();
+
+  addressContactRows.forEach(row => {
+    const contactRow = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
+    if (!row.address_id || !contactRow || contactRow.deleted_at) return;
+    const list = byAddress.get(row.address_id) || [];
+    list.push({
+      contact: contactRowToContact(contactRow),
+      isPrimary: Boolean(row.is_primary)
+    });
+    byAddress.set(row.address_id, list);
+  });
+
+  return properties.map(property => {
+    const normalizedContacts = byAddress.get(property.id) || [];
+    const primary = normalizedContacts.find(item => item.isPrimary)?.contact;
+    const additional = normalizedContacts.filter(item => !item.isPrimary).map(item => item.contact);
+    const legacyAdditional = property.contacts || [];
+    const additionalById = new Map<string, Contact>();
+
+    [...additional, ...legacyAdditional].forEach(contact => {
+      if (!additionalById.has(contact.id)) {
+        additionalById.set(contact.id, contact);
+      }
+    });
+
+    return {
+      ...property,
+      firstName: primary ? primary.firstName : property.firstName,
+      lastName: primary ? primary.lastName : property.lastName,
+      phone: primary ? primary.phone : property.phone,
+      email: primary ? primary.email : property.email,
+      role: primary ? primary.role : property.role,
+      isDecisionMaker: primary ? primary.isDecisionMaker : property.isDecisionMaker,
+      customData: {
+        ...(property.customData || {}),
+        primaryContactId: primary?.id || property.customData?.primaryContactId || null
+      },
+      contacts: Array.from(additionalById.values())
+    };
+  });
+};
+
 const activityRowToInteraction = (row: any): Interaction => {
   const metadata = row.metadata || {};
   const eventType = metadata.event_type || row.type;
@@ -488,6 +556,7 @@ type AppHeaderNavProps = {
   isCatalogOpen: boolean;
   isSettingsOpen: boolean;
   isOverdueInvoicesOpen: boolean;
+  displacedContactCount: number;
   onOpenDashboard: () => void;
   onOpenContacts: () => void;
   onOpenMap: () => void;
@@ -495,6 +564,7 @@ type AppHeaderNavProps = {
   onOpenRoutes: () => void;
   onOpenCatalog: () => void;
   onOpenInvoices: () => void;
+  onOpenDisplacedContacts: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
 };
@@ -510,6 +580,7 @@ function AppHeaderNav({
   isCatalogOpen,
   isSettingsOpen,
   isOverdueInvoicesOpen,
+  displacedContactCount,
   onOpenDashboard,
   onOpenContacts,
   onOpenMap,
@@ -517,6 +588,7 @@ function AppHeaderNav({
   onOpenRoutes,
   onOpenCatalog,
   onOpenInvoices,
+  onOpenDisplacedContacts,
   onOpenSettings,
   onSignOut,
 }: AppHeaderNavProps) {
@@ -533,6 +605,12 @@ function AppHeaderNav({
     { label: 'Routes', icon: <Navigation className="w-4 h-4" />, onClick: onOpenRoutes, active: isProspectsOpen },
     { label: 'Catalog', icon: <Package className="w-4 h-4" />, onClick: onOpenCatalog, active: isCatalogOpen },
     { label: 'Invoices', icon: <DollarSign className="w-4 h-4" />, onClick: onOpenInvoices, active: isOverdueInvoicesOpen },
+    ...(displacedContactCount > 0 ? [{
+      label: `Queue ${displacedContactCount}`,
+      icon: <UserPlus className="w-4 h-4" />,
+      onClick: onOpenDisplacedContacts,
+      active: false
+    }] : []),
     { label: 'Settings', icon: <SettingsIcon className="w-4 h-4" />, onClick: onOpenSettings, active: isSettingsOpen },
   ];
 
@@ -1639,6 +1717,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [currentView, setCurrentView] = useState<'dashboard' | 'map'>('dashboard');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isOverdueInvoicesOpen, setIsOverdueInvoicesOpen] = useState(false);
+  const [isDisplacedContactsOpen, setIsDisplacedContactsOpen] = useState(false);
+  const [displacedContacts, setDisplacedContacts] = useState<DisplacedContactRow[]>([]);
   const [settingsActiveTab, setSettingsActiveTab] = useState<'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'>('business');
   const [routes, setRoutes] = useState<ProspectRoute[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -1697,83 +1777,92 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const hasLoadedRemoteAddresses = useRef(!workspaceId);
   const hasLoadedRemoteAppState = useRef(!workspaceId);
 
-  useEffect(() => {
+  const refreshWorkspaceAddresses = useCallback(async () => {
     if (!workspaceId) return;
 
-    let isMounted = true;
+    setDataStatus('loading');
+    setDataError(null);
+    hasLoadedRemoteAddresses.current = false;
 
-    const loadAddresses = async () => {
-      setDataStatus('loading');
-      setDataError(null);
-      hasLoadedRemoteAddresses.current = false;
+    const { data, error } = await doorstepDb
+      .from('addresses')
+      .select('*')
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false });
 
-      const { data, error } = await doorstepDb
-        .from('addresses')
-        .select('*')
-        .is('deleted_at', null)
-        .order('updated_at', { ascending: false });
+    if (error) {
+      setDataStatus('error');
+      setDataError(error.message);
+      hasLoadedRemoteAddresses.current = true;
+      return;
+    }
 
-      if (!isMounted) return;
+    let loadedProperties = (data || []).map(addressRowToProperty);
+    const addressIds = loadedProperties.map(property => property.id);
 
-      if (error) {
+    if (addressIds.length > 0) {
+      const [
+        { data: activities, error: activitiesError },
+        { data: addressContacts, error: addressContactsError }
+      ] = await Promise.all([
+        doorstepDb
+          .from('activities')
+          .select('*')
+          .in('address_id', addressIds)
+          .order('created_at', { ascending: false }),
+        doorstepDb
+          .from('address_contacts')
+          .select('address_id,is_primary,relationship_label,contacts(id,first_name,last_name,role_title,email,phone,is_decision_maker,custom_data,deleted_at)')
+          .in('address_id', addressIds)
+      ]);
+
+      if (activitiesError || addressContactsError) {
         setDataStatus('error');
-        setDataError(error.message);
+        setDataError(activitiesError?.message || addressContactsError?.message || 'Could not load address data.');
         hasLoadedRemoteAddresses.current = true;
         return;
       }
 
-      const loadedProperties = (data || []).map(addressRowToProperty);
-      const addressIds = loadedProperties.map(property => property.id);
+      loadedProperties = mergeNormalizedContactsIntoProperties(loadedProperties, addressContacts || []);
 
-      if (addressIds.length > 0) {
-        const { data: activities, error: activitiesError } = await doorstepDb
-          .from('activities')
-          .select('*')
-          .in('address_id', addressIds)
-          .order('created_at', { ascending: false });
+      const activitiesByAddress = new Map<string, Interaction[]>();
+      (activities || []).forEach((activity: any) => {
+        if (!activity.address_id) return;
+        const list = activitiesByAddress.get(activity.address_id) || [];
+        list.push(activityRowToInteraction(activity));
+        activitiesByAddress.set(activity.address_id, list);
+      });
 
-        if (!isMounted) return;
+      loadedProperties = loadedProperties.map(property => {
+        const remoteInteractions = activitiesByAddress.get(property.id) || [];
+        const legacyInteractions = property.interactions || [];
+        const uniqueInteractions = new Map<string, Interaction>();
+        [...remoteInteractions, ...legacyInteractions].forEach(interaction => uniqueInteractions.set(interaction.id, interaction));
 
-        if (activitiesError) {
-          setDataStatus('error');
-          setDataError(activitiesError.message);
-          hasLoadedRemoteAddresses.current = true;
-          return;
-        }
+        return {
+          ...property,
+          interactions: Array.from(uniqueInteractions.values()).sort((a, b) => b.createdAt - a.createdAt)
+        };
+      });
+    }
 
-        const activitiesByAddress = new Map<string, Interaction[]>();
-        (activities || []).forEach((activity: any) => {
-          if (!activity.address_id) return;
-          const list = activitiesByAddress.get(activity.address_id) || [];
-          list.push(activityRowToInteraction(activity));
-          activitiesByAddress.set(activity.address_id, list);
-        });
+    setProperties(loadedProperties);
+    hasLoadedRemoteAddresses.current = true;
+    setDataStatus('synced');
+  }, [workspaceId]);
 
-        setProperties(loadedProperties.map(property => {
-          const remoteInteractions = activitiesByAddress.get(property.id) || [];
-          const legacyInteractions = property.interactions || [];
-          const uniqueInteractions = new Map<string, Interaction>();
-          [...remoteInteractions, ...legacyInteractions].forEach(interaction => uniqueInteractions.set(interaction.id, interaction));
+  useEffect(() => {
+    if (!workspaceId) return;
 
-          return {
-            ...property,
-            interactions: Array.from(uniqueInteractions.values()).sort((a, b) => b.createdAt - a.createdAt)
-          };
-        }));
-      } else {
-        setProperties(loadedProperties);
-      }
-
-      hasLoadedRemoteAddresses.current = true;
-      setDataStatus('synced');
-    };
-
-    loadAddresses();
+    let isMounted = true;
+    refreshWorkspaceAddresses().finally(() => {
+      if (!isMounted) return;
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [workspaceId]);
+  }, [refreshWorkspaceAddresses, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId || !hasLoadedRemoteAddresses.current) return;
@@ -1802,6 +1891,27 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     const timeout = window.setTimeout(syncAddresses, 700);
     return () => window.clearTimeout(timeout);
   }, [properties, userId, workspaceId]);
+
+  const refreshDisplacedContacts = useCallback(async () => {
+    if (!workspaceId) return;
+
+    const { data, error } = await doorstepDb
+      .from('displaced_contacts')
+      .select('id,original_address_id,destination_address_id,contact_id,contact_snapshot,displaced_at,resolved')
+      .eq('resolved', false)
+      .order('displaced_at', { ascending: false });
+
+    if (error) {
+      setDisplacedContacts([]);
+      return;
+    }
+
+    setDisplacedContacts((data || []) as DisplacedContactRow[]);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    refreshDisplacedContacts();
+  }, [refreshDisplacedContacts]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -2469,6 +2579,338 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     }));
   };
 
+  const createAddressContact = async (property: PropertyContact, idempotencyKey: string): Promise<Contact> => {
+    if (!workspaceId || !userId) {
+      throw new Error('Workspace session is not ready. Please refresh and try again.');
+    }
+
+    const createViaTables = async (): Promise<Contact> => {
+      const { error: keyError } = await doorstepDb
+        .from('contact_idempotency_keys')
+        .insert({
+          workspace_id: workspaceId,
+          idempotency_key: idempotencyKey,
+          address_id: property.id,
+          created_by: userId
+        });
+
+      if (keyError) {
+        const { data: existingKey, error: existingKeyError } = await doorstepDb
+          .from('contact_idempotency_keys')
+          .select('contact_id')
+          .eq('workspace_id', workspaceId)
+          .eq('idempotency_key', idempotencyKey)
+          .maybeSingle();
+
+        if (existingKeyError) {
+          throw new Error(existingKeyError.message);
+        }
+
+        if (existingKey?.contact_id) {
+          const { data: existingContact, error: existingContactError } = await doorstepDb
+            .from('contacts')
+            .select('*')
+            .eq('id', existingKey.contact_id)
+            .single();
+
+          if (existingContactError) {
+            throw new Error(existingContactError.message);
+          }
+
+          return contactRowToContact(existingContact);
+        }
+
+        throw new Error('Contact creation is already in progress. Please wait a moment and refresh if it does not appear.');
+      }
+
+      const { data: contactRow, error: contactError } = await doorstepDb
+        .from('contacts')
+        .insert({
+          workspace_id: workspaceId,
+          first_name: null,
+          last_name: null,
+          role_title: null,
+          email: null,
+          phone: null,
+          is_decision_maker: false,
+          custom_data: { idempotencyKey },
+          created_by: userId,
+          updated_by: userId
+        })
+        .select('*')
+        .single();
+
+      if (contactError) {
+        throw new Error(contactError.message);
+      }
+
+      const { error: linkError } = await doorstepDb
+        .from('address_contacts')
+        .insert({
+          workspace_id: workspaceId,
+          address_id: property.id,
+          contact_id: contactRow.id,
+          is_primary: false
+        });
+
+      if (linkError) {
+        throw new Error(linkError.message);
+      }
+
+      const { error: keyUpdateError } = await doorstepDb
+        .from('contact_idempotency_keys')
+        .update({ contact_id: contactRow.id })
+        .eq('workspace_id', workspaceId)
+        .eq('idempotency_key', idempotencyKey);
+
+      if (keyUpdateError) {
+        throw new Error(keyUpdateError.message);
+      }
+
+      return contactRowToContact(contactRow);
+    };
+
+    const { data, error } = await doorstepDb.rpc('create_address_contact_idempotent', {
+      p_workspace_id: workspaceId,
+      p_address_id: property.id,
+      p_idempotency_key: idempotencyKey,
+      p_contact: {
+        first_name: '',
+        last_name: '',
+        role_title: '',
+        email: '',
+        phone: '',
+        is_decision_maker: false,
+        custom_data: { idempotencyKey }
+      },
+      p_is_primary: false,
+      p_relationship_label: null
+    });
+
+    if (error) {
+      if (error.message.toLowerCase().includes('create_address_contact_idempotent')) {
+        return createViaTables();
+      }
+      throw new Error(error.message);
+    }
+
+    const contactRow = (data as any)?.contact || data;
+    if (!contactRow?.id) {
+      throw new Error('Contact was created but Supabase did not return the new contact.');
+    }
+
+    return contactRowToContact(contactRow);
+  };
+
+  const upsertNormalizedContactForAddress = async (
+    property: PropertyContact,
+    contact: Contact,
+    isPrimary: boolean
+  ) => {
+    if (!workspaceId || !userId) {
+      throw new Error('Workspace session is not ready. Please refresh and try again.');
+    }
+
+    const { error: contactError } = await doorstepDb
+      .from('contacts')
+      .upsert({
+        id: contact.id,
+        workspace_id: workspaceId,
+        first_name: contact.firstName || '',
+        last_name: contact.lastName || '',
+        role_title: contact.role || '',
+        email: contact.email || null,
+        phone: contact.phone || null,
+        is_decision_maker: Boolean(contact.isDecisionMaker),
+        custom_data: contact.customData || {},
+        created_by: userId,
+        updated_by: userId
+      }, { onConflict: 'id' });
+
+    if (contactError) {
+      throw new Error(contactError.message);
+    }
+
+    const { error: linkError } = await doorstepDb
+      .from('address_contacts')
+      .upsert({
+        workspace_id: workspaceId,
+        address_id: property.id,
+        contact_id: contact.id,
+        is_primary: isPrimary
+      }, { onConflict: 'address_id,contact_id' });
+
+    if (linkError) {
+      throw new Error(linkError.message);
+    }
+  };
+
+  const ensureNormalizedContactsForMove = async (property: PropertyContact) => {
+    if (!workspaceId) {
+      throw new Error('Workspace session is not ready. Please refresh and try again.');
+    }
+
+    const { data: links, error: linksError } = await doorstepDb
+      .from('address_contacts')
+      .select('contact_id,is_primary')
+      .eq('address_id', property.id);
+
+    if (linksError) {
+      throw new Error(linksError.message);
+    }
+
+    const existingIds = new Set((links || []).map((link: any) => link.contact_id));
+    const hasPrimaryLink = (links || []).some((link: any) => link.is_primary);
+    const hasPrimaryData = Boolean(
+      property.firstName?.trim() ||
+      property.lastName?.trim() ||
+      property.phone?.trim() ||
+      property.email?.trim()
+    );
+
+    if (hasPrimaryData && !hasPrimaryLink) {
+      const primaryContact: Contact = {
+        id: property.customData?.primaryContactId || uuidv4(),
+        firstName: property.firstName || '',
+        lastName: property.lastName || '',
+        role: property.role || '',
+        email: property.email || '',
+        phone: property.phone || '',
+        isDecisionMaker: Boolean(property.isDecisionMaker),
+        customData: {
+          ...(property.customData || {}),
+          source: 'legacy_primary_contact'
+        }
+      };
+      await upsertNormalizedContactForAddress(property, primaryContact, true);
+      existingIds.add(primaryContact.id);
+    }
+
+    for (const contact of property.contacts || []) {
+      if (existingIds.has(contact.id)) continue;
+      await upsertNormalizedContactForAddress(property, contact, false);
+      existingIds.add(contact.id);
+    }
+
+    const { data: finalLinks, error: finalLinksError } = await doorstepDb
+      .from('address_contacts')
+      .select('contact_id')
+      .eq('address_id', property.id);
+
+    if (finalLinksError) {
+      throw new Error(finalLinksError.message);
+    }
+
+    if (!finalLinks || finalLinks.length === 0) {
+      throw new Error('There are no contacts at this address to move.');
+    }
+  };
+
+  const handleMoveContactsToAddress = (property: PropertyContact) => {
+    setPromptConfig({
+      title: 'Move Contacts To New Address',
+      message: 'All contacts at this address will move. Gate-side address notes and quotes stay with the original address; invoices follow the contacts.',
+      type: 'form',
+      fields: [
+        { key: 'address', label: 'Destination Address' },
+      ],
+      onConfirm: async (dataStr) => {
+        if (!workspaceId || !userId) {
+          alert('Workspace session is not ready. Please refresh and try again.');
+          return;
+        }
+
+        const formData = JSON.parse(dataStr);
+        const destinationAddress = String(formData.address || '').trim();
+        if (!destinationAddress) {
+          alert('Choose a destination address first.');
+          return;
+        }
+
+        try {
+          await ensureNormalizedContactsForMove(property);
+
+          const normalizedDestination = normalizeAddress(destinationAddress);
+          let destination = properties.find(item =>
+            item.id !== property.id && normalizeAddress(item.address) === normalizedDestination
+          );
+
+          if (!destination) {
+            destination = {
+              id: uuidv4(),
+              address: destinationAddress,
+              firstName: '',
+              lastName: '',
+              phone: '',
+              email: '',
+              role: '',
+              isDecisionMaker: false,
+              lat: Number(formData.lat || property.lat),
+              lng: Number(formData.lng || property.lng),
+              status: 'Not Visited',
+              type: settings.defaultPremisesType || property.type || 'Residential',
+              notes: '',
+              tags: [],
+              contacts: [],
+              quotes: [],
+              sales: [],
+              interactions: [],
+              appointments: [],
+              stage: 'prospect',
+              subStatus: null,
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            };
+
+            const { error: destinationError } = await doorstepDb
+              .from('addresses')
+              .upsert(propertyToAddressRow(destination, workspaceId, userId), { onConflict: 'id' });
+
+            if (destinationError) {
+              throw new Error(destinationError.message);
+            }
+          }
+
+          const destinationHasContacts = Boolean(
+            destination.firstName?.trim() ||
+            destination.lastName?.trim() ||
+            destination.phone?.trim() ||
+            destination.email?.trim() ||
+            (destination.contacts || []).length > 0
+          );
+
+          const warning = destinationHasContacts
+            ? 'The destination already has contacts. Existing destination contacts will be moved to the admin-only Contacts Without Address queue. Continue?'
+            : 'Move all contacts to this destination address?';
+
+          if (!window.confirm(warning)) return;
+
+          const { error: moveError } = await doorstepDb.rpc('move_address_contacts', {
+            p_workspace_id: workspaceId,
+            p_source_address_id: property.id,
+            p_destination_address_id: destination.id,
+            p_operation_key: uuidv4()
+          });
+
+          if (moveError) {
+            throw new Error(moveError.message);
+          }
+
+          await Promise.all([
+            refreshWorkspaceAddresses(),
+            refreshDisplacedContacts()
+          ]);
+
+          setSelectedPropertyId(destination.id);
+          setIsDrawerOpen(true);
+          alert('Contacts moved successfully.');
+        } catch (error: any) {
+          alert(error.message || 'Contacts could not be moved. Please try again.');
+        }
+      }
+    });
+  };
+
   const logAddressEvent = async (propertyId: string, payload: LiveEventPayload) => {
     const property = properties.find(p => p.id === propertyId);
     if (!property || !workspaceId || !userId) {
@@ -2726,6 +3168,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     setIsCatalogOpen(false);
     setIsSettingsOpen(false);
     setIsMoreMenuOpen(false);
+    setIsDisplacedContactsOpen(false);
   };
 
   const openAppView = (view: 'dashboard' | 'contacts' | 'map' | 'appointments') => {
@@ -2765,6 +3208,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         isCatalogOpen={isCatalogOpen}
         isSettingsOpen={isSettingsOpen}
         isOverdueInvoicesOpen={isOverdueInvoicesOpen}
+        displacedContactCount={displacedContacts.length}
         onOpenDashboard={() => openAppView('dashboard')}
         onOpenContacts={() => openAppView('contacts')}
         onOpenMap={() => openAppView('map')}
@@ -2772,6 +3216,11 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         onOpenRoutes={openAppRoutes}
         onOpenCatalog={openAppCatalog}
         onOpenInvoices={openAppOverdueInvoices}
+        onOpenDisplacedContacts={() => {
+          closeAppOverlays();
+          refreshDisplacedContacts();
+          setIsDisplacedContactsOpen(true);
+        }}
         onOpenSettings={openAppSettings}
         onSignOut={onSignOut}
       />
@@ -3790,12 +4239,24 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       </AnimatePresence>
 
       <AnimatePresence>
+        {isDisplacedContactsOpen && (
+          <DisplacedContactsOverlay
+            rows={displacedContacts}
+            properties={properties}
+            onClose={() => setIsDisplacedContactsOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {isDrawerOpen && selectedProperty && (
           <PropertyDrawer
             property={selectedProperty}
             updateProperty={updateProperty}
             settings={settings}
             onLogEvent={logAddressEvent}
+            onAddContact={createAddressContact}
+            onMoveContacts={handleMoveContactsToAddress}
             onClose={() => setIsDrawerOpen(false)}
             onSchedule={() => {
               setIsDrawerOpen(false);
@@ -3991,6 +4452,8 @@ function PropertyDrawer({
   updateProperty,
   settings,
   onLogEvent,
+  onAddContact,
+  onMoveContacts,
   onClose,
   onSchedule,
   onQuote,
@@ -4000,6 +4463,8 @@ function PropertyDrawer({
   updateProperty: (id: string, updates: Partial<PropertyContact>) => void,
   settings: AppSettings,
   onLogEvent: (propertyId: string, payload: LiveEventPayload) => Promise<Interaction>,
+  onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
+  onMoveContacts: (property: PropertyContact) => void,
   onClose: () => void,
   onSchedule: () => void,
   onQuote: () => void,
@@ -4133,7 +4598,7 @@ function PropertyDrawer({
     }
   };
 
-  const handleAddContact = () => {
+  const handleAddContact = async () => {
     if (!sectionPermissions.contactsAtAddress.editable || isAddingContact) return;
 
     const idempotencyKey = uuidv4();
@@ -4141,29 +4606,18 @@ function PropertyDrawer({
     setIsAddingContact(true);
     setAddContactError('');
 
-    const nextContact: Contact = {
-      id: uuidv4(),
-      firstName: '',
-      lastName: '',
-      isDecisionMaker: false,
-      customData: {
-        idempotencyKey
-      }
-    };
-
     try {
+      const nextContact = await onAddContact(property, idempotencyKey);
       updateProperty(property.id, {
         contacts: [...(property.contacts || []), nextContact]
       });
     } catch (error: any) {
       setAddContactError(error.message || 'Contact could not be added. Please try again.');
     } finally {
-      window.setTimeout(() => {
-        if (addContactIdempotencyRef.current === idempotencyKey) {
-          addContactIdempotencyRef.current = null;
-          setIsAddingContact(false);
-        }
-      }, 300);
+      if (addContactIdempotencyRef.current === idempotencyKey) {
+        addContactIdempotencyRef.current = null;
+        setIsAddingContact(false);
+      }
     }
   };
 
@@ -4730,6 +5184,17 @@ function PropertyDrawer({
                <label className="text-[10px] font-black uppercase text-blue-600 tracking-widest leading-none">Contacts at Address</label>
             </div>
             <div className="flex items-center gap-2">
+              {isContactInfoEditing && (
+                <button
+                  type="button"
+                  onClick={() => onMoveContacts(property)}
+                  className="text-[10px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 transition-all"
+                  disabled={!sectionPermissions.contactsAtAddress.editable}
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  Move Address
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsContactInfoEditing(prev => !prev)}
@@ -5042,6 +5507,103 @@ function PropertyDrawer({
         )}
 
       </div>
+    </motion.div>
+  );
+}
+
+function DisplacedContactsOverlay({
+  rows,
+  properties,
+  onClose
+}: {
+  rows: DisplacedContactRow[];
+  properties: PropertyContact[];
+  onClose: () => void;
+}) {
+  const addressLabel = (id: string | null) => {
+    if (!id) return 'Unknown address';
+    return properties.find(property => property.id === id)?.address || id.slice(0, 8);
+  };
+
+  const contactName = (snapshot: Record<string, any>) => {
+    const first = snapshot.first_name || snapshot.firstName || '';
+    const last = snapshot.last_name || snapshot.lastName || '';
+    const name = `${first} ${last}`.trim();
+    return name || snapshot.email || snapshot.phone || 'Unnamed contact';
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[6000] bg-slate-950/40 backdrop-blur-sm flex justify-end"
+    >
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 35, stiffness: 400 }}
+        className="w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col"
+      >
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Admin Recovery</p>
+            <h2 className="text-2xl font-black text-slate-900">Contacts Without Address</h2>
+            <p className="text-xs font-bold text-slate-400 mt-1">
+              Contacts displaced by address move/merge operations.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 w-11 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-slate-100"
+            aria-label="Close contacts without address"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          {rows.length === 0 ? (
+            <div className="h-full min-h-[320px] border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-center p-8">
+              <UserPlus className="w-10 h-10 text-slate-300 mb-4" />
+              <p className="text-sm font-black uppercase tracking-widest text-slate-400">No displaced contacts</p>
+              <p className="text-xs font-bold text-slate-300 mt-2 max-w-sm">
+                If a move displaces destination contacts, Owner/Admin users will see them here for follow-up.
+              </p>
+            </div>
+          ) : rows.map(row => {
+            const snapshot = row.contact_snapshot || {};
+            return (
+              <div key={row.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="min-w-0">
+                    <p className="text-base font-black text-slate-900 truncate">{contactName(snapshot)}</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">
+                      Displaced {new Date(row.displaced_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-amber-50 text-amber-700 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                    Unresolved
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-bold text-slate-500">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Original/Destination</p>
+                    <p className="text-slate-700">{addressLabel(row.original_address_id)}</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Contact Details</p>
+                    <p className="text-slate-700 truncate">{snapshot.email || 'No email'}</p>
+                    <p className="text-slate-700 truncate">{snapshot.phone || 'No phone'}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

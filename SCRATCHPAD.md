@@ -1,6 +1,29 @@
 # Scratchpad
 
 ## 2026-06-10 — Current Objective
+**Task:** Fix map-view header/menu overlap and add an easy route-builder toggle that does not select addresses behind map controls.
+**Target spec:** `/specs/address-crm-core.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and address/map spec.
+- [x] Inspect map header, floating controls, and route-builder state.
+- [x] Update address CRM spec with map control safety rules.
+- [x] Reserve visual space for the shared hamburger menu on map view.
+- [x] Make the map route icon toggle route-builder mode on/off.
+- [x] Stop map control click/pointer events from reaching the map.
+- [x] Run verification.
+- [ ] Commit, push, and deploy if verification passes.
+
+## Assumptions
+- The right-side route icon should mean "build/select route addresses" rather than only "show route overlay."
+- Exiting route-builder mode should preserve any in-progress selected addresses so a rep can resume without losing work.
+- The shared hamburger remains the global nav; map-specific controls should work around it instead of duplicating nav.
+- Local browser smoke reached the expected Supabase runtime-config screen, so authenticated map visual QA should happen against the Cloudflare deployment.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-10 — Current Objective
 **Task:** Tighten Leaflet map click selection so neighboring houses do not accidentally open an existing nearby address record.
 **Target spec:** `/specs/address-crm-core.spec.md`
 

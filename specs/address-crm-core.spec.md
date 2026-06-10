@@ -34,6 +34,9 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Activity and notes should be Supabase-backed, not browser/local nested state.
 - Map clicks should only open an existing address when the click is within a tight, meter-based hit radius of that address pin; nearby blank-map clicks should not snap to a neighboring record.
 - Leaflet/OpenStreetMap tiles do not provide parcel boundaries. True parcel-level boundary selection requires parcel data or a provider/API that exposes property polygons.
+- Map-view chrome must reserve space for the shared hamburger navigation so stats/actions are not hidden underneath it.
+- Map control buttons must intercept click/pointer events and never trigger address selection, reverse geocoding, or route point changes on the map behind them.
+- Route-builder mode must be easy to enter and exit directly from the map view with a visible active state.
 
 ## Edge Cases
 - Empty states: Dashboard and map must handle zero address records.
@@ -72,6 +75,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - 2026-06-09: Replace duplicate address screens with a Unified Address Record.
 - 2026-06-09: Add dedicated notes/quotes/invoices/transactions schema as the next normalization step.
 - 2026-06-10: Keep Leaflet/OpenStreetMap for MVP and tighten map click hit testing before reconsidering Google Maps.
+- 2026-06-10: Keep global navigation in the shared hamburger and use the map's right-side control rail for map-specific route-builder toggling.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.

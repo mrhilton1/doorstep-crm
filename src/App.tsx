@@ -2106,6 +2106,39 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     return { subtotal, total: Math.max(0, total) };
   }, [quoteItems, quoteDiscounts, settings.discounts]);
 
+  const stopMapControlEvent = (event: React.SyntheticEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const stopMapPointerEvent = (event: React.SyntheticEvent<HTMLElement>) => {
+    event.stopPropagation();
+  };
+
+  const enterRouteBuilderFromMap = () => {
+    setIsBuildingRoute(true);
+    setIsSelectionMode(true);
+    setIsRouteActive(true);
+    setIsLegendExpanded(false);
+    setMapMode('satellite');
+  };
+
+  const exitRouteBuilderFromMap = () => {
+    setIsBuildingRoute(false);
+    setIsSelectionMode(false);
+    setSelectingStartForRouteId(null);
+    setIsRouteActive(false);
+  };
+
+  const toggleRouteBuilderFromMap = () => {
+    if (isBuildingRoute || isSelectionMode) {
+      exitRouteBuilderFromMap();
+      return;
+    }
+
+    enterRouteBuilderFromMap();
+  };
+
   // Handlers
   const handleMapClick = async (lat: number, lng: number) => {
     const { existing, minDistanceMeters } = findClosestAddressRecord(properties, lat, lng);
@@ -2668,14 +2701,14 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               )}
             </div>
           ) : (
-            <div className="w-full flex justify-between items-center">
-              <div className="flex flex-col">
+            <div className="w-full flex justify-between items-center gap-4 pr-16 sm:pr-20">
+              <div className="flex flex-col min-w-0">
                 <span className="text-[10px] text-[#64748B] font-bold uppercase tracking-wider">Daily Progress</span>
                 <div className="text-xl font-extrabold text-[#1E293B] flex items-baseline gap-1">
                   {stats.knockedToday} <span className="text-xs font-normal text-[#94A3B8]">knocks today</span>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right min-w-0">
                 <span className="text-[10px] text-[#64748B] font-bold uppercase tracking-wider">Interested & B2B</span>
                 <div className="text-sm font-bold text-[#2563EB]">{stats.interested} Leads • {stats.b2bSites} B2B</div>
               </div>
@@ -3078,10 +3111,15 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         )}
 
         {/* Map Controls */}
-        <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-[1000]">
+        <div
+          className="absolute bottom-4 right-4 flex flex-col gap-2 z-[1200] pointer-events-auto"
+          onClick={stopMapControlEvent}
+          onDoubleClick={stopMapControlEvent}
+          onPointerDown={stopMapPointerEvent}
+        >
           <button 
             onClick={(e) => {
-              e.stopPropagation();
+              stopMapControlEvent(e);
               if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition((pos) => {
                   setMapCenter([pos.coords.latitude, pos.coords.longitude]);
@@ -3094,12 +3132,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             }}
             className="p-3 bg-white/95 backdrop-blur-md rounded-full shadow-lg border border-[#E2E8F0] text-[#1E293B] active:scale-95 transition-transform"
             title="Center on My Location"
+            aria-label="Center on my location"
           >
             <Target className="w-6 h-6" />
           </button>
           <button 
             onClick={(e) => {
-              e.stopPropagation();
+              stopMapControlEvent(e);
               setMapMode(mapMode === 'street' ? 'satellite' : 'street');
             }}
             className={cn(
@@ -3107,31 +3146,42 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               mapMode === 'satellite' ? "bg-indigo-600 text-white border-indigo-700" : "bg-white/95 text-[#1E293B] border-[#E2E8F0]"
             )}
             title="Toggle Map Mode"
+            aria-label="Toggle map mode"
           >
             <Layers className="w-6 h-6" />
           </button>
           <button 
             onClick={(e) => {
-              e.stopPropagation();
-              setIsRouteActive(!isRouteActive);
+              stopMapControlEvent(e);
+              toggleRouteBuilderFromMap();
             }}
             className={cn(
-              "p-3 rounded-full shadow-lg border border-[#E2E8F0] active:scale-95 transition-all text-[#1E293B] backdrop-blur-md",
-              isRouteActive ? "bg-blue-600 text-white border-blue-700 shadow-blue-100" : "bg-white/95"
+              "p-3 rounded-full shadow-lg border active:scale-95 transition-all backdrop-blur-md",
+              isBuildingRoute || isSelectionMode
+                ? "bg-blue-600 text-white border-blue-700 shadow-blue-100"
+                : "bg-white/95 text-[#1E293B] border-[#E2E8F0]"
             )}
-            title="Toggle Route View"
+            title={isBuildingRoute || isSelectionMode ? "Exit Route Builder" : "Build Route"}
+            aria-label={isBuildingRoute || isSelectionMode ? "Exit route builder" : "Build route"}
+            aria-pressed={isBuildingRoute || isSelectionMode}
           >
             <Navigation className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="absolute bottom-4 left-4 z-[1000]">
+        <div
+          className="absolute bottom-4 left-4 z-[1200] pointer-events-auto"
+          onClick={stopMapControlEvent}
+          onDoubleClick={stopMapControlEvent}
+          onPointerDown={stopMapPointerEvent}
+        >
           <div className="flex flex-col items-center gap-3">
             {(isBuildingRoute || workingRouteId) && (
               <motion.button 
                 initial={{ scale: 0.8, opacity: 0, y: 10 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
-                onClick={() => {
+                onClick={(e) => {
+                  stopMapControlEvent(e);
                   if (isBuildingRoute) {
                     if (newRoute.selectedIds.length === 0) return alert('Select at least one point');
                     
@@ -3186,7 +3236,10 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                          </div>
                          <h3 className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Map Legend</h3>
                       </div>
-                      <button onClick={() => setIsLegendExpanded(false)} className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors">
+                      <button onClick={(e) => {
+                        stopMapControlEvent(e);
+                        setIsLegendExpanded(false);
+                      }} className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors">
                         <X className="w-4 h-4 text-gray-300" />
                       </button>
                    </div>
@@ -3208,7 +3261,10 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
              </AnimatePresence>
 
              <button 
-               onClick={() => setIsLegendExpanded(!isLegendExpanded)}
+               onClick={(e) => {
+                 stopMapControlEvent(e);
+                 setIsLegendExpanded(!isLegendExpanded);
+               }}
                className={cn(
                  "w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl border transition-all active:scale-95",
                  isLegendExpanded 

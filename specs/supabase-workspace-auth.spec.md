@@ -1,7 +1,7 @@
 # Feature: Supabase Workspace Auth
 
 **Status:** In Progress  
-**Last updated:** 2026-06-08  
+**Last updated:** 2026-06-10
 **Owner:** Mike Hilton
 
 ---
@@ -59,6 +59,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Given Supabase env vars are missing, when the app loads, then it shows a Supabase configuration-required screen instead of running a separate local CRM.
 - Given address CRM data changes in the app, when persistence is needed, then data is written through `doorstep.addresses` rather than browser storage.
 - Given workspace-level app state changes in the app, when persistence is needed, then catalog, settings, team, goals, and routes are written through `doorstep.workspace_app_state` rather than browser storage.
+- Given catalog products, bundles, or global discounts are created/edited/deleted, when persistence is needed, then those workspace-level changes are saved through `doorstep.workspace_app_state`.
 
 ## Validation Plan
 - Verify Supabase migrations exist and are listed in Supabase.
@@ -78,6 +79,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - 2026-06-08: Keep signup open for MVP unless abuse or launch constraints require invitation-only later.
 - 2026-06-09: Browser storage is not an acceptable source of truth for CRM data; Supabase is required.
 - 2026-06-09: Use `doorstep.workspace_app_state` as a bridge for workspace-level JSON state until normalized tables are implemented.
+- 2026-06-10: Catalog product/bundle CRUD and global discount CRUD continue to use `doorstep.workspace_app_state` until normalized catalog tables are implemented.
 
 ## Iteration History
 - 2026-06-08: Initial auth/workspace bootstrap shipped.
@@ -85,3 +87,4 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - 2026-06-08: Added password reset and set-new-password flow for existing users.
 - 2026-06-09: Removed local CRM persistence and local demo fallback from the live app.
 - 2026-06-09: Added Supabase workspace app-state bridge for catalog, settings, team, goals, and routes.
+- 2026-06-10: Confirmed catalog and discount CRUD changes persist through the workspace app-state bridge.

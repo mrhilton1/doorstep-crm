@@ -1,7 +1,7 @@
 # Feature: Quotes, Invoices, And Payments
 
-**Status:** Draft  
-**Last updated:** 2026-06-09  
+**Status:** Draft
+**Last updated:** 2026-06-10
 **Owner:** Mike Hilton
 
 ---
@@ -10,7 +10,7 @@
 Let reps create, edit, send, and track quotes from the doorstep, then convert accepted quotes into invoices with payment status and future Stripe support.
 
 ## Current Behavior
-The UI has legacy nested quote/sale/invoice-like structures. Supabase foundation includes permissions and object types but not full quote/invoice/payment tables yet. Stripe is not integrated.
+The UI has legacy nested quote/sale/invoice-like structures. Supabase foundation includes dedicated quote/invoice/payment tables, but quote UI still saves through the current nested bridge. The quote builder can add catalog products/bundles, edit line item quantity directly, and recalculate subtotal/total from `unit price * quantity`. Stripe is not integrated.
 
 ## Desired Behavior
 Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live in dedicated Supabase tables, not activity payloads. A quote has a hosted privacy-safe URL that can be copied and manually sent. Accepted quotes become invoices ready to send after work completion, with JSON-backed line/adjustment detail for MVP. Stripe is stubbed and not customer-visible for MVP while invoice payment state can be manually marked paid/unpaid/outstanding.
@@ -33,6 +33,10 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - Stripe payment affordances must not be customer-visible until explicitly enabled.
 - Additional charges/discounts can be added during/after visit before invoice finalization.
 - Record Transaction remains a first-class action label.
+- Quote and invoice line items must support quantity. Totals must calculate from unit price times quantity, so a $4 product with quantity 46 totals $184.
+- Product catalog prices are unit prices.
+- Catalog products and bundles need full create/read/update/delete controls in the workspace UI.
+- Global discounts need create/read/update/delete controls including name, value, and percentage/fixed type.
 - Quote/invoice/transaction actions should create related `doorstep.activities` feed entries.
 - If all contacts move to a new address through the approved move flow, invoices follow the moved contacts to the destination address while quotes remain attached to the original address.
 - Invoice reassociation during contact/address move must happen inside the atomic move/merge RPC described in `/specs/contact-address-move-and-merge.spec.md`.
@@ -56,6 +60,10 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - Given an accepted quote, when a rep attempts to edit it, then editing is blocked.
 - Given a quote is accepted, when conversion runs, then one invoice is created.
 - Given Stripe is not configured, when invoice status changes, then manual status works.
+- Given a catalog product has unit price $4, when a quote line item quantity is set to 46, then the line total is $184 and the quote subtotal reflects that quantity.
+- Given a catalog product is edited, when the user saves it, then name, unit price, category, and description are retained in workspace app state.
+- Given a catalog product is deleted, when it belonged to bundles, then bundle references are cleaned up and empty bundles are removed.
+- Given a global discount is edited, when the user changes name/value/type, then the discount persists through workspace settings.
 - Given quote, invoice, or transaction records exist, when the unified address record opens, then history can query dedicated tables instead of parsing generic activity JSON.
 - Given contacts are moved to a new address, when the move succeeds, then invoices are associated to the new address and quotes remain with the original address.
 
@@ -76,7 +84,10 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - 2026-06-09: Invoice line/adjustment detail can be JSON for MVP.
 - 2026-06-09: Keep Record Transaction as the action label.
 - 2026-06-10: During address move, invoices follow moved contacts and quotes stay with the original address.
+- 2026-06-10: Quote line items support direct quantity input and line/quote totals recalculate from unit price times quantity.
+- 2026-06-10: Catalog product/bundle CRUD and global discount CRUD are available through current workspace app-state/settings bridge.
 
 ## Iteration History
 - 2026-06-08: Initial spec created.
 - 2026-06-09: Updated data-model direction from Unified Address Record PRD.
+- 2026-06-10: Added quote quantity input, safer catalog product delete cleanup, product description editing, and discount type editing.

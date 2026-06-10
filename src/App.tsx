@@ -10,19 +10,19 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { 
-  APIProvider, 
-  Map as GoogleMap, 
-  AdvancedMarker, 
+import {
+  APIProvider,
+  Map as GoogleMap,
+  AdvancedMarker,
   Pin,
   useMap,
   useMapsLibrary,
   useAdvancedMarkerRef
 } from '@vis.gl/react-google-maps';
-import { 
-  MapContainer, 
-  TileLayer, 
-  Marker as LeafletMarker, 
+import {
+  MapContainer,
+  TileLayer,
+  Marker as LeafletMarker,
   Circle as LeafletCircle,
   useMap as useLeafletMap,
   useMapEvents as useLeafletMapEvents,
@@ -30,14 +30,14 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Map as MapIcon, 
-  Layers, 
-  Navigation, 
-  X, 
-  ChevronDown, 
-  CheckCircle2, 
-  History, 
+import {
+  Map as MapIcon,
+  Layers,
+  Navigation,
+  X,
+  ChevronDown,
+  CheckCircle2,
+  History,
   MoreVertical,
   MessageCircle,
   Calendar,
@@ -48,12 +48,12 @@ import {
   ShoppingBag,
   ShoppingCart,
   MousePointer2,
-  UserPlus, 
-  Building2, 
-  Home, 
-  User, 
-  Mail, 
-  Phone, 
+  UserPlus,
+  Building2,
+  Home,
+  User,
+  Mail,
+  Phone,
   ShieldCheck,
   Trash2,
   Edit3,
@@ -105,11 +105,12 @@ import { cn } from './lib/utils';
 import HomeDashboard from './components/HomeDashboard';
 import OverdueInvoicesOverlay from './components/OverdueInvoicesOverlay';
 import { appUrl, doorstepDb, hasSupabaseConfig, supabase } from './lib/supabase';
-import { 
-  PropertyContact, 
-  PropertyStatus, 
+import {
+  PropertyContact,
+  PropertyStatus,
   PropertyType,
   PropertyStage,
+  PropertySubStatus,
   ProspectRoute,
   Contact,
   Product,
@@ -121,7 +122,7 @@ import {
   CustomField,
   Interaction,
   Settings as AppSettings,
-  STATUS_COLORS, 
+  STATUS_COLORS,
   DEFAULT_TAGS,
   AppState,
   Member,
@@ -172,6 +173,33 @@ const normalizeAddress = (addr: string) => {
 
 const ADDRESS_CLICK_HIT_RADIUS_METERS = 8;
 const ROUTE_SELECTION_HIT_RADIUS_METERS = 12;
+const DEFAULT_STAGE_COLORS: Record<PropertyStage, string> = {
+  prospect: '#94a3b8',
+  lead: '#3b82f6',
+  opportunity: '#f59e0b',
+  customer: '#10b981'
+};
+
+const DEFAULT_SUB_STATUS_CONFIG: NonNullable<AppSettings['subStatusConfig']> = {
+  not_interested: {
+    label: 'Not Interested',
+    parentStages: ['prospect'],
+    color: '#ef4444',
+    description: 'Address has been worked and is not interested right now.'
+  },
+  loss: {
+    label: 'Loss',
+    parentStages: ['opportunity', 'customer'],
+    color: '#ef4444',
+    description: 'Opportunity or customer relationship was lost.'
+  },
+  scheduled: {
+    label: 'Scheduled',
+    parentStages: ['opportunity'],
+    color: '#8b5cf6',
+    description: 'A visit or job has been scheduled.'
+  }
+};
 
 const distanceMeters = (a: [number, number], b: [number, number]) => {
   const toRad = (value: number) => (value * Math.PI) / 180;
@@ -278,6 +306,33 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   inbound: 'Inbound Call',
 };
 
+const getStageColor = (stage: PropertyStage, settings?: AppSettings) => {
+  return settings?.stageConfig?.[stage]?.color || DEFAULT_STAGE_COLORS[stage] || DEFAULT_STAGE_COLORS.prospect;
+};
+
+const getAddressMarkerColor = (property: PropertyContact, settings?: AppSettings) => {
+  const subStatus = property.subStatus || null;
+  if (subStatus && settings?.subStatusConfig?.[subStatus]) {
+    return settings.subStatusConfig[subStatus].color;
+  }
+
+  if (subStatus && DEFAULT_SUB_STATUS_CONFIG[subStatus]) {
+    return DEFAULT_SUB_STATUS_CONFIG[subStatus].color;
+  }
+
+  return getStageColor(property.stage, settings);
+};
+
+const hasLoggedAttemptedContact = (property: PropertyContact) => {
+  return property.status !== 'Not Visited' || (property.interactions || []).some(interaction =>
+    ['Knock', 'Conversation', 'Call', 'Meeting', 'Text'].includes(interaction.type)
+  );
+};
+
+const isUnworkedRouteAddress = (property: PropertyContact, isOnRoute: boolean) => {
+  return isOnRoute && !hasLoggedAttemptedContact(property);
+};
+
 const statusToDb: Record<PropertyStatus, string> = {
   'Not Visited': 'not_visited',
   'Knocked': 'knocked',
@@ -319,6 +374,9 @@ const propertyToAddressRow = (property: PropertyContact, workspaceId: string, us
     sales: property.sales || [],
     appointments: property.appointments || [],
     invoices: property.invoices || [],
+    subStatus: property.subStatus || null,
+    subStatusSetAt: property.subStatusSetAt || null,
+    subStatusSetBy: property.subStatusSetBy || null,
   },
   created_by: userId,
   updated_by: userId,
@@ -350,6 +408,9 @@ const addressRowToProperty = (row: any): PropertyContact => {
     invoices: Array.isArray(customData.invoices) ? customData.invoices : [],
     customData,
     stage: row.stage || 'prospect',
+    subStatus: row.sub_status || customData.subStatus || null,
+    subStatusSetAt: row.sub_status_set_at ? new Date(row.sub_status_set_at).getTime() : (customData.subStatusSetAt || null),
+    subStatusSetBy: row.sub_status_set_by || customData.subStatusSetBy || null,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
   };
@@ -623,6 +684,14 @@ const createDefaultSettings = (): AppSettings => ({
     phone: '',
     email: ''
   },
+  defaultPremisesType: 'Residential',
+  stageConfig: {
+    prospect: { color: DEFAULT_STAGE_COLORS.prospect, description: 'Address exists with no contact information yet.' },
+    lead: { color: DEFAULT_STAGE_COLORS.lead, description: 'Address has contact information or an attempted contact.' },
+    opportunity: { color: DEFAULT_STAGE_COLORS.opportunity, description: 'A quote or estimate has been requested or issued.' },
+    customer: { color: DEFAULT_STAGE_COLORS.customer, description: 'A payment has been logged or job has completed.' }
+  },
+  subStatusConfig: DEFAULT_SUB_STATUS_CONFIG,
   operationalTargets: {
     weeklyKnocks: 40,
     monthlyConverted: 15,
@@ -650,9 +719,9 @@ const MapController = ({ center, zoom }: { center: [number, number] | null, zoom
   return null;
 };
 
-const MapEvents = ({ onClick, onDoubleClick }: { 
+const MapEvents = ({ onClick, onDoubleClick }: {
   onClick?: (e: google.maps.MapMouseEvent) => void,
-  onDoubleClick?: (e: google.maps.MapMouseEvent) => void 
+  onDoubleClick?: (e: google.maps.MapMouseEvent) => void
 }) => {
   const map = useMap();
   useEffect(() => {
@@ -680,10 +749,10 @@ const LocationMarker = ({ userLocation }: { userLocation: [number, number] | nul
   );
 };
 
-const OptimizedRoute = ({ propertyIds, properties, isActive }: { 
-  propertyIds: string[], 
-  properties: PropertyContact[], 
-  isActive: boolean 
+const OptimizedRoute = ({ propertyIds, properties, isActive }: {
+  propertyIds: string[],
+  properties: PropertyContact[],
+  isActive: boolean
 }) => {
   const map = useMap();
   const routesLib = useMapsLibrary('routes');
@@ -710,7 +779,7 @@ const OptimizedRoute = ({ propertyIds, properties, isActive }: {
     const midpoints = waypoints.slice(1, -1);
 
     const directionsService = new routesLib.DirectionsService();
-    
+
     if (!directionsRendererRef.current) {
       directionsRendererRef.current = new routesLib.DirectionsRenderer({
         map,
@@ -763,10 +832,10 @@ const LeafletMapController = ({ center, zoom }: { center: [number, number] | nul
   return null;
 };
 
-const LeafletMapEvents = ({ 
-  onClick, 
-  onMoveEnd 
-}: { 
+const LeafletMapEvents = ({
+  onClick,
+  onMoveEnd
+}: {
   onClick?: (e: L.LeafletMouseEvent) => void,
   onMoveEnd?: (center: [number, number], zoom: number) => void
 }) => {
@@ -783,20 +852,30 @@ const LeafletMapEvents = ({
   return null;
 };
 
-function createLeafletMarkerIcon(stage: PropertyStage, isSelected?: boolean, sequenceNumber?: number) {
-  const color = isSelected ? '#2563EB' : (STAGE_COLORS[stage] || STAGE_COLORS.prospect);
+function createLeafletMarkerIcon(
+  stage: PropertyStage,
+  isSelected?: boolean,
+  sequenceNumber?: number,
+  variant: 'pin' | 'route-square' = 'pin',
+  markerColor?: string
+) {
+  const color = isSelected ? '#2563EB' : (markerColor || STAGE_COLORS[stage] || STAGE_COLORS.prospect);
   const size = isSelected ? 48 : 40;
   const innerSize = isSelected ? 40 : 32;
   const circleSize = isSelected ? 12 : 10;
-  
+  const markerShape = variant === 'route-square'
+    ? 'border-radius: 10px; transform: rotate(0deg);'
+    : 'border-radius: 50% 50% 50% 0; transform: rotate(-45deg);';
+  const glyphTransform = variant === 'route-square' ? 'none' : 'rotate(45deg)';
+
   return L.divIcon({
     className: 'custom-property-marker-leaflet',
     html: `
       <div class="relative flex items-center justify-center p-0 m-0" style="width: ${size}px; height: ${size}px;">
-        ${isSelected ? '<div class="absolute w-12 h-12 rounded-full bg-blue-100/50 animate-pulse"></div>' : ''}
-        <div class="flex items-center justify-center shadow-lg transition-transform duration-300" 
-             style="background-color: ${color}; color: #ffffff; border: 2px solid #ffffff; width: ${innerSize}px; height: ${innerSize}px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);">
-          <div style="transform: rotate(45deg);" class="flex items-center justify-center font-bold text-[11px]">
+        ${isSelected ? '<div class="absolute w-12 h-12 rounded-2xl bg-blue-100/50 animate-pulse"></div>' : ''}
+        <div class="flex items-center justify-center shadow-lg transition-transform duration-300"
+             style="background-color: ${color}; color: #ffffff; border: 2px solid #ffffff; width: ${innerSize}px; height: ${innerSize}px; ${markerShape}">
+          <div style="transform: ${glyphTransform};" class="flex items-center justify-center font-bold text-[11px]">
             ${sequenceNumber ? sequenceNumber : `<div class="rounded-full bg-white" style="width: ${circleSize}px; height: ${circleSize}px;"></div>`}
           </div>
         </div>
@@ -808,7 +887,7 @@ function createLeafletMarkerIcon(stage: PropertyStage, isSelected?: boolean, seq
 }
 
 const StatusBadge = ({ status, className }: { status: PropertyStatus, className?: string }) => (
-  <span 
+  <span
     className={cn(
       "px-2 py-0.5 rounded-full text-xs font-semibold text-white",
       className
@@ -819,21 +898,21 @@ const StatusBadge = ({ status, className }: { status: PropertyStatus, className?
   </span>
 );
 
-function PromptModal({ 
-  config, 
+function PromptModal({
+  config,
   onClose,
   mapCenter
-}: { 
-  config: { 
-    title: string, 
-    message?: string, 
-    defaultValue?: string, 
-    placeholder?: string, 
-    type?: 'text' | 'select' | 'form', 
+}: {
+  config: {
+    title: string,
+    message?: string,
+    defaultValue?: string,
+    placeholder?: string,
+    type?: 'text' | 'select' | 'form',
     fields?: { key: string, label: string, placeholder?: string, type?: string }[],
     options?: { label: string, value: string }[],
-    onConfirm: (val: string) => void 
-  }, 
+    onConfirm: (val: string) => void
+  },
   onClose: () => void,
   mapCenter?: [number, number]
 }) {
@@ -848,7 +927,7 @@ function PromptModal({
     }
     return { value: config.defaultValue || '' };
   });
-  
+
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
   const [isAddressConfirmed, setIsAddressConfirmed] = useState(!!config.defaultValue && config.type === 'form');
@@ -869,7 +948,7 @@ function PromptModal({
       setIsSearchingAddress(true);
       try {
         const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=us&limit=15&addressdetails=1&accept-language=en-US`;
-        
+
         // Add a timeout to the fetch via AbortController
         const timeoutId = setTimeout(() => abortController.abort(), 8000);
 
@@ -877,12 +956,12 @@ function PromptModal({
           headers: { 'User-Agent': 'SalesOptimizer_D2D_US_Search_v2.1' },
           signal: abortController.signal
         });
-        
+
         clearTimeout(timeoutId);
 
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
-        
+
         const seen = new Set<string>();
         const suggestions = (Array.isArray(data) ? data : [])
           .map((s: any) => {
@@ -891,7 +970,7 @@ function PromptModal({
             const road = addr.road || '';
             const city = addr.city || addr.town || addr.village || '';
             const state = addr.state || '';
-            
+
             let main = '';
             if (house && road) {
               main = `${house} ${road}`;
@@ -938,7 +1017,7 @@ function PromptModal({
           })
           .sort((a, b) => b.score - a.score)
           .slice(0, 6);
-        
+
         setAddressSuggestions(suggestions);
       } catch (e: any) {
         if (e.name !== 'AbortError') {
@@ -959,13 +1038,13 @@ function PromptModal({
   const value = formData.value || '';
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-8"
     >
-      <motion.div 
+      <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -973,17 +1052,17 @@ function PromptModal({
       >
         <h3 className={`text-2xl font-black text-[#1E293B] leading-tight uppercase tracking-tight ${config.message ? 'mb-3' : 'mb-12'}`}>{config.title}</h3>
         {config.message && <p className="text-[10px] font-black text-slate-400 mb-8 uppercase tracking-widest leading-relaxed">{config.message}</p>}
-        
+
         <div className={cn(
           "mb-12 relative",
-          config.type === 'form' && config.fields && config.fields.length > 2 
-            ? "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4" 
+          config.type === 'form' && config.fields && config.fields.length > 2
+            ? "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4"
             : "space-y-4"
         )}>
           {config.type === 'form' && config.fields ? (
             config.fields.map(field => (
-              <div 
-                key={field.key} 
+              <div
+                key={field.key}
                 className={cn(
                   "relative",
                   (field.key === 'address' || field.key === 'notes' || field.key === 'comment') && "md:col-span-2"
@@ -997,7 +1076,7 @@ function PromptModal({
                           <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
                           <span className="text-sm font-black text-slate-700 truncate tracking-tight">{formData[field.key]}</span>
                         </div>
-                        <button 
+                        <button
                           type="button"
                           onClick={() => {
                             setIsAddressConfirmed(false);
@@ -1032,8 +1111,8 @@ function PromptModal({
                                 key={idx}
                                 type="button"
                                 onClick={() => {
-                                  setFormData(prev => ({ 
-                                    ...prev, 
+                                  setFormData(prev => ({
+                                    ...prev,
                                     [field.key]: s.display_name,
                                     lat: parseFloat(s.lat),
                                     lng: parseFloat(s.lon)
@@ -1077,7 +1156,7 @@ function PromptModal({
               </div>
             ))
           ) : config.type === 'select' ? (
-            <select 
+            <select
               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
               value={value}
               onChange={(e) => setFormData({ value: e.target.value })}
@@ -1087,7 +1166,7 @@ function PromptModal({
               ))}
             </select>
           ) : (
-            <input 
+            <input
               autoFocus
               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
               placeholder={config.placeholder}
@@ -1102,15 +1181,15 @@ function PromptModal({
             />
           )}
         </div>
-        
+
         <div className="flex gap-3">
-          <button 
+          <button
             onClick={onClose}
             className="flex-1 bg-gray-50 text-gray-500 py-4 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all"
           >
             Cancel
           </button>
-          <button 
+          <button
             onClick={() => {
               if (config.type === 'form') {
                 config.onConfirm(JSON.stringify(formData));
@@ -1578,12 +1657,12 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isBuildingRoute, setIsBuildingRoute] = useState(false);
   const [newRoute, setNewRoute] = useState<{id?: string, name: string, selectedIds: string[]}>({ name: '', selectedIds: [] });
-  
+
   // Advanced Quoting State
   const [activeTab, setActiveTab] = useState<'details' | 'quotes' | 'sales'>('details');
   const [isAddingQuote, setIsAddingQuote] = useState(false);
   const [isAddingSale, setIsAddingSale] = useState(false);
-  
+
   // Advanced Quoting State
   const [quoteItems, setQuoteItems] = useState<QuoteLineItem[]>([]);
   const [quoteDiscounts, setQuoteDiscounts] = useState<Discount[]>([]);
@@ -1815,7 +1894,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 placeId: p.place_id,
               };
             }));
-            
+
             setSearchSuggestions(suggestions.slice(0, 6));
           } catch (err: any) {
             console.error('Search failed', err);
@@ -1837,7 +1916,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 const road = addr.road || '';
                 const city = addr.city || addr.town || addr.village || '';
                 const state = addr.state || '';
-                
+
                 let main = '';
                 if (house && road) {
                   main = `${house} ${road}`;
@@ -1984,7 +2063,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       }
     }
 
-    const existing = properties.find(p => 
+    const existing = properties.find(p =>
       Math.abs(p.lat - lat) < 0.0001 && Math.abs(p.lng - lng) < 0.0001
     );
 
@@ -2038,7 +2117,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       });
       setMapCenter([lat, lng]);
     }
-    
+
     setSearchQuery('');
     setSearchSuggestions([]);
     setIsDrawerOpen(true);
@@ -2046,8 +2125,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
   // Address persistence is handled by the Supabase sync effect above.
 
-  const selectedProperty = useMemo(() => 
-    properties.find(p => p.id === selectedPropertyId), 
+  const selectedProperty = useMemo(() =>
+    properties.find(p => p.id === selectedPropertyId),
   [properties, selectedPropertyId]);
 
   // Helpers
@@ -2139,35 +2218,76 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     enterRouteBuilderFromMap();
   };
 
+  const saveRouteDraft = (routeName?: string) => {
+    if (newRoute.selectedIds.length === 0) {
+      alert('Select at least one address for this route.');
+      return;
+    }
+
+    const trimmedName = (routeName ?? newRoute.name).trim();
+    if (!newRoute.id && !trimmedName) {
+      setPromptConfig({
+        title: 'Name this route',
+        message: 'Give this route a name before saving. Your selected addresses will stay on the route.',
+        placeholder: 'e.g. Queen Creek North AM',
+        onConfirm: (name) => {
+          if (!name.trim()) return;
+          saveRouteDraft(name);
+        }
+      });
+      return;
+    }
+
+    const idsToUse = newRoute.selectedIds;
+
+    if (newRoute.id) {
+      setRoutes(prev => prev.map(r => r.id === newRoute.id ? {
+        ...r,
+        name: trimmedName || r.name,
+        propertyIds: idsToUse
+      } : r));
+    } else {
+      const r: ProspectRoute = {
+        id: uuidv4(),
+        name: trimmedName,
+        propertyIds: idsToUse,
+        status: 'Draft',
+        createdAt: Date.now()
+      };
+      setRoutes(prev => [...prev, r]);
+    }
+
+    setIsBuildingRoute(false);
+    setIsSelectionMode(false);
+    setMapMode('street');
+    setNewRoute({ name: '', selectedIds: [] });
+  };
+
   // Handlers
   const handleMapClick = async (lat: number, lng: number) => {
     const { existing, minDistanceMeters } = findClosestAddressRecord(properties, lat, lng);
     const hitRadius = isSelectionMode ? ROUTE_SELECTION_HIT_RADIUS_METERS : ADDRESS_CLICK_HIT_RADIUS_METERS;
-    
+
     if (existing && minDistanceMeters <= hitRadius) {
       if (isSelectionMode) {
         setNewRoute(prev => ({
           ...prev,
-          selectedIds: prev.selectedIds.includes(existing.id) 
+          selectedIds: prev.selectedIds.includes(existing.id)
             ? prev.selectedIds.filter(id => id !== existing.id)
             : [...prev.selectedIds, existing.id]
         }));
         return;
       }
-      
+
       // Logic for ascension: if we click non-selection mode (knocking) and it's a prospect, upgrade to lead
       if (!isSelectionMode && existing.stage === 'prospect') {
         updateProperty(existing.id, { stage: 'lead' });
       }
-      
+
       if (!isSelectionMode) {
         setSelectedPropertyId(existing.id);
         setIsDrawerOpen(true);
       }
-      return;
-    }
-
-    if (isSelectionMode) {
       return;
     }
 
@@ -2178,11 +2298,11 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       });
       if (!res.ok) throw new Error('Reverse geocode failed');
       const data = await res.json();
-      
+
       if (!data.address) throw new Error('No address found at this location');
-      
+
       const addr = data.address;
-      
+
       const houseNumber = addr.house_number || '';
       const street = addr.road || '';
       const city = addr.city || addr.town || addr.village || '';
@@ -2227,7 +2347,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           lat,
           lng,
           status: 'Not Visited',
-          type: 'Residential',
+          type: settings.defaultPremisesType || 'Residential',
           notes: '',
           tags: [],
           contacts: [],
@@ -2236,12 +2356,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           interactions: [],
           appointments: [],
           stage: isSelectionMode ? 'prospect' : 'lead',
+          subStatus: null,
           createdAt: Date.now(),
           updatedAt: Date.now()
         };
 
         setProperties(prev => [newProperty, ...prev]);
-        
+
         if (isSelectionMode) {
           setNewRoute(prev => ({
             ...prev,
@@ -2279,7 +2400,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               lat,
               lng,
               status: 'Not Visited',
-              type: 'Residential',
+              type: settings.defaultPremisesType || 'Residential',
               notes: '',
               tags: [],
               contacts: [],
@@ -2288,6 +2409,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               interactions: [],
               appointments: [],
               stage: 'lead',
+              subStatus: null,
               createdAt: Date.now(),
               updatedAt: Date.now()
             };
@@ -2304,8 +2426,47 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     }
   };
 
+  const deriveForwardStage = (property: PropertyContact): PropertyStage => {
+    let derived: PropertyStage = 'prospect';
+    const hasPrimaryContact = Boolean(
+      property.firstName?.trim() ||
+      property.lastName?.trim() ||
+      property.phone?.trim() ||
+      property.email?.trim()
+    );
+    const hasAdditionalContacts = (property.contacts || []).some(contact =>
+      contact.firstName?.trim() ||
+      contact.lastName?.trim() ||
+      contact.phone?.trim() ||
+      contact.email?.trim()
+    );
+
+    if (hasPrimaryContact || hasAdditionalContacts || hasLoggedAttemptedContact(property)) {
+      derived = 'lead';
+    }
+
+    if ((property.quotes || []).length > 0) {
+      derived = 'opportunity';
+    }
+
+    if ((property.sales || []).length > 0) {
+      derived = 'customer';
+    }
+
+    const currentWeight = STAGE_ORDER.indexOf(property.stage);
+    const derivedWeight = STAGE_ORDER.indexOf(derived);
+    return derivedWeight > currentWeight ? derived : property.stage;
+  };
+
   const updateProperty = (id: string, updates: Partial<PropertyContact>) => {
-    setProperties(prev => prev.map(p => p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p));
+    setProperties(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const merged = { ...p, ...updates, updatedAt: Date.now() };
+      if (!updates.stage) {
+        merged.stage = deriveForwardStage(merged);
+      }
+      return merged;
+    }));
   };
 
   const logAddressEvent = async (propertyId: string, payload: LiveEventPayload) => {
@@ -2440,7 +2601,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [googleTokens, setGoogleTokens] = useState<Record<string, string>>({});
 
   const connectGoogle = async (memberId: string) => {
-    // This is a placeholder for real OAuth flow since set_up_oauth tool is not available 
+    // This is a placeholder for real OAuth flow since set_up_oauth tool is not available
     // and we are in a client-side SPA. OAuth tokens must be stored server-side.
     setGoogleTokens(prev => ({ ...prev, [memberId]: 'connected_this_session' }));
     alert(`Google Account marked connected for this session only.`);
@@ -2460,7 +2621,11 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     };
 
     updateProperty(propertyId, {
-      appointments: [...(property.appointments || []), newAppointment]
+      appointments: [...(property.appointments || []), newAppointment],
+      stage: STAGE_ORDER.indexOf(property.stage) < STAGE_ORDER.indexOf('opportunity') ? 'opportunity' : property.stage,
+      subStatus: 'scheduled',
+      subStatusSetAt: Date.now(),
+      subStatusSetBy: userId || undefined
     });
 
     // In a real app, we would push to Google Calendar here using the token
@@ -2472,19 +2637,19 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const smartSortPropertyIds = useCallback((ids: string[]) => {
     if (ids.length <= 1) return ids;
     const props = properties.filter(p => ids.includes(p.id));
-    
+
     // Helper to parse address
     const parseAddress = (addr: string) => {
       const match = addr.match(/^(\d+)\s+(.+?)(?:,|$)/i);
       if (!match) return { number: 0, street: addr.toLowerCase().trim(), parity: 0 };
-      
+
       const number = parseInt(match[1], 10);
       let street = match[2].toLowerCase()
-        .replace(/\b(east|west|north|south|e|w|n|s)\b/gi, '') 
-        .replace(/\b(drive|dr|street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|court|ct)\.?\b/gi, '') 
+        .replace(/\b(east|west|north|south|e|w|n|s)\b/gi, '')
+        .replace(/\b(drive|dr|street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|court|ct)\.?\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
-        
+
       return { number, street, parity: number % 2 };
     };
 
@@ -2551,7 +2716,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     return sorted;
   }, [properties, userLocation]);
 
-  const activeRoute = useMemo(() => 
+  const activeRoute = useMemo(() =>
     workingRouteId ? routes.find(r => r.id === workingRouteId) : null
   , [workingRouteId, routes]);
 
@@ -2612,7 +2777,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       />
 
       {currentView !== 'map' ? (
-        <HomeDashboard 
+        <HomeDashboard
           properties={properties}
           updateProperty={updateProperty}
           team={team}
@@ -2644,9 +2809,9 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           onOpenCatalog={() => setIsCatalogOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onAddNewLead={() => handleAddNewLead(
-            setPromptConfig, 
-            setProperties, 
-            setSelectedPropertyId, 
+            setPromptConfig,
+            setProperties,
+            setSelectedPropertyId,
             setIsDrawerOpen,
             mapCenter?.[0],
             mapCenter?.[1]
@@ -2659,7 +2824,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         <div className="bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] shadow-sm px-6 py-5 flex justify-center items-center pointer-events-auto min-h-[92px]">
           {isBuildingRoute || workingRouteId ? (
             <div className="flex flex-col items-center w-full max-w-lg animate-in fade-in slide-in-from-top-4 duration-500 relative">
-              <input 
+              <input
                 className="text-[12px] font-black text-slate-500 uppercase tracking-[0.2em] bg-transparent border-none outline-none focus:ring-0 p-0 h-auto text-center w-full placeholder-slate-300 mb-1"
                 placeholder="[ROUTE NAME LISTED HERE]"
                 value={isBuildingRoute ? newRoute.name : (activeRoute?.name || '')}
@@ -2678,14 +2843,24 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 </span>
                 <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] mt-3">addresses</span>
               </div>
+              <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-2">
+                {(() => {
+                  const routeIds = isBuildingRoute ? newRoute.selectedIds : (activeRoute?.propertyIds || []);
+                  const worked = routeIds.filter(id => {
+                    const property = properties.find(p => p.id === id);
+                    return property ? hasLoggedAttemptedContact(property) : false;
+                  }).length;
+                  return `${worked} of ${routeIds.length} worked`;
+                })()}
+              </div>
 
               {workingRouteId && (
                 <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-3">
-                  <button 
+                  <button
                     onClick={() => {
                       if (workingRouteId) {
-                        setRoutes(prev => prev.map(r => r.id === workingRouteId ? { 
-                          ...r, 
+                        setRoutes(prev => prev.map(r => r.id === workingRouteId ? {
+                          ...r,
                           status: 'Completed',
                           completedAt: Date.now()
                         } : r));
@@ -2725,15 +2900,15 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         {isSearchExpanded ? (
           <div className="relative group animate-in fade-in slide-in-from-left-2 transition-all">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-            <input 
-              type="text" 
-              placeholder="Search address..." 
+            <input
+              type="text"
+              placeholder="Search address..."
               className="w-full bg-white border border-[#E2E8F0] rounded-xl py-3.5 pl-11 pr-11 shadow-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] transition-all font-medium text-sm placeholder-[#94A3B8]"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
             />
-            <button 
+            <button
               onClick={() => {
                 setIsSearchExpanded(false);
                 setSearchQuery('');
@@ -2749,7 +2924,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             )}
           </div>
         ) : (
-          <button 
+          <button
             onClick={() => setIsSearchExpanded(true)}
             className="w-12 h-12 bg-white border border-[#E2E8F0] rounded-xl flex items-center justify-center text-[#1E293B] shadow-xl hover:bg-gray-50 transition-all active:scale-95"
           >
@@ -2786,7 +2961,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         {/* Banner Overlays */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[2000] flex flex-col gap-2 pointer-events-none w-full max-w-[90%] items-center">
           {selectingStartForRouteId && (
-            <motion.div 
+            <motion.div
               initial={{ y: -50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               className="bg-indigo-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 backdrop-blur-md pointer-events-auto"
@@ -2798,7 +2973,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 leading-none mb-1">Route Ignition</span>
                 <span className="text-sm font-bold leading-tight italic">Tap the house you want as #1</span>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectingStartForRouteId(null)}
                 className="ml-2 p-2 hover:bg-white/10 rounded-xl transition-colors pointer-events-auto"
               >
@@ -2808,7 +2983,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           )}
 
           {isBuildingRoute && (
-            <motion.div 
+            <motion.div
               initial={{ y: -50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               className="bg-[#1E293B] text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/10 backdrop-blur-md"
@@ -2817,7 +2992,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 <Plus className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 leading-none mb-1">Route Builder</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 leading-none mb-1">Route Creation</span>
                 <span className="text-sm font-bold leading-tight italic">Tap pins to add to route</span>
               </div>
             </motion.div>
@@ -2843,7 +3018,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
             >
               <MapController center={mapCenter} zoom={mapZoom} />
-              <MapEvents 
+              <MapEvents
                 onClick={(e) => {
                   if (e.latLng) {
                     setClickPulse([e.latLng.lat(), e.latLng.lng()]);
@@ -2854,7 +3029,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                   if (!e.latLng) return;
                   const lat = e.latLng.lat();
                   const lng = e.latLng.lng();
-                  const closest = properties.find(p => 
+                  const closest = properties.find(p =>
                     Math.abs(p.lat - lat) < 0.002 && Math.abs(p.lng - lng) < 0.002
                   );
                   if (closest) {
@@ -2864,23 +3039,24 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 }}
               />
               <LocationMarker userLocation={userLocation} />
-              
+
               {clickPulse && (
                 <AdvancedMarker position={{ lat: clickPulse[0], lng: clickPulse[1] }}>
                   <div className="w-10 h-10 bg-indigo-500/20 rounded-full border-2 border-indigo-500 animate-ping" />
                 </AdvancedMarker>
               )}
-              
+
               {dedupedProperties.map(prop => {
                 const isSelectedInRoute = newRoute.selectedIds.includes(prop.id) || (activeRoute?.propertyIds.includes(prop.id) ?? false);
-                const sequence = isBuildingRoute 
-                  ? (newRoute.selectedIds.indexOf(prop.id) + 1 || undefined) 
+                const sequence = isBuildingRoute
+                  ? (newRoute.selectedIds.indexOf(prop.id) + 1 || undefined)
                   : (activeRoute?.propertyIds.indexOf(prop.id) !== -1 ? (activeRoute?.propertyIds.indexOf(prop.id)! + 1) : undefined);
-                const color = STAGE_COLORS[prop.stage] || STAGE_COLORS.prospect;
+                const color = getAddressMarkerColor(prop, settings);
+                const routeMarkerVariant = isUnworkedRouteAddress(prop, isSelectedInRoute) ? 'route-square' : 'pin';
 
                 return (
-                  <AdvancedMarker 
-                    key={prop.id} 
+                  <AdvancedMarker
+                    key={prop.id}
                     position={{ lat: prop.lat, lng: prop.lng }}
                     onClick={() => {
                       if (selectingStartForRouteId) {
@@ -2890,14 +3066,14 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                             const p = properties.find(prop => prop.id === id);
                             return p && (p.status === 'Not Visited' || p.status === 'No Answer' || p.stage === 'prospect');
                           });
-                          
+
                           const remainingToVisit = route.propertyIds.filter(id => uncontactedIds.includes(id));
                           const contactedIds = route.propertyIds.filter(id => !uncontactedIds.includes(id));
-                          
+
                           let currentSortPos: [number, number] = [prop.lat, prop.lng];
                           let pool = remainingToVisit.filter(id => id !== prop.id);
                           const sortedRemaining = [prop.id];
-                          
+
                           while (pool.length > 0) {
                             pool.sort((a, b) => {
                               const pa = properties.find(p => p.id === a)!;
@@ -2911,26 +3087,26 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                             const np = properties.find(p => p.id === next)!;
                             currentSortPos = [np.lat, np.lng];
                           }
-                          
+
                           const newOrder = [...sortedRemaining, ...contactedIds];
-                          
+
                           setRoutes(prev => prev.map(r => r.id === selectingStartForRouteId ? {
                             ...r,
                             status: 'In Progress',
                             propertyIds: newOrder,
                             startedAt: Date.now()
                           } : r));
-                          
+
                           setWorkingRouteId(selectingStartForRouteId);
                           setSelectingStartForRouteId(null);
                         }
                         return;
                       }
-                      
+
                       if (isSelectionMode) {
                         setNewRoute(prev => ({
                           ...prev,
-                          selectedIds: prev.selectedIds.includes(prop.id) 
+                          selectedIds: prev.selectedIds.includes(prop.id)
                             ? prev.selectedIds.filter(id => id !== prop.id)
                             : [...prev.selectedIds, prop.id]
                         }));
@@ -2942,20 +3118,34 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                   >
                     <div className="relative group cursor-pointer">
                       {isSelectedInRoute && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-blue-100/50 animate-pulse" />}
-                      <Pin 
-                        background={isSelectedInRoute ? '#2563eb' : color} 
-                        borderColor="#ffffff" 
-                        glyphColor="#ffffff" 
-                        glyph={sequence ? String(sequence) : undefined}
-                        scale={isSelectedInRoute ? 1.2 : 1.0}
-                      />
+                      {routeMarkerVariant === 'route-square' ? (
+                        <div
+                          className="flex items-center justify-center text-white font-black text-xs border-2 border-white shadow-lg"
+                          style={{
+                            width: isSelectedInRoute ? 40 : 32,
+                            height: isSelectedInRoute ? 40 : 32,
+                            borderRadius: 10,
+                            backgroundColor: isSelectedInRoute ? '#2563eb' : color
+                          }}
+                        >
+                          {sequence || ''}
+                        </div>
+                      ) : (
+                        <Pin
+                          background={isSelectedInRoute ? '#2563eb' : color}
+                          borderColor="#ffffff"
+                          glyphColor="#ffffff"
+                          glyph={sequence ? String(sequence) : undefined}
+                          scale={isSelectedInRoute ? 1.2 : 1.0}
+                        />
+                      )}
                     </div>
                   </AdvancedMarker>
                 );
               })}
 
-              <OptimizedRoute 
-                propertyIds={isBuildingRoute ? newRoute.selectedIds : (activeRoute?.propertyIds || [])} 
+              <OptimizedRoute
+                propertyIds={isBuildingRoute ? newRoute.selectedIds : (activeRoute?.propertyIds || [])}
                 properties={properties}
                 isActive={isRouteActive || workingRouteId !== null || isBuildingRoute}
               />
@@ -2969,13 +3159,20 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             className="h-full w-full"
             doubleClickZoom={false}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            
+            {mapMode === 'satellite' ? (
+              <TileLayer
+                attribution='Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+              />
+            ) : (
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+            )}
+
             <LeafletMapController center={mapCenter} zoom={mapZoom} />
-            <LeafletMapEvents 
+            <LeafletMapEvents
               onClick={(e) => {
                 setClickPulse([e.latlng.lat, e.latlng.lng]);
                 handleMapClick(e.latlng.lat, e.latlng.lng);
@@ -2988,8 +3185,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
             {userLocation && (
               <>
-                <LeafletMarker 
-                  position={userLocation} 
+                <LeafletMarker
+                  position={userLocation}
                   icon={L.divIcon({
                     className: 'custom-user-location-marker',
                     html: '<div class="w-6 h-6 bg-blue-500 rounded-full border-2 border-white shadow-lg animate-pulse" />',
@@ -3007,7 +3204,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             )}
 
             {clickPulse && (
-              <LeafletMarker 
+              <LeafletMarker
                 position={clickPulse}
                 icon={L.divIcon({
                   className: 'custom-click-marker',
@@ -3020,15 +3217,16 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
             {dedupedProperties.map(prop => {
               const isSelectedInRoute = newRoute.selectedIds.includes(prop.id) || (activeRoute?.propertyIds.includes(prop.id) ?? false);
-              const sequence = isBuildingRoute 
-                ? (newRoute.selectedIds.indexOf(prop.id) + 1 || undefined) 
+              const sequence = isBuildingRoute
+                ? (newRoute.selectedIds.indexOf(prop.id) + 1 || undefined)
                 : (activeRoute?.propertyIds.indexOf(prop.id) !== -1 ? (activeRoute?.propertyIds.indexOf(prop.id)! + 1) : undefined);
+              const routeMarkerVariant = isUnworkedRouteAddress(prop, isSelectedInRoute) ? 'route-square' : 'pin';
 
               return (
-                <LeafletMarker 
+                <LeafletMarker
                   key={prop.id}
                   position={[prop.lat, prop.lng]}
-                  icon={createLeafletMarkerIcon(prop.stage, isSelectedInRoute, sequence)}
+                  icon={createLeafletMarkerIcon(prop.stage, isSelectedInRoute, sequence, routeMarkerVariant, getAddressMarkerColor(prop, settings))}
                   eventHandlers={{
                     click: () => {
                       if (selectingStartForRouteId) {
@@ -3038,14 +3236,14 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                             const p = properties.find(prop => prop.id === id);
                             return p && (p.status === 'Not Visited' || p.status === 'No Answer' || p.stage === 'prospect');
                           });
-                          
+
                           const remainingToVisit = route.propertyIds.filter(id => uncontactedIds.includes(id));
                           const contactedIds = route.propertyIds.filter(id => !uncontactedIds.includes(id));
-                          
+
                           let currentSortPos: [number, number] = [prop.lat, prop.lng];
                           let pool = remainingToVisit.filter(id => id !== prop.id);
                           const sortedRemaining = [prop.id];
-                          
+
                           while (pool.length > 0) {
                             pool.sort((a, b) => {
                               const pa = properties.find(p => p.id === a)!;
@@ -3059,26 +3257,26 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                             const np = properties.find(p => p.id === next)!;
                             currentSortPos = [np.lat, np.lng];
                           }
-                          
+
                           const newOrder = [...sortedRemaining, ...contactedIds];
-                          
+
                           setRoutes(prev => prev.map(r => r.id === selectingStartForRouteId ? {
                             ...r,
                             status: 'In Progress',
                             propertyIds: newOrder,
                             startedAt: Date.now()
                           } : r));
-                          
+
                           setWorkingRouteId(selectingStartForRouteId);
                           setSelectingStartForRouteId(null);
                         }
                         return;
                       }
-                      
+
                       if (isSelectionMode) {
                         setNewRoute(prev => ({
                           ...prev,
-                          selectedIds: prev.selectedIds.includes(prop.id) 
+                          selectedIds: prev.selectedIds.includes(prop.id)
                             ? prev.selectedIds.filter(id => id !== prop.id)
                             : [...prev.selectedIds, prop.id]
                         }));
@@ -3098,12 +3296,12 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 const p = properties.find(prop => prop.id === id);
                 return p ? [p.lat, p.lng] as [number, number] : null;
               }).filter(Boolean) as [number, number][];
-              
+
               if (points.length < 2) return null;
               return (
-                <LeafletPolyline 
-                  positions={points} 
-                  pathOptions={{ color: '#2563EB', weight: 5, opacity: 0.8 }} 
+                <LeafletPolyline
+                  positions={points}
+                  pathOptions={{ color: '#2563EB', weight: 5, opacity: 0.8 }}
                 />
               );
             })()}
@@ -3117,7 +3315,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           onDoubleClick={stopMapControlEvent}
           onPointerDown={stopMapPointerEvent}
         >
-          <button 
+          <button
             onClick={(e) => {
               stopMapControlEvent(e);
               if (navigator.geolocation) {
@@ -3136,7 +3334,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           >
             <Target className="w-6 h-6" />
           </button>
-          <button 
+          <button
             onClick={(e) => {
               stopMapControlEvent(e);
               setMapMode(mapMode === 'street' ? 'satellite' : 'street');
@@ -3150,7 +3348,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           >
             <Layers className="w-6 h-6" />
           </button>
-          <button 
+          <button
             onClick={(e) => {
               stopMapControlEvent(e);
               toggleRouteBuilderFromMap();
@@ -3161,8 +3359,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                 ? "bg-blue-600 text-white border-blue-700 shadow-blue-100"
                 : "bg-white/95 text-[#1E293B] border-[#E2E8F0]"
             )}
-            title={isBuildingRoute || isSelectionMode ? "Exit Route Builder" : "Build Route"}
-            aria-label={isBuildingRoute || isSelectionMode ? "Exit route builder" : "Build route"}
+            title={isBuildingRoute || isSelectionMode ? "Exit Route Creation" : "Create Route"}
+            aria-label={isBuildingRoute || isSelectionMode ? "Exit route creation" : "Create route"}
             aria-pressed={isBuildingRoute || isSelectionMode}
           >
             <Navigation className="w-6 h-6" />
@@ -3177,39 +3375,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         >
           <div className="flex flex-col items-center gap-3">
             {(isBuildingRoute || workingRouteId) && (
-              <motion.button 
+              <motion.button
                 initial={{ scale: 0.8, opacity: 0, y: 10 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 onClick={(e) => {
                   stopMapControlEvent(e);
                   if (isBuildingRoute) {
-                    if (newRoute.selectedIds.length === 0) return alert('Select at least one point');
-                    
-                    const idsToUse = newRoute.selectedIds;
-
-                    if (newRoute.id) {
-                      setRoutes(prev => prev.map(r => r.id === newRoute.id ? {
-                        ...r,
-                        name: newRoute.name || r.name,
-                        propertyIds: idsToUse
-                      } : r));
-                    } else {
-                      const dateStr = new Date().toISOString().split('T')[0];
-                      const repName = team[0]?.name?.split(' ')[0] || 'Mike';
-                      const r: ProspectRoute = {
-                        id: uuidv4(),
-                        name: newRoute.name || `${dateStr} - ${repName}`,
-                        propertyIds: idsToUse,
-                        status: 'Draft',
-                        createdAt: Date.now()
-                      };
-                      setRoutes(prev => [...prev, r]);
-                    }
-                    
-                    setIsBuildingRoute(false);
-                    setIsSelectionMode(false);
-                    setMapMode('street');
-                    setNewRoute({ name: '', selectedIds: [] });
+                    saveRouteDraft();
                   } else if (workingRouteId) {
                     setWorkingRouteId(null);
                   }
@@ -3223,7 +3395,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
              <AnimatePresence>
                {isLegendExpanded && (
-                 <motion.div 
+                 <motion.div
                    initial={{ opacity: 0, scale: 0.9, y: 20, originX: 0, originY: 1 }}
                    animate={{ opacity: 1, scale: 1, y: 0 }}
                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -3243,9 +3415,11 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                         <X className="w-4 h-4 text-gray-300" />
                       </button>
                    </div>
-                   
+
                    <div className="space-y-2.5">
-                      {Object.entries(STAGE_COLORS).map(([stage, color]) => (
+                      {Object.keys(STAGE_COLORS).map((stage) => {
+                        const color = getStageColor(stage as PropertyStage, settings);
+                        return (
                         <div key={stage} className="flex items-center justify-between group">
                           <div className="flex items-center gap-3">
                             <div className="w-3.5 h-3.5 rounded-lg shadow-sm" style={{ backgroundColor: color }} />
@@ -3254,21 +3428,21 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                             </span>
                           </div>
                         </div>
-                      ))}
+                      )})}
                    </div>
                  </motion.div>
                )}
              </AnimatePresence>
 
-             <button 
+             <button
                onClick={(e) => {
                  stopMapControlEvent(e);
                  setIsLegendExpanded(!isLegendExpanded);
                }}
                className={cn(
                  "w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl border transition-all active:scale-95",
-                 isLegendExpanded 
-                   ? "bg-indigo-600 text-white border-indigo-700" 
+                 isLegendExpanded
+                   ? "bg-indigo-600 text-white border-indigo-700"
                    : "bg-white text-[#1E293B] border-[#E2E8F0] hover:border-indigo-200"
                )}
                title="Map Controls"
@@ -3279,7 +3453,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         </div>
 
         {isSelectionMode && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
@@ -3289,7 +3463,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               <div className="w-7 h-7 bg-white/20 rounded-xl flex items-center justify-center animate-pulse">
                 <Zap className="w-4 h-4" />
               </div>
-              <span className="text-[11px] font-black uppercase tracking-widest whitespace-nowrap">Rapid Mode</span>
+              <span className="text-[11px] font-black uppercase tracking-widest whitespace-nowrap">Route Creation</span>
             </div>
           </motion.div>
         )}
@@ -3299,20 +3473,20 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       <div className="bg-white border-t border-[#E2E8F0] pb-8 pt-3 px-4 z-[1001]">
         <div className="max-w-2xl mx-auto flex justify-between items-center gap-1">
           {/* 1. Dashboard Home */}
-          <button 
+          <button
             onClick={() => {
               setCurrentView('dashboard');
               setIsProspectsOpen(false);
               setIsLeadsOpen(false);
               setIsCatalogOpen(false);
               setIsSettingsOpen(false);
-            }} 
+            }}
             className="flex flex-col items-center gap-1 transition-all flex-1 min-w-0"
           >
             <div className={cn(
               "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
               currentView === 'dashboard' && !isProspectsOpen && !isLeadsOpen && !isCatalogOpen && !isSettingsOpen
-                ? "bg-[#DBEAFE] text-[#2563EB]" 
+                ? "bg-[#DBEAFE] text-[#2563EB]"
                 : "bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B] hover:text-[#2563EB]"
             )}>
               <Home className="w-5 h-5" />
@@ -3321,20 +3495,20 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           </button>
 
           {/* 2. Contacts Directory */}
-          <button 
+          <button
             onClick={() => {
               setCurrentView('contacts');
               setIsProspectsOpen(false);
               setIsLeadsOpen(false);
               setIsCatalogOpen(false);
               setIsSettingsOpen(false);
-            }} 
+            }}
             className="flex flex-col items-center gap-1 transition-all flex-1 min-w-0"
           >
             <div className={cn(
               "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
               currentView === 'contacts' && !isProspectsOpen && !isLeadsOpen && !isCatalogOpen && !isSettingsOpen
-                ? "bg-[#DBEAFE] text-[#2563EB]" 
+                ? "bg-[#DBEAFE] text-[#2563EB]"
                 : "bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B]"
             )}>
               <Users className="w-5 h-5" />
@@ -3343,20 +3517,20 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           </button>
 
           {/* 3. Map View */}
-          <button 
+          <button
             onClick={() => {
               setCurrentView('map');
               setIsProspectsOpen(false);
               setIsLeadsOpen(false);
               setIsCatalogOpen(false);
               setIsSettingsOpen(false);
-            }} 
+            }}
             className="flex flex-col items-center gap-1 transition-all flex-1 min-w-0"
           >
             <div className={cn(
               "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
               currentView === 'map' && !isProspectsOpen && !isLeadsOpen && !isCatalogOpen && !isSettingsOpen
-                ? "bg-indigo-100 text-indigo-600" 
+                ? "bg-indigo-100 text-indigo-600"
                 : "bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B]"
             )}>
               <MapIcon className="w-5 h-5" />
@@ -3366,11 +3540,11 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
           {/* 4. Center Plus button */}
           <div className="relative -mt-10 mx-1 scale-100 shrink-0">
-            <button 
+            <button
               onClick={() => handleAddNewLead(
-                setPromptConfig, 
-                setProperties, 
-                setSelectedPropertyId, 
+                setPromptConfig,
+                setProperties,
+                setSelectedPropertyId,
                 setIsDrawerOpen,
                 mapCenter?.[0],
                 mapCenter?.[1]
@@ -3383,20 +3557,20 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           </div>
 
           {/* 5. Schedule */}
-          <button 
+          <button
             onClick={() => {
               setCurrentView('appointments');
               setIsProspectsOpen(false);
               setIsLeadsOpen(false);
               setIsCatalogOpen(false);
               setIsSettingsOpen(false);
-            }} 
+            }}
             className="flex flex-col items-center gap-1 transition-all flex-1 min-w-0"
           >
             <div className={cn(
               "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
               currentView === 'appointments' && !isProspectsOpen && !isLeadsOpen && !isCatalogOpen && !isSettingsOpen
-                ? "bg-blue-100 text-blue-600" 
+                ? "bg-blue-100 text-blue-600"
                 : "bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B]"
             )}>
               <Calendar className="w-5 h-5" />
@@ -3405,13 +3579,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           </button>
 
           {/* 6. Routes */}
-          <button 
+          <button
             onClick={() => {
               setIsProspectsOpen(true);
               setIsLeadsOpen(false);
               setIsCatalogOpen(false);
               setIsSettingsOpen(false);
-            }} 
+            }}
             className="flex flex-col items-center gap-1 transition-all flex-1 min-w-0"
           >
             <div className={cn(
@@ -3430,11 +3604,11 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               {isMoreMenuOpen && (
                 <>
                   {/* Overlay background block to close popover */}
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setIsMoreMenuOpen(false)} 
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsMoreMenuOpen(false)}
                   />
-                  
+
                   <motion.div
                     initial={{ opacity: 0, y: 15, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -3537,14 +3711,14 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
               )}
             </AnimatePresence>
 
-            <button 
+            <button
               onClick={() => setIsMoreMenuOpen(prev => !prev)}
               className="flex flex-col items-center gap-1 transition-all w-full min-w-0"
             >
               <div className={cn(
                 "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
                 isMoreMenuOpen || isSettingsOpen || isCatalogOpen || isTeamOpen || isOverdueInvoicesOpen
-                  ? "bg-slate-200 text-slate-800" 
+                  ? "bg-slate-200 text-slate-800"
                   : "bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B]"
               )}>
                 <MoreHorizontal className="w-5 h-5" />
@@ -3557,16 +3731,16 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
       <AnimatePresence>
         {isSettingsOpen && (
-          <SettingsOverlay 
-            settings={settings} 
-            setSettings={setSettings} 
+          <SettingsOverlay
+            settings={settings}
+            setSettings={setSettings}
             catalog={catalog}
             setCatalog={setCatalog}
             team={team}
             setTeam={setTeam}
             goals={goals}
             setGoals={setGoals}
-            onClose={() => setIsSettingsOpen(false)} 
+            onClose={() => setIsSettingsOpen(false)}
             properties={properties}
             setPromptConfig={setPromptConfig}
             initialTab={settingsActiveTab}
@@ -3576,7 +3750,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
       <AnimatePresence>
         {isOverdueInvoicesOpen && (
-          <OverdueInvoicesOverlay 
+          <OverdueInvoicesOverlay
             properties={properties}
             updateProperty={updateProperty}
             onClose={() => setIsOverdueInvoicesOpen(false)}
@@ -3595,7 +3769,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
       <AnimatePresence>
         {isTeamOpen && (
-          <TeamOverlay 
+          <TeamOverlay
             team={team}
             goals={goals}
             properties={properties}
@@ -3607,17 +3781,17 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
       <AnimatePresence>
         {isCatalogOpen && (
-          <CatalogOverlay 
-            catalog={catalog} 
-            setCatalog={setCatalog} 
-            onClose={() => setIsCatalogOpen(false)} 
+          <CatalogOverlay
+            catalog={catalog}
+            setCatalog={setCatalog}
+            onClose={() => setIsCatalogOpen(false)}
           />
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {isDrawerOpen && selectedProperty && (
-          <PropertyDrawer 
+          <PropertyDrawer
             property={selectedProperty}
             updateProperty={updateProperty}
             settings={settings}
@@ -3670,7 +3844,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         )}
 
         {isLeadsOpen && (
-          <LeadsOverlay 
+          <LeadsOverlay
             properties={properties}
             onDeleteProperty={handleDeleteProperty}
             settings={settings}
@@ -3690,7 +3864,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
       <AnimatePresence>
         {isProspectsOpen && (
-          <ProspectsOverlay 
+          <ProspectsOverlay
             properties={dedupedProperties}
             setProperties={setProperties}
             onDeleteProperty={handleDeleteProperty}
@@ -3746,7 +3920,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
       <AnimatePresence>
         {promptConfig && (
-          <PromptModal 
+          <PromptModal
             config={promptConfig}
             onClose={() => setPromptConfig(null)}
             mapCenter={mapCenter}
@@ -3758,9 +3932,9 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 }
 
 function handleAddNewLead(
-  setPromptConfig: any, 
-  setProperties: any, 
-  setSelectedPropertyId: any, 
+  setPromptConfig: any,
+  setProperties: any,
+  setSelectedPropertyId: any,
   setIsDrawerOpen: any,
   defaultLat?: number,
   defaultLng?: number
@@ -3812,16 +3986,16 @@ function handleAddNewLead(
 
 // --- Property Detail Drawer ---
 
-function PropertyDrawer({ 
-  property, 
-  updateProperty, 
+function PropertyDrawer({
+  property,
+  updateProperty,
   settings,
   onLogEvent,
   onClose,
   onSchedule,
   onQuote,
   onSale
-}: { 
+}: {
   property: PropertyContact,
   updateProperty: (id: string, updates: Partial<PropertyContact>) => void,
   settings: AppSettings,
@@ -3850,10 +4024,25 @@ function PropertyDrawer({
   const [eventError, setEventError] = useState('');
   const [isLoggingEvent, setIsLoggingEvent] = useState(false);
   const [eventLoggedLabel, setEventLoggedLabel] = useState('');
-  const sectionPermissions = DEFAULT_ADDRESS_RECORD_PERMISSIONS;
+  const [isContactInfoEditing, setIsContactInfoEditing] = useState(false);
+  const [isJobInfoEditing, setIsJobInfoEditing] = useState(false);
+  const [isAddingContact, setIsAddingContact] = useState(false);
+  const [addContactError, setAddContactError] = useState('');
+  const [showNotesOnly, setShowNotesOnly] = useState(false);
+  const addContactIdempotencyRef = useRef<string | null>(null);
+  const sectionPermissions = {
+    ...DEFAULT_ADDRESS_RECORD_PERMISSIONS,
+    addressHeader: { ...DEFAULT_ADDRESS_RECORD_PERMISSIONS.addressHeader, editable: isContactInfoEditing },
+    addressDetails: { ...DEFAULT_ADDRESS_RECORD_PERMISSIONS.addressDetails, editable: isJobInfoEditing },
+    contactsAtAddress: { ...DEFAULT_ADDRESS_RECORD_PERMISSIONS.contactsAtAddress, editable: isContactInfoEditing },
+    activityFeed: { ...DEFAULT_ADDRESS_RECORD_PERMISSIONS.activityFeed, visible: true }
+  };
   const lastSavedNotesRef = useRef(property.notes || '');
 
   const activityHistory = [...(property.interactions || [])].sort((a, b) => b.createdAt - a.createdAt);
+  const visibleActivityHistory = showNotesOnly
+    ? activityHistory.filter(item => item.type === 'Note' || Boolean(item.metadata?.note_id || item.metadata?.human_note))
+    : activityHistory;
   const latestActivity = activityHistory[0];
 
   useEffect(() => {
@@ -3944,8 +4133,42 @@ function PropertyDrawer({
     }
   };
 
+  const handleAddContact = () => {
+    if (!sectionPermissions.contactsAtAddress.editable || isAddingContact) return;
+
+    const idempotencyKey = uuidv4();
+    addContactIdempotencyRef.current = idempotencyKey;
+    setIsAddingContact(true);
+    setAddContactError('');
+
+    const nextContact: Contact = {
+      id: uuidv4(),
+      firstName: '',
+      lastName: '',
+      isDecisionMaker: false,
+      customData: {
+        idempotencyKey
+      }
+    };
+
+    try {
+      updateProperty(property.id, {
+        contacts: [...(property.contacts || []), nextContact]
+      });
+    } catch (error: any) {
+      setAddContactError(error.message || 'Contact could not be added. Please try again.');
+    } finally {
+      window.setTimeout(() => {
+        if (addContactIdempotencyRef.current === idempotencyKey) {
+          addContactIdempotencyRef.current = null;
+          setIsAddingContact(false);
+        }
+      }, 300);
+    }
+  };
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -3960,24 +4183,25 @@ function PropertyDrawer({
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">
             {property.lastName ? property.address : property.address.split(',').slice(1).join(', ')}
           </p>
-        </div>
-        <div className="flex gap-2">
-          <button 
+          <button
+            type="button"
             onClick={() => {
-              if (!sectionPermissions.addressHeader.editable) return;
+              if (!isContactInfoEditing) return;
               const newType = property.type === 'Residential' ? 'Commercial' : 'Residential';
               updateProperty(property.id, { type: newType as PropertyType });
             }}
-            disabled={!sectionPermissions.addressHeader.editable}
             className={cn(
-              "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all flex items-center gap-1.5",
-              property.type === 'Commercial' ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700",
-              !sectionPermissions.addressHeader.editable && "opacity-70 cursor-not-allowed"
+              "mt-2 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5 transition-colors",
+              property.type === 'Commercial' ? "text-purple-700" : "text-blue-700",
+              isContactInfoEditing ? "cursor-pointer hover:underline" : "cursor-default"
             )}
+            title={isContactInfoEditing ? "Change premises type" : "Premises type"}
           >
             {property.type === 'Commercial' ? <Building2 className="w-3.5 h-3.5" /> : <Home className="w-3.5 h-3.5" />}
             {property.type}
           </button>
+        </div>
+        <div className="flex gap-2">
           <button onClick={onClose} className="p-2 bg-gray-50 rounded-xl">
             <X className="w-6 h-6 text-gray-400" />
           </button>
@@ -4053,20 +4277,57 @@ function PropertyDrawer({
                 disabled={!sectionPermissions.stageControls.editable}
                 className={cn(
                   "py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2",
-                  property.stage === s 
-                    ? "text-white shadow-lg" 
+                  property.stage === s
+                    ? "text-white shadow-lg"
                     : "bg-white border-gray-100 text-gray-400 hover:border-blue-200",
                   !sectionPermissions.stageControls.editable && "cursor-not-allowed opacity-70"
                 )}
                 style={{
-                  backgroundColor: property.stage === s ? STAGE_COLORS[s] : undefined,
-                  borderColor: property.stage === s ? STAGE_COLORS[s] : undefined,
-                  boxShadow: property.stage === s ? `0 4px 12px ${STAGE_COLORS[s]}33` : undefined
+                  backgroundColor: property.stage === s ? getStageColor(s, settings) : undefined,
+                  borderColor: property.stage === s ? getStageColor(s, settings) : undefined,
+                  boxShadow: property.stage === s ? `0 4px 12px ${getStageColor(s, settings)}33` : undefined
                 }}
               >
                 {(settings.labels.stages as any)[s] || s}
               </button>
             ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 items-center">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sub-status</span>
+            <button
+              type="button"
+              onClick={() => updateProperty(property.id, { subStatus: null, subStatusSetAt: null, subStatusSetBy: null })}
+              className={cn(
+                "py-1.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-tight border transition-all",
+                !property.subStatus ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-400 border-slate-200"
+              )}
+            >
+              None
+            </button>
+            {Object.entries(settings.subStatusConfig || DEFAULT_SUB_STATUS_CONFIG)
+              .filter(([, config]) => config.parentStages.includes(property.stage))
+              .map(([subStatus, config]) => (
+                <button
+                  key={subStatus}
+                  type="button"
+                  onClick={() => updateProperty(property.id, {
+                    subStatus: subStatus as PropertySubStatus,
+                    subStatusSetAt: Date.now(),
+                    subStatusSetBy: undefined
+                  })}
+                  className={cn(
+                    "py-1.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-tight border transition-all",
+                    property.subStatus === subStatus ? "text-white shadow-sm" : "bg-white text-slate-400 border-slate-200"
+                  )}
+                  style={{
+                    backgroundColor: property.subStatus === subStatus ? config.color : undefined,
+                    borderColor: property.subStatus === subStatus ? config.color : undefined
+                  }}
+                  title={config.description}
+                >
+                  {config.label}
+                </button>
+              ))}
           </div>
         </section>
         )}
@@ -4275,8 +4536,22 @@ function PropertyDrawer({
 
           {sectionPermissions.activityFeed.visible && (
           <div className="space-y-2">
-            {activityHistory.length > 0 ? (
-              activityHistory.map(item => (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowNotesOnly(prev => !prev)}
+                className={cn(
+                  "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
+                  showNotesOnly
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50"
+                )}
+              >
+                Notes Only
+              </button>
+            </div>
+            {visibleActivityHistory.length > 0 ? (
+              visibleActivityHistory.map(item => (
                 <div key={item.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-4 space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <span className={cn(
@@ -4303,7 +4578,9 @@ function PropertyDrawer({
               ))
             ) : (
               <div className="bg-white border border-dashed border-[#CBD5E1] rounded-2xl p-5 text-center">
-                <p className="text-xs font-semibold text-slate-400 italic">No activity logged yet.</p>
+                <p className="text-xs font-semibold text-slate-400 italic">
+                  {showNotesOnly ? 'No human notes logged yet.' : 'No activity logged yet.'}
+                </p>
               </div>
             )}
           </div>
@@ -4314,13 +4591,33 @@ function PropertyDrawer({
         {/* Address Level Details & Custom Fields */}
         {sectionPermissions.addressDetails.visible && (
         <section className="space-y-4">
-          <div className="flex items-center gap-2">
-             <div className="w-6 h-6 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
-               <MapPin className="w-3.5 h-3.5" />
+          <div className="flex items-center justify-between gap-3">
+             <div className="flex items-center gap-2">
+               <div className="w-6 h-6 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
+                 <MapPin className="w-3.5 h-3.5" />
+               </div>
+               <label className="text-[10px] font-black uppercase text-amber-600 tracking-widest leading-none">Job Info</label>
              </div>
-             <label className="text-[10px] font-black uppercase text-amber-600 tracking-widest leading-none">Address Details</label>
+             <button
+               type="button"
+               onClick={() => setIsJobInfoEditing(prev => !prev)}
+               className={cn(
+                 "text-[10px] font-black uppercase tracking-widest flex items-center gap-1 px-3 py-2 rounded-xl border transition-all",
+                 isJobInfoEditing
+                   ? "bg-amber-500 text-white border-amber-500"
+                   : "bg-white text-amber-600 border-amber-100 hover:bg-amber-50"
+               )}
+             >
+               <Edit3 className="w-3.5 h-3.5" />
+               {isJobInfoEditing ? 'Done' : 'Edit'}
+             </button>
           </div>
-          
+          {!isJobInfoEditing && (
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Read-only. Tap Edit to change job details or gate-side notes.
+            </p>
+          )}
+
           <div className="grid grid-cols-1 gap-3">
              {/* Dynamic Address-Level Custom Fields */}
              {settings.contactFields
@@ -4328,7 +4625,7 @@ function PropertyDrawer({
                 .map(field => (
                   <div key={field.id} className="relative group/field">
                     {field.type === 'checkbox' ? (
-                      <button 
+                      <button
                         onClick={() => {
                           if (!sectionPermissions.addressDetails.editable) return;
                           const current = property.customData?.[field.id] || false;
@@ -4346,7 +4643,7 @@ function PropertyDrawer({
                       </button>
                     ) : (
                       <div className="relative">
-                        <input 
+                        <input
                           type={field.type}
                           className={cn(
                             "w-full bg-white border rounded-xl px-4 py-2 text-xs font-bold transition-all",
@@ -4365,7 +4662,7 @@ function PropertyDrawer({
                 ))}
 
              <div className="relative">
-                <textarea 
+                <textarea
                   className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl px-4 py-3 text-xs font-bold min-h-[100px] focus:ring-2 focus:ring-blue-500/10"
                   placeholder="Gate-side notes, key info, next actions..."
                   value={notes}
@@ -4389,7 +4686,7 @@ function PropertyDrawer({
                </div>
                <label className="text-[10px] font-black uppercase text-slate-600 tracking-widest leading-none">Property History</label>
             </div>
-            
+
             <div className="space-y-2">
               {[...(property.quotes || []).map(q => ({...q, type: 'quote'})), ...(property.sales || []).map(s => ({...s, type: 'sale'}))]
                 .sort((a,b) => b.createdAt - a.createdAt)
@@ -4432,27 +4729,41 @@ function PropertyDrawer({
                </div>
                <label className="text-[10px] font-black uppercase text-blue-600 tracking-widest leading-none">Contacts at Address</label>
             </div>
-            <button 
-              onClick={() => {
-                if (!sectionPermissions.contactsAtAddress.editable) return;
-                const newContact: Contact = {
-                  id: uuidv4(),
-                  firstName: '',
-                  lastName: '',
-                  isDecisionMaker: false
-                };
-                updateProperty(property.id, { 
-                  contacts: [...(property.contacts || []), newContact] 
-                });
-              }}
-              className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1"
-              disabled={!sectionPermissions.contactsAtAddress.editable}
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              Add Contact
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsContactInfoEditing(prev => !prev)}
+                className={cn(
+                  "text-[10px] font-black uppercase tracking-widest flex items-center gap-1 px-3 py-2 rounded-xl border transition-all",
+                  isContactInfoEditing
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-blue-600 border-blue-100 hover:bg-blue-50"
+                )}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                {isContactInfoEditing ? 'Done' : 'Edit'}
+              </button>
+              <button
+                onClick={handleAddContact}
+                className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1 px-3 py-2 rounded-xl border border-blue-100 bg-white hover:bg-blue-50 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!sectionPermissions.contactsAtAddress.editable || isAddingContact}
+              >
+                {isAddingContact ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                {isAddingContact ? 'Adding...' : 'Add Contact'}
+              </button>
+            </div>
           </div>
-          
+          {!isContactInfoEditing && (
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Read-only. Tap Edit to change contact details or premises type.
+            </p>
+          )}
+          {addContactError && (
+            <div className="bg-red-50 border border-red-100 text-red-600 rounded-xl px-4 py-3 text-xs font-black">
+              {addContactError}
+            </div>
+          )}
+
           <div className="space-y-3">
             {/* Primary Fields (Preserved for compatibility) */}
             <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl relative group">
@@ -4462,9 +4773,9 @@ function PropertyDrawer({
                 </div>
                 <span className="text-[10px] font-black uppercase text-blue-600 tracking-tighter">Primary Contact Card</span>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
                   placeholder={settings.labels.firstName || "First Name"}
                   value={firstName}
@@ -4476,7 +4787,7 @@ function PropertyDrawer({
                   }}
                   disabled={!sectionPermissions.contactsAtAddress.editable}
                 />
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
                   placeholder={settings.labels.lastName || "Last Name"}
                   value={lastName}
@@ -4492,7 +4803,7 @@ function PropertyDrawer({
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div className="relative">
                   <Phone className="absolute left-3 top-2.5 w-3 h-3 text-gray-300" />
-                  <input 
+                  <input
                     className="w-full bg-white border border-[#E2E8F0] rounded-xl pl-8 pr-4 py-2 text-xs font-bold"
                     placeholder={settings.labels.phone || "Phone"}
                     value={phone}
@@ -4507,7 +4818,7 @@ function PropertyDrawer({
                 </div>
                 <div className="relative">
                   <Mail className="absolute left-3 top-2.5 w-3 h-3 text-gray-300" />
-                  <input 
+                  <input
                     className="w-full bg-white border border-[#E2E8F0] rounded-xl pl-8 pr-4 py-2 text-xs font-bold"
                     placeholder={settings.labels.email || "Email"}
                     value={email}
@@ -4521,7 +4832,7 @@ function PropertyDrawer({
                   />
                 </div>
               </div>
-              
+
               {/* Dynamic Custom Fields integrated into Contact Card */}
               <div className="space-y-3 mb-3">
                 {settings.contactFields
@@ -4529,7 +4840,7 @@ function PropertyDrawer({
                   .map(field => (
                     <div key={field.id} className="relative group/field">
                       {field.type === 'checkbox' ? (
-                        <button 
+                        <button
                           onClick={() => {
                             const current = property.customData?.[field.id] || false;
                             updateProperty(property.id, { customData: { ...(property.customData || {}), [field.id]: !current } });
@@ -4544,7 +4855,7 @@ function PropertyDrawer({
                         </button>
                       ) : (
                         <div className="relative">
-                           <input 
+                           <input
                             type={field.type}
                             className={cn(
                               "w-full bg-white border rounded-xl px-4 py-2 text-xs font-bold transition-all",
@@ -4566,7 +4877,7 @@ function PropertyDrawer({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
                   placeholder="Role"
                   value={role}
@@ -4578,7 +4889,7 @@ function PropertyDrawer({
                   }}
                   disabled={!sectionPermissions.contactsAtAddress.editable}
                 />
-                <button 
+                <button
                   onClick={() => {
                     if (!sectionPermissions.contactsAtAddress.editable) return;
                     const newVal = !isDecisionMaker;
@@ -4607,7 +4918,7 @@ function PropertyDrawer({
                     </div>
                     <span className="text-[10px] font-black uppercase text-slate-500 tracking-tighter">Contact #{idx + 2}</span>
                   </div>
-                  <button 
+                  <button
                     onClick={() => {
                       if (!sectionPermissions.contactsAtAddress.editable) return;
                       const updated = property.contacts.filter(c => c.id !== contact.id);
@@ -4622,7 +4933,7 @@ function PropertyDrawer({
 
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <input 
+                    <input
                       className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
                       placeholder="First Name"
                       value={contact.firstName || ''}
@@ -4634,7 +4945,7 @@ function PropertyDrawer({
                       }}
                       disabled={!sectionPermissions.contactsAtAddress.editable}
                     />
-                    <input 
+                    <input
                       className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
                       placeholder="Last Name"
                       value={contact.lastName || ''}
@@ -4650,7 +4961,7 @@ function PropertyDrawer({
                   <div className="grid grid-cols-2 gap-3">
                     <div className="relative">
                       <Phone className="absolute left-3 top-2.5 w-3 h-3 text-gray-300" />
-                      <input 
+                      <input
                         className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl pl-8 pr-4 py-2 text-xs font-bold"
                         placeholder="Phone"
                         value={contact.phone || ''}
@@ -4665,7 +4976,7 @@ function PropertyDrawer({
                     </div>
                     <div className="relative">
                       <Mail className="absolute left-3 top-2.5 w-3 h-3 text-gray-300" />
-                      <input 
+                      <input
                         className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl pl-8 pr-4 py-2 text-xs font-bold"
                         placeholder="Email"
                         value={contact.email || ''}
@@ -4680,7 +4991,7 @@ function PropertyDrawer({
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <input 
+                    <input
                       className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
                       placeholder="Role"
                       value={contact.role || ''}
@@ -4692,7 +5003,7 @@ function PropertyDrawer({
                       }}
                       disabled={!sectionPermissions.contactsAtAddress.editable}
                     />
-                    <button 
+                    <button
                       onClick={() => {
                         if (!sectionPermissions.contactsAtAddress.editable) return;
                         const updated = property.contacts.map(c => c.id === contact.id ? { ...c, isDecisionMaker: !c.isDecisionMaker } : c);
@@ -4718,7 +5029,7 @@ function PropertyDrawer({
         {property.type === 'Commercial' && (
           <section className="animate-in slide-in-from-top-2">
             <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-2 block">Business Name</label>
-            <input 
+            <input
               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               placeholder="e.g. Acme Corp"
               value={businessName}
@@ -4735,18 +5046,18 @@ function PropertyDrawer({
   );
 }
 
-function RouteDetailOverlay({ 
-  route, 
-  properties, 
-  onClose, 
-  onFocusProperty, 
+function RouteDetailOverlay({
+  route,
+  properties,
+  onClose,
+  onFocusProperty,
   onUpdateStatus,
   onRemoveProperty,
   onEditRoute
-}: { 
-  route: ProspectRoute, 
-  properties: PropertyContact[], 
-  onClose: () => void, 
+}: {
+  route: ProspectRoute,
+  properties: PropertyContact[],
+  onClose: () => void,
   onFocusProperty: (id: string) => void,
   onUpdateStatus: (status: ProspectRoute['status']) => void,
   onRemoveProperty: (id: string) => void,
@@ -4765,7 +5076,7 @@ function RouteDetailOverlay({
   }, [routeProperties]);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -4783,7 +5094,7 @@ function RouteDetailOverlay({
         </div>
         <div className="flex gap-2">
           {route.status === 'In Progress' ? (
-            <button 
+            <button
               onClick={() => onUpdateStatus('Completed')}
               className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
             >
@@ -4794,7 +5105,7 @@ function RouteDetailOverlay({
               Completed
             </div>
           ) : (
-            <button 
+            <button
               onClick={() => onUpdateStatus('In Progress')}
               className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100"
             >
@@ -4805,7 +5116,7 @@ function RouteDetailOverlay({
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-3">
-        <button 
+        <button
           onClick={onEditRoute}
           className="w-full py-4 border-2 border-dashed border-indigo-200 rounded-2xl flex items-center justify-center gap-3 text-indigo-600 font-black text-xs uppercase tracking-widest hover:border-indigo-400 hover:bg-indigo-50 transition-all mb-4"
         >
@@ -4822,7 +5133,7 @@ function RouteDetailOverlay({
           </div>
         ) : (
           routeProperties.map(p => (
-          <div 
+          <div
             key={p.id}
             className="p-4 bg-white border border-[#E2E8F0] rounded-2xl shadow-sm flex items-center justify-between group transition-all hover:border-blue-200"
           >
@@ -4843,7 +5154,7 @@ function RouteDetailOverlay({
                </div>
             </div>
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemoveProperty(p.id);
@@ -4869,13 +5180,13 @@ function RouteDetailOverlay({
 
 // --- Prospects & Routes Management ---
 
-function ProspectsOverlay({ 
-  properties, 
+function ProspectsOverlay({
+  properties,
   onDeleteProperty,
   setProperties,
-  routes, 
-  setRoutes, 
-  team, 
+  routes,
+  setRoutes,
+  team,
   onClose,
   onFocusProperty,
   selectedPropertyId,
@@ -4895,7 +5206,7 @@ function ProspectsOverlay({
   setMapZoom,
   smartSortPropertyIds,
   setSelectingStartForRouteId
-}: { 
+}: {
   properties: PropertyContact[],
   onDeleteProperty: (id: string) => void,
   setProperties: React.Dispatch<React.SetStateAction<PropertyContact[]>>,
@@ -4931,7 +5242,7 @@ function ProspectsOverlay({
   const prospects = useMemo(() => {
     // Filter out customers AND anyone already on an active route
     let list = properties.filter(p => !['customer'].includes(p.stage) && !onRouteIds.has(p.id));
-    
+
     if (searchTerm.trim()) {
       const s = searchTerm.toLowerCase();
       list = list.filter(p => {
@@ -4939,12 +5250,12 @@ function ProspectsOverlay({
         const inName = `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase().includes(s);
         const inPhone = p.phone?.toLowerCase().includes(s) || false;
         const inEmail = p.email?.toLowerCase().includes(s) || false;
-        
-        const inCustom = p.customData ? Object.values(p.customData).some(val => 
+
+        const inCustom = p.customData ? Object.values(p.customData).some(val =>
           String(val || '').toLowerCase().includes(s)
         ) : false;
 
-        const inContacts = p.contacts?.some(c => 
+        const inContacts = p.contacts?.some(c =>
           (c.firstName || '').toLowerCase().includes(s) ||
           (c.lastName || '').toLowerCase().includes(s) ||
           c.email?.toLowerCase().includes(s) ||
@@ -4955,7 +5266,7 @@ function ProspectsOverlay({
         return inAddress || inName || inPhone || inEmail || inCustom || inContacts;
       });
     }
-    
+
     const uniqueResult = new Map<string, PropertyContact>();
     list.forEach(p => {
       const key = normalizeAddress(p.address);
@@ -4973,7 +5284,7 @@ function ProspectsOverlay({
 
   const createRoute = () => {
     if (newRoute.selectedIds.length === 0) return;
-    
+
     if (newRoute.id) {
       setRoutes(prev => prev.map(r => r.id === newRoute.id ? {
         ...r,
@@ -4988,7 +5299,7 @@ function ProspectsOverlay({
         const repName = team?.find(m => m.id === 'm1')?.name?.split(' ')[0] || 'Team';
         finalName = `${dateStr} - ${repName}`;
       }
-      
+
       const r: ProspectRoute = {
         id: uuidv4(),
         name: finalName,
@@ -4998,7 +5309,7 @@ function ProspectsOverlay({
       };
       setRoutes(prev => [...prev, r]);
     }
-    
+
     setIsBuildingRoute(false);
     setIsSelectionMode(false);
     setMapMode('street');
@@ -5013,15 +5324,15 @@ function ProspectsOverlay({
     const route = routes.find(r => r.id === selectedRouteId);
     if (route) {
       return (
-        <RouteDetailOverlay 
+        <RouteDetailOverlay
           route={route}
           properties={properties}
           onClose={() => setSelectedRouteId(null)}
           onFocusProperty={onFocusProperty}
           onUpdateStatus={(status) => {
-            setRoutes(prev => prev.map(r => r.id === route.id ? { 
-              ...r, 
-              status, 
+            setRoutes(prev => prev.map(r => r.id === route.id ? {
+              ...r,
+              status,
               startedAt: status === 'In Progress' ? Date.now() : r.startedAt,
               completedAt: status === 'Completed' ? Date.now() : r.completedAt
             } : r));
@@ -5046,7 +5357,7 @@ function ProspectsOverlay({
   }
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -5068,7 +5379,7 @@ function ProspectsOverlay({
       <div className="px-6 py-4 bg-white border-b border-[#E2E8F0]">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input 
+          <input
             type="text"
             className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl pl-12 pr-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500/10 placeholder:text-gray-400"
             placeholder="Search address or business..."
@@ -5079,7 +5390,7 @@ function ProspectsOverlay({
       </div>
 
       <div className="flex border-b border-[#E2E8F0]">
-        <button 
+        <button
           onClick={() => setActiveTab('prospects')}
           className={cn(
             "flex-1 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2",
@@ -5088,7 +5399,7 @@ function ProspectsOverlay({
         >
           Untapped Prospects ({prospects.length})
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('routes')}
           className={cn(
             "flex-1 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2",
@@ -5108,11 +5419,11 @@ function ProspectsOverlay({
                   <Navigation className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-[#1E293B]">Route Builder</h3>
+                  <h3 className="text-sm font-black text-[#1E293B]">Route Creation</h3>
                   <p className="text-[10px] font-black text-gray-400 tracking-wider uppercase">Plan your next territory</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setIsBuildingRoute(true);
                   setIsSelectionMode(true);
@@ -5122,7 +5433,7 @@ function ProspectsOverlay({
                 className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 flex items-center justify-center gap-3 active:scale-95 transition-all"
               >
                 <Plus className="w-4 h-4" />
-                Build territory route
+                Create route
               </button>
             </div>
 
@@ -5132,8 +5443,8 @@ function ProspectsOverlay({
 
             <div className="space-y-3">
               {prospects.map(p => (
-                <div 
-                  key={p.id} 
+                <div
+                  key={p.id}
                   className="bg-white p-4 border border-[#E2E8F0] rounded-2xl shadow-sm flex items-center justify-between group cursor-pointer transition-all hover:border-blue-200"
                   onClick={() => onFocusProperty(p.id)}
                 >
@@ -5158,7 +5469,7 @@ function ProspectsOverlay({
                       </p>
                     </div>
                   </div>
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeleteConfirmId(p.id);
@@ -5189,7 +5500,7 @@ function ProspectsOverlay({
                   <div className="px-5 pt-5 pb-3">
                     <div className="flex items-center gap-4 mb-4">
                       <div className="relative shrink-0">
-                        <select 
+                        <select
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                           value={route.assignedMemberId || ''}
                           onChange={(e) => {
@@ -5209,7 +5520,7 @@ function ProspectsOverlay({
                           <Users className="w-2.5 h-2.5 text-slate-400" />
                         </div>
                       </div>
-                      
+
                       <div className="min-w-0 flex-1">
                         <h4 className="text-[17px] font-black text-[#1E293B] leading-tight truncate uppercase tracking-tight mb-1">
                           {route.name}
@@ -5249,15 +5560,15 @@ function ProspectsOverlay({
                   </div>
 
                   <div className="flex border-t border-[#F1F5F9] min-h-[72px]">
-                    <button 
+                    <button
                       onClick={() => {
                         if (route.status !== 'In Progress') {
                           setMapMode('street');
                           setSelectingStartForRouteId(route.id);
                           onClose();
                         } else {
-                          setRoutes(prev => prev.map(r => r.id === route.id ? { 
-                            ...r, 
+                          setRoutes(prev => prev.map(r => r.id === route.id ? {
+                            ...r,
                             status: 'Completed',
                             completedAt: Date.now()
                           } : r));
@@ -5272,7 +5583,7 @@ function ProspectsOverlay({
                       {route.status === 'In Progress' ? 'Complete' : 'Start'}
                     </button>
                     <div className="w-[1px] bg-[#F1F5F9]" />
-                    <button 
+                    <button
                       onClick={() => {
                         setIsBuildingRoute(true);
                         setIsSelectionMode(true);
@@ -5285,7 +5596,7 @@ function ProspectsOverlay({
                       Add
                     </button>
                     <div className="w-[1px] bg-[#F1F5F9]" />
-                    <button 
+                    <button
                       onClick={() => deleteRoute(route.id)}
                       className="flex-1 text-[11px] font-black uppercase tracking-[0.1em] text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
                     >
@@ -5304,13 +5615,13 @@ function ProspectsOverlay({
 
 // --- Catalog Management UI ---
 
-function LeadsOverlay({ 
-  properties, 
+function LeadsOverlay({
+  properties,
   onDeleteProperty,
   settings,
   onClose,
   onFocusProperty
-}: { 
+}: {
   properties: PropertyContact[],
   onDeleteProperty: (id: string) => void,
   settings: AppSettings,
@@ -5320,7 +5631,7 @@ function LeadsOverlay({
   const [filter, setFilter] = useState<PropertyStage | 'all'>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   const filteredProperties = useMemo(() => {
     let list: PropertyContact[] = [];
     if (filter === 'all') list = properties;
@@ -5334,12 +5645,12 @@ function LeadsOverlay({
         const inPhone = p.phone?.toLowerCase().includes(s) || false;
         const inEmail = p.email?.toLowerCase().includes(s) || false;
         const inBusiness = p.businessName?.toLowerCase().includes(s) || false;
-        
-        const inCustom = p.customData ? Object.values(p.customData).some(val => 
+
+        const inCustom = p.customData ? Object.values(p.customData).some(val =>
           String(val || '').toLowerCase().includes(s)
         ) : false;
 
-        const inContacts = p.contacts?.some(c => 
+        const inContacts = p.contacts?.some(c =>
           (c.firstName || '').toLowerCase().includes(s) ||
           (c.lastName || '').toLowerCase().includes(s) ||
           c.email?.toLowerCase().includes(s) ||
@@ -5368,7 +5679,7 @@ function LeadsOverlay({
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -5390,7 +5701,7 @@ function LeadsOverlay({
       <div className="px-6 py-4 bg-white border-b border-[#E2E8F0]">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input 
+          <input
             type="text"
             className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl pl-12 pr-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500/10 placeholder:text-gray-400"
             placeholder="Search by name, address, phone..."
@@ -5402,7 +5713,7 @@ function LeadsOverlay({
 
       <div className="flex border-b border-[#E2E8F0] p-1 bg-gray-50 overflow-x-auto no-scrollbar">
         {(['all', 'prospect', 'lead', 'opportunity', 'customer'] as const).map(f => (
-          <button 
+          <button
             key={f}
             onClick={() => setFilter(f)}
             className={cn(
@@ -5426,8 +5737,8 @@ function LeadsOverlay({
             </div>
           ) : (
             filteredProperties.map(p => (
-              <div 
-                key={p.id} 
+              <div
+                key={p.id}
                 className="bg-white p-4 border border-[#E2E8F0] rounded-2xl shadow-sm flex items-center justify-between group animate-in slide-in-from-left-2 transition-all hover:border-indigo-200"
                 onClick={() => onFocusProperty(p.id)}
               >
@@ -5452,7 +5763,7 @@ function LeadsOverlay({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeleteConfirmId(p.id);
@@ -5468,7 +5779,7 @@ function LeadsOverlay({
           )}
         </div>
       </div>
-      
+
       <div className="p-6 border-t border-[#E2E8F0] bg-white">
         <p className="text-[10px] font-bold text-gray-400 text-center uppercase tracking-widest">
           Showing {filteredProperties.length} of {properties.length} Total Records
@@ -5477,7 +5788,7 @@ function LeadsOverlay({
 
       <AnimatePresence>
         {deleteConfirmId && (
-          <ConfirmDeleteModal 
+          <ConfirmDeleteModal
             onConfirm={() => handleDelete(deleteConfirmId)}
             onCancel={() => setDeleteConfirmId(null)}
           />
@@ -5489,13 +5800,13 @@ function LeadsOverlay({
 
 function ConfirmDeleteModal({ onConfirm, onCancel }: { onConfirm: () => void, onCancel: () => void }) {
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[6000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6"
     >
-      <motion.div 
+      <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -5506,15 +5817,15 @@ function ConfirmDeleteModal({ onConfirm, onCancel }: { onConfirm: () => void, on
         </div>
         <h3 className="text-xl font-black text-gray-900 mb-2">Delete Record?</h3>
         <p className="text-sm font-bold text-gray-400 leading-relaxed mb-8 uppercase tracking-tight">This action is permanent and cannot be undone.</p>
-        
+
         <div className="flex flex-col gap-3">
-          <button 
+          <button
             onClick={onConfirm}
             className="w-full bg-red-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-red-100 active:scale-95 transition-all"
           >
             Yes, Delete Permanently
           </button>
-          <button 
+          <button
             onClick={onCancel}
             className="w-full bg-gray-50 text-gray-500 py-4 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all"
           >
@@ -5528,20 +5839,20 @@ function ConfirmDeleteModal({ onConfirm, onCancel }: { onConfirm: () => void, on
 
 // --- Catalog Management UI ---
 
-function CatalogOverlay({ 
-  catalog, 
-  setCatalog, 
-  onClose 
-}: { 
-  catalog: AppState['catalog'], 
-  setCatalog: React.Dispatch<React.SetStateAction<AppState['catalog']>>, 
-  onClose: () => void 
+function CatalogOverlay({
+  catalog,
+  setCatalog,
+  onClose
+}: {
+  catalog: AppState['catalog'],
+  setCatalog: React.Dispatch<React.SetStateAction<AppState['catalog']>>,
+  onClose: () => void
 }) {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [isAddingBundle, setIsAddingBundle] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingBundleId, setEditingBundleId] = useState<string | null>(null);
-  
+
   const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: '', price: 0, description: '', category: '' });
   const [newBundle, setNewBundle] = useState<Partial<Bundle>>({ name: '', description: '', productIds: [], discountLabel: 'Package Savings' });
 
@@ -5573,8 +5884,8 @@ function CatalogOverlay({
       if (editingBundleId) {
         setCatalog(prev => ({
           ...prev,
-          bundles: prev.bundles.map(b => b.id === editingBundleId ? { 
-            ...b, 
+          bundles: prev.bundles.map(b => b.id === editingBundleId ? {
+            ...b,
             name: newBundle.name!,
             description: newBundle.description || '',
             productIds: newBundle.productIds!,
@@ -5614,7 +5925,7 @@ function CatalogOverlay({
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -5642,7 +5953,7 @@ function CatalogOverlay({
                 <Box className="w-4 h-4 text-blue-400" />
                 <h3 className="text-[10px] font-black uppercase text-blue-900/40 tracking-widest leading-none">Standard Items</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setIsAddingProduct(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-blue-100 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
               >
@@ -5655,13 +5966,13 @@ function CatalogOverlay({
               <div className="bg-white border-2 border-blue-100 rounded-3xl p-6 shadow-xl animate-in zoom-in-95">
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input 
+                    <input
                       className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Product Name"
                       value={newProduct.name || ''}
                       onChange={e => setNewProduct({...newProduct, name: e.target.value})}
                     />
-                    <input 
+                    <input
                       type="number"
                       className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Price"
@@ -5669,7 +5980,7 @@ function CatalogOverlay({
                       onChange={e => setNewProduct({...newProduct, price: parseFloat(e.target.value)})}
                     />
                   </div>
-                  <input 
+                  <input
                     className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Category"
                     value={newProduct.category || ''}
@@ -5696,7 +6007,7 @@ function CatalogOverlay({
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
+                    <button
                       onClick={() => {
                         setEditingProductId(p.id);
                         setNewProduct(p);
@@ -5706,7 +6017,7 @@ function CatalogOverlay({
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setCatalog(prev => ({ ...prev, products: prev.products.filter(i => i.id !== p.id) }))}
                       className="p-2 text-gray-300 hover:text-red-500 transition-colors"
                     >
@@ -5725,7 +6036,7 @@ function CatalogOverlay({
                 <LayoutGrid className="w-4 h-4 text-blue-400" />
                 <h3 className="text-[10px] font-black uppercase text-blue-900/40 tracking-widest leading-none">Incentivized Bundles</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setIsAddingBundle(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-blue-100 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
               >
@@ -5742,7 +6053,7 @@ function CatalogOverlay({
                     <div className="space-y-6">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-blue-600 tracking-widest ml-1">Bundle Identity</label>
-                        <input 
+                        <input
                           className="w-full bg-[#F8FAFC] border-2 border-[#E2E8F0] rounded-2xl px-6 py-4 text-base font-bold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
                           placeholder="e.g. Premium Solar Package"
                           value={newBundle.name || ''}
@@ -5757,7 +6068,7 @@ function CatalogOverlay({
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto p-1 pr-2 scrollbar-thin scrollbar-thumb-blue-100">
                           {catalog.products.map(p => (
-                            <div 
+                            <div
                               key={p.id}
                               onClick={() => {
                                 const ids = newBundle.productIds || [];
@@ -5766,8 +6077,8 @@ function CatalogOverlay({
                               }}
                               className={cn(
                                 "group p-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-between cursor-pointer transition-all duration-200",
-                                newBundle.productIds?.includes(p.id) 
-                                  ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200" 
+                                newBundle.productIds?.includes(p.id)
+                                  ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200"
                                   : "bg-[#F8FAFC] border-gray-100 text-gray-500 hover:border-blue-200 hover:bg-white"
                               )}
                             >
@@ -5778,8 +6089,8 @@ function CatalogOverlay({
                                   newBundle.productIds?.includes(p.id) ? "text-blue-100" : "text-gray-400"
                                 )}>${p.price.toLocaleString()}</span>
                               </div>
-                              {newBundle.productIds?.includes(p.id) 
-                                ? <CheckCircle2 className="w-4 h-4" /> 
+                              {newBundle.productIds?.includes(p.id)
+                                ? <CheckCircle2 className="w-4 h-4" />
                                 : <Plus className="w-4 h-4 opacity-30 group-hover:opacity-100" />
                               }
                             </div>
@@ -5797,11 +6108,11 @@ function CatalogOverlay({
                           </div>
                           <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Pricing & Incentive Item</span>
                         </div>
-                        
+
                         <div className="space-y-4">
                           <div className="space-y-1.5 text-right">
                             <label className="text-[9px] font-black uppercase text-blue-600/50 mr-1">Discount Label (Line Item)</label>
-                            <input 
+                            <input
                               className="w-full bg-white border-2 border-blue-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500"
                               placeholder="e.g. Bundle Discount"
                               value={newBundle.discountLabel || ''}
@@ -5812,7 +6123,7 @@ function CatalogOverlay({
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                               <label className="text-[9px] font-black uppercase text-blue-600/50 ml-1">Type</label>
-                              <select 
+                              <select
                                 className="w-full bg-white border-2 border-blue-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                                 value={newBundle.discountType || ''}
                                 onChange={e => setNewBundle({...newBundle, discountType: e.target.value as any})}
@@ -5824,7 +6135,7 @@ function CatalogOverlay({
                             </div>
                             <div className="space-y-1.5">
                               <label className="text-[9px] font-black uppercase text-blue-600/50 ml-1">Value</label>
-                              <input 
+                              <input
                                 type="number"
                                 className="w-full bg-white border-2 border-blue-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                                 placeholder="0"
@@ -5855,14 +6166,14 @@ function CatalogOverlay({
                   </div>
 
                   <div className="flex gap-4 pt-4">
-                    <button 
-                      onClick={() => { setIsAddingBundle(false); setEditingBundleId(null); setNewBundle({name:'', productIds:[], discountLabel: 'Package Savings'}); }} 
+                    <button
+                      onClick={() => { setIsAddingBundle(false); setEditingBundleId(null); setNewBundle({name:'', productIds:[], discountLabel: 'Package Savings'}); }}
                       className="flex-1 py-4 text-sm font-black text-gray-500 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"
                     >
                       Cancel
                     </button>
-                    <button 
-                      onClick={addBundle} 
+                    <button
+                      onClick={addBundle}
                       className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl text-base font-black shadow-xl shadow-blue-200 hover:scale-[1.03] active:scale-[0.97] transition-all"
                     >
                       {editingBundleId ? 'Update Package' : 'Create Package'}
@@ -5876,7 +6187,7 @@ function CatalogOverlay({
             {catalog.bundles.map(b => {
               const { totalOriginal, discounted } = getBundlePrices(b);
               const savings = totalOriginal - discounted;
-              
+
               return (
                 <div key={b.id} className="bg-white border-2 border-[#E2E8F0] rounded-[32px] overflow-hidden shadow-sm group hover:border-blue-200 transition-all duration-300">
                   <div className="p-6">
@@ -5925,7 +6236,7 @@ function CatalogOverlay({
                     )}
 
                     <div className="flex border-t border-[#F1F5F9] -mx-6 -mb-6 mt-4">
-                      <button 
+                      <button
                         onClick={() => {
                           setNewBundle(b);
                           setEditingBundleId(b.id);
@@ -5936,7 +6247,7 @@ function CatalogOverlay({
                         <Edit3 className="w-3.5 h-3.5" />
                         Configure
                       </button>
-                      <button 
+                      <button
                         onClick={() => setCatalog(prev => ({ ...prev, bundles: prev.bundles.filter(i => i.id !== b.id) }))}
                         className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-red-400 hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
                       >
@@ -5960,7 +6271,7 @@ function CatalogOverlay({
 
 function TabButton({ active, onClick, label, icon: Icon }: { active: boolean, onClick: () => void, label: string, icon: any }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className={cn(
         "flex-1 flex flex-col items-center gap-1.5 py-4 border-b-2 transition-all",
@@ -6022,21 +6333,21 @@ function ActionButton({ icon: Icon, label, color }: { icon: any, label: string, 
   );
 }
 
-function SettingsOverlay({ 
-  settings, 
-  setSettings, 
-  catalog, 
-  setCatalog, 
-  team, 
-  setTeam, 
-  goals, 
-  setGoals, 
-  onClose, 
-  properties, 
+function SettingsOverlay({
+  settings,
+  setSettings,
+  catalog,
+  setCatalog,
+  team,
+  setTeam,
+  goals,
+  setGoals,
+  onClose,
+  properties,
   setPromptConfig,
   initialTab = 'business'
-}: { 
-  settings: AppSettings, 
+}: {
+  settings: AppSettings,
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>,
   catalog: AppState['catalog'],
   setCatalog: React.Dispatch<React.SetStateAction<AppState['catalog']>>,
@@ -6052,7 +6363,7 @@ function SettingsOverlay({
   const [activeConfig, setActiveConfig] = useState<'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'>(initialTab);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -6073,7 +6384,7 @@ function SettingsOverlay({
 
       <div className="flex border-b border-[#E2E8F0] overflow-x-auto no-scrollbar">
         {['business', 'general', 'targets', 'contact', 'catalog', 'labels', 'team'].map((tab) => (
-          <button 
+          <button
             key={tab}
             onClick={() => setActiveConfig(tab as any)}
             className={cn(
@@ -6093,33 +6404,33 @@ function SettingsOverlay({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2 space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Company Name</label>
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                   value={settings.businessInfo.name}
                   onChange={(e) => setSettings(prev => ({
-                    ...prev, 
+                    ...prev,
                     businessInfo: { ...prev.businessInfo, name: e.target.value }
                   }))}
                 />
               </div>
               <div className="md:col-span-2 space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Street Address</label>
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                   value={settings.businessInfo.address}
                   onChange={(e) => setSettings(prev => ({
-                    ...prev, 
+                    ...prev,
                     businessInfo: { ...prev.businessInfo, address: e.target.value }
                   }))}
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">City</label>
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                   value={settings.businessInfo.city}
                   onChange={(e) => setSettings(prev => ({
-                    ...prev, 
+                    ...prev,
                     businessInfo: { ...prev.businessInfo, city: e.target.value }
                   }))}
                 />
@@ -6127,22 +6438,22 @@ function SettingsOverlay({
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">State</label>
-                  <input 
+                  <input
                     className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                     value={settings.businessInfo.state}
                     onChange={(e) => setSettings(prev => ({
-                      ...prev, 
+                      ...prev,
                       businessInfo: { ...prev.businessInfo, state: e.target.value }
                     }))}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Zip</label>
-                  <input 
+                  <input
                     className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                     value={settings.businessInfo.zip}
                     onChange={(e) => setSettings(prev => ({
-                      ...prev, 
+                      ...prev,
                       businessInfo: { ...prev.businessInfo, zip: e.target.value }
                     }))}
                   />
@@ -6150,22 +6461,22 @@ function SettingsOverlay({
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Phone</label>
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                   value={settings.businessInfo.phone}
                   onChange={(e) => setSettings(prev => ({
-                    ...prev, 
+                    ...prev,
                     businessInfo: { ...prev.businessInfo, phone: e.target.value }
                   }))}
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Email</label>
-                <input 
+                <input
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                   value={settings.businessInfo.email}
                   onChange={(e) => setSettings(prev => ({
-                    ...prev, 
+                    ...prev,
                     businessInfo: { ...prev.businessInfo, email: e.target.value }
                   }))}
                 />
@@ -6183,7 +6494,7 @@ function SettingsOverlay({
             <div className="space-y-5 bg-white border border-[#E2E8F0] p-6 rounded-2xl shadow-sm">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Weekly Territory Knocks Target</label>
-                <input 
+                <input
                   type="number"
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all font-mono"
                   value={settings.operationalTargets?.weeklyKnocks ?? 40}
@@ -6202,7 +6513,7 @@ function SettingsOverlay({
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Monthly Converted Clients Target</label>
-                <input 
+                <input
                   type="number"
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all font-mono"
                   value={settings.operationalTargets?.monthlyConverted ?? 15}
@@ -6221,7 +6532,7 @@ function SettingsOverlay({
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Weekly Collection Target ($)</label>
-                <input 
+                <input
                   type="number"
                   className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all font-mono"
                   value={settings.operationalTargets?.collectionGoal ?? 3000}
@@ -6245,6 +6556,26 @@ function SettingsOverlay({
         {activeConfig === 'general' && (
           <div className="space-y-8">
             <section>
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Default Premises Type</h3>
+              <div className="grid grid-cols-2 gap-2 p-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl">
+                {(['Residential', 'Commercial'] as PropertyType[]).map(type => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setSettings(prev => ({ ...prev, defaultPremisesType: type }))}
+                    className={cn(
+                      "py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                      (settings.defaultPremisesType || 'Residential') === type
+                        ? "bg-white text-blue-600 shadow-sm border border-[#E2E8F0]"
+                        : "text-slate-400"
+                    )}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section>
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Observable Tags</h3>
               <div className="flex flex-wrap gap-2 mb-4">
                 {settings.tags.map(tag => (
@@ -6257,7 +6588,7 @@ function SettingsOverlay({
                 ))}
               </div>
               <div className="flex gap-2">
-                <input 
+                <input
                   id="new-tag-input"
                   className="flex-1 bg-white border border-[#E2E8F0] rounded-xl px-4 py-2 text-xs font-bold"
                   placeholder="Add new tag (e.g. Solar Ready)"
@@ -6297,7 +6628,7 @@ function SettingsOverlay({
                         <p className="text-[10px] font-bold text-gray-400 uppercase">System Required • {field.type}</p>
                       </div>
                     </div>
-                    <button 
+                    <button
                       onClick={() => {
                         setPromptConfig({
                           title: 'Rename Field',
@@ -6328,9 +6659,9 @@ function SettingsOverlay({
                 {settings.contactFields.map(field => (
                   <div key={field.id} className="p-4 bg-white border border-[#E2E8F0] rounded-2xl flex items-center justify-between shadow-sm">
                     <div className="flex items-center gap-4">
-                      <button 
+                      <button
                         onClick={() => setSettings(prev => ({
-                          ...prev, 
+                          ...prev,
                           contactFields: prev.contactFields.map(f => f.id === field.id ? { ...f, visible: !f.visible } : f)
                         }))}
                         className={cn(
@@ -6351,7 +6682,7 @@ function SettingsOverlay({
                       </div>
                     </div>
                     <div className="flex gap-1">
-                      <button 
+                      <button
                         onClick={() => {
                           setPromptConfig({
                             title: 'Field Options',
@@ -6427,7 +6758,7 @@ function SettingsOverlay({
                   </div>
                 ))}
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setPromptConfig({
                     title: 'New Custom Field',
@@ -6468,11 +6799,11 @@ function SettingsOverlay({
                                   ],
                                   defaultValue: 'Contact',
                                   onConfirm: (scope) => {
-                                    const newField: AppSettings['contactFields'][0] = { 
-                                      id: uuidv4(), 
-                                      label, 
-                                      type: type as any, 
-                                      required: false, 
+                                    const newField: AppSettings['contactFields'][0] = {
+                                      id: uuidv4(),
+                                      label,
+                                      type: type as any,
+                                      required: false,
                                       visible: true,
                                       applicableTo: applicableTo as any,
                                       scope: scope as any
@@ -6513,7 +6844,7 @@ function SettingsOverlay({
                         <p className="text-[10px] font-bold text-gray-400 uppercase">{d.type === 'percentage' ? `${d.value}% Off` : `$${d.value} Off`}</p>
                       </div>
                       <div className="flex gap-1">
-                        <button 
+                        <button
                           onClick={() => {
                             setPromptConfig({
                               title: 'Rename Discount',
@@ -6538,7 +6869,7 @@ function SettingsOverlay({
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => setSettings(prev => ({...prev, discounts: prev.discounts.filter(i => i.id !== d.id)}))}
                           className="p-2 text-gray-300 hover:text-red-500"
                         >
@@ -6548,7 +6879,7 @@ function SettingsOverlay({
                     </div>
                   ))}
                 </div>
-                <button 
+                <button
                   onClick={() => {
                     setPromptConfig({
                       title: 'New Discount',
@@ -6600,14 +6931,47 @@ function SettingsOverlay({
                 {Object.entries(settings.labels.stages).map(([key, value]) => (
                   <div key={key} className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase text-blue-600/50 ml-1">{key}</label>
-                    <input 
-                      className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all capitalize"
-                      value={value}
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        className="h-12 w-14 bg-white border border-[#E2E8F0] rounded-xl p-1 shadow-sm"
+                        value={settings.stageConfig?.[key as PropertyStage]?.color || DEFAULT_STAGE_COLORS[key as PropertyStage]}
+                        onChange={(e) => setSettings(prev => ({
+                          ...prev,
+                          stageConfig: {
+                            ...(prev.stageConfig || createDefaultSettings().stageConfig),
+                            [key]: {
+                              color: e.target.value,
+                              description: prev.stageConfig?.[key as PropertyStage]?.description || ''
+                            }
+                          }
+                        }))}
+                        title={`${value} color`}
+                      />
+                      <input
+                        className="min-w-0 flex-1 bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all capitalize"
+                        value={value}
+                        onChange={(e) => setSettings(prev => ({
+                          ...prev,
+                          labels: {
+                            ...prev.labels,
+                            stages: { ...prev.labels.stages, [key]: e.target.value }
+                          }
+                        }))}
+                      />
+                    </div>
+                    <textarea
+                      className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-xs font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all min-h-[72px]"
+                      placeholder="Stage description shown as an explanation for reps..."
+                      value={settings.stageConfig?.[key as PropertyStage]?.description || ''}
                       onChange={(e) => setSettings(prev => ({
-                        ...prev, 
-                        labels: { 
-                          ...prev.labels, 
-                          stages: { ...prev.labels.stages, [key]: e.target.value }
+                        ...prev,
+                        stageConfig: {
+                          ...(prev.stageConfig || createDefaultSettings().stageConfig),
+                          [key]: {
+                            color: prev.stageConfig?.[key as PropertyStage]?.color || DEFAULT_STAGE_COLORS[key as PropertyStage],
+                            description: e.target.value
+                          }
                         }
                       }))}
                     />
@@ -6622,11 +6986,11 @@ function SettingsOverlay({
                 {Object.entries(settings.labels).filter(([key]) => key !== 'stages').map(([key, value]) => (
                   <div key={key} className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase text-gray-400 ml-1">{key}</label>
-                    <input 
+                    <input
                       className="w-full bg-white border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all"
                       value={value as string}
                       onChange={(e) => setSettings(prev => ({
-                        ...prev, 
+                        ...prev,
                         labels: { ...prev.labels, [key]: e.target.value }
                       }))}
                     />
@@ -6641,7 +7005,7 @@ function SettingsOverlay({
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Team Members</h3>
-              <button 
+              <button
                 onClick={() => {
                   setPromptConfig({
                     title: 'Add Team Member',
@@ -6688,9 +7052,9 @@ function SettingsOverlay({
                         <span className="text-[10px] font-bold text-gray-400 uppercase">{goal.period}</span>
                       </div>
                       <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-600 transition-all duration-500" 
-                          style={{ width: `${Math.min(100, (goal.current / goal.target) * 100)}%` }} 
+                        <div
+                          className="h-full bg-blue-600 transition-all duration-500"
+                          style={{ width: `${Math.min(100, (goal.current / goal.target) * 100)}%` }}
                         />
                       </div>
                       <div className="flex justify-between items-center mt-2">
@@ -6701,11 +7065,11 @@ function SettingsOverlay({
                   );
                 })}
               </div>
-              <button 
+              <button
                 onClick={() => {
                   const memberId = team[0]?.id; // Default to first
                   if (!memberId) return alert('Add team members first');
-                  
+
                   setPromptConfig({
                     title: 'New Goal',
                     message: 'Enter target amount',
@@ -6762,7 +7126,7 @@ function TeamOverlay({ team, goals, properties, settings, onClose }: {
   }, [properties]);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -6816,7 +7180,7 @@ function TeamOverlay({ team, goals, properties, settings, onClose }: {
                       <p className="text-xs font-bold text-blue-600">
                         {Math.floor(stats.totalVolume / team.length * (1 - (i*0.2))).toLocaleString()}$
                       </p>
-                      <button 
+                      <button
                         className="text-[9px] font-bold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded mt-1 hover:bg-blue-100 transition-colors"
                         onClick={() => alert(`Connecting Google Account for ${member.name}...`)}
                       >
@@ -6852,7 +7216,7 @@ function TeamOverlay({ team, goals, properties, settings, onClose }: {
                      <span>{Math.round((progress / goal.target) * 100)}%</span>
                    </div>
                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                     <div 
+                     <div
                        className="h-full bg-blue-600 transition-all duration-1000"
                        style={{ width: `${Math.min(100, (progress / goal.target) * 100)}%` }}
                      />
@@ -6875,10 +7239,7 @@ function TeamOverlay({ team, goals, properties, settings, onClose }: {
 
 
 const STAGE_COLORS: Record<PropertyStage, string> = {
-  prospect: '#94a3b8',    // Slate/Gray - Not worked yet
-  lead: '#3b82f6',        // Blue - Contacted/Warm
-  opportunity: '#f59e0b', // Amber - Hot/Quote Sent
-  customer: '#10b981'     // Emerald - Closed/Customer
+  ...DEFAULT_STAGE_COLORS
 };
 
 // --- Scheduling & Calendar UI ---
@@ -6897,7 +7258,7 @@ function SaleOverlay({
   const [notes, setNotes] = useState('');
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -6905,7 +7266,7 @@ function SaleOverlay({
       className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-sm flex justify-end"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white w-full max-w-5xl h-full shadow-2xl flex flex-col"
         onClick={e => e.stopPropagation()}
       >
@@ -6920,7 +7281,7 @@ function SaleOverlay({
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Sale Amount ($)</label>
-              <input 
+              <input
                 type="number"
                 className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-lg font-black focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
                 placeholder="0.00"
@@ -6930,7 +7291,7 @@ function SaleOverlay({
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Product/Service Sold</label>
-              <input 
+              <input
                 className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
                 placeholder="e.g. Solar Installation"
                 value={product}
@@ -6939,7 +7300,7 @@ function SaleOverlay({
             </div>
           </div>
 
-          <button 
+          <button
             onClick={() => {
               if (!amount || !product) return;
               onSave({
@@ -7007,7 +7368,7 @@ function QuoteOverlay({
   };
 
   const updateQuantity = (id: string, delta: number) => {
-    setItems(prev => prev.map(item => 
+    setItems(prev => prev.map(item =>
       item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
     ));
   };
@@ -7029,7 +7390,7 @@ function QuoteOverlay({
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -7050,7 +7411,7 @@ function QuoteOverlay({
         </div>
         <div className="flex items-center gap-3">
           {step === 'preview' && (
-            <button 
+            <button
               onClick={() => setStep('build')}
               className="text-[10px] font-black text-blue-600 uppercase tracking-widest"
             >
@@ -7074,7 +7435,7 @@ function QuoteOverlay({
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4 block">Recommended Bundles</label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {catalog.bundles.map(b => (
-                      <button 
+                      <button
                         key={b.id}
                         onClick={() => addBundle(b)}
                         className="bg-white p-6 rounded-3xl border border-blue-100 shadow-sm transition-all hover:shadow-md hover:border-blue-400 text-left group flex flex-col justify-between h-full"
@@ -7104,7 +7465,7 @@ function QuoteOverlay({
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4 block">A La Carte Items</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {catalog.products.map(p => (
-                    <button 
+                    <button
                       key={p.id}
                       onClick={() => addProduct(p)}
                       className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:border-blue-300 transition-all text-left flex justify-between items-center group active:scale-[0.98]"
@@ -7129,7 +7490,7 @@ function QuoteOverlay({
                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] leading-none mb-1">Subtotal</span>
                    <span className="text-2xl font-black text-slate-900">${subtotal.toLocaleString()}</span>
                  </div>
-                 <button 
+                 <button
                    disabled={items.length === 0}
                    onClick={() => setStep('preview')}
                    className="flex-1 h-16 bg-blue-600 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 active:scale-95 transition-all flex items-center justify-center gap-3"
@@ -7170,7 +7531,7 @@ function QuoteOverlay({
                 {/* Notes Section */}
                 <div className="space-y-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Quote Description / Notes</label>
-                  <textarea 
+                  <textarea
                     autoFocus
                     className="w-full bg-white border border-slate-200 rounded-3xl p-6 text-sm font-bold min-h-[150px] focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300"
                     placeholder="Include specific installation details or warranty information..."
@@ -7188,7 +7549,7 @@ function QuoteOverlay({
                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Commercial Estimate</span>
                   <span className="text-3xl font-black text-slate-900">${subtotal.toLocaleString()}</span>
                 </div>
-                <button 
+                <button
                   onClick={handleSave}
                   className="w-full h-16 bg-blue-600 text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-blue-200/50 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-4"
                 >
@@ -7204,20 +7565,20 @@ function QuoteOverlay({
   );
 }
 
-function CalendarOverlay({ 
-  property, 
-  team, 
-  googleTokens, 
-  onConnect, 
-  onSchedule, 
-  onClose 
-}: { 
+function CalendarOverlay({
+  property,
+  team,
+  googleTokens,
+  onConnect,
+  onSchedule,
+  onClose
+}: {
   property: PropertyContact,
   team: Member[],
   googleTokens: Record<string, string>,
   onConnect: (id: string) => void,
   onSchedule: (id: string, details: any) => void,
-  onClose: () => void 
+  onClose: () => void
 }) {
   const [selectedMemberId, setSelectedMemberId] = useState(team[0]?.id || '');
   const [useRoundRobin, setUseRoundRobin] = useState(true);
@@ -7231,7 +7592,7 @@ function CalendarOverlay({
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
@@ -7239,7 +7600,7 @@ function CalendarOverlay({
       className="fixed inset-0 z-[4000] bg-black/40 backdrop-blur-sm flex justify-end"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white w-full max-w-xl h-full shadow-2xl flex flex-col"
         onClick={e => e.stopPropagation()}
       >
@@ -7257,7 +7618,7 @@ function CalendarOverlay({
           <div>
             <label className="text-[10px] font-extrabold uppercase text-[#94A3B8] mb-3 block">Assign To</label>
             <div className="flex gap-2 p-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
-              <button 
+              <button
                 onClick={() => setUseRoundRobin(true)}
                 className={cn(
                   "flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2",
@@ -7267,7 +7628,7 @@ function CalendarOverlay({
                 <Zap className="w-3.5 h-3.5" />
                 Round Robin
               </button>
-              <button 
+              <button
                 onClick={() => setUseRoundRobin(false)}
                 className={cn(
                   "flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2",
@@ -7306,25 +7667,25 @@ function CalendarOverlay({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[10px] font-extrabold uppercase text-[#94A3B8] mb-2 block">Date</label>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={date}
                 onChange={e => setDate(e.target.value)}
-                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold" 
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold"
               />
             </div>
             <div>
               <label className="text-[10px] font-extrabold uppercase text-[#94A3B8] mb-2 block">Time</label>
-              <input 
-                type="time" 
+              <input
+                type="time"
                 value={time}
                 onChange={e => setTime(e.target.value)}
-                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold" 
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-sm font-bold"
               />
             </div>
           </div>
 
-          <button 
+          <button
             onClick={() => {
               const start = new Date(`${date}T${time}`).getTime();
               onSchedule(useRoundRobin ? team[0].id : selectedMemberId, {

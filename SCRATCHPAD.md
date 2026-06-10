@@ -1,6 +1,29 @@
 # Scratchpad
 
 ## 2026-06-10 — Current Objective
+**Task:** Implement the approved PRD slices for Route Creation, stage/sub-status, contact read/edit/idempotency foundation, and safe move/merge database foundation.
+**Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-crm-core.spec.md`, `/specs/scheduling-routes.spec.md`, `/specs/contact-address-move-and-merge.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and impacted specs.
+- [x] Inspect current React route/contact/stage code and Supabase migrations.
+- [x] Implement Route Creation naming, save prompt, progress, marker shape, and non-Google satellite layer.
+- [x] Implement stage/sub-status UI/state helpers and scheduled appointment behavior where reachable.
+- [x] Implement contact read/edit shell and Add Contact idempotency guard.
+- [x] Add new migration for contact normalization/move-merge RPC foundation without altering applied migrations.
+- [x] Run verification.
+- [ ] Commit, push, and deploy if verification passes.
+
+## Assumptions
+- Full move/merge UI may require a second pass after the database RPC foundation because it is the riskiest data path.
+- Route Creation can continue to use existing address persistence bridge while route tables are normalized later.
+- Satellite layer should use a working non-Google provider and remain session-only.
+- Supabase MCP auth is expired, so migration `007_contact_move_stage_route_foundation.sql` could not be applied from this session; frontend sub-status persistence uses the existing Supabase `custom_data` bridge until that migration is applied.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-10 — Current Objective
 **Task:** Convert the Contact Record Redesign / Stage System / Address Move / Route Fixes PRD decisions into implementation-ready specs before coding.
 **Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-crm-core.spec.md`, `/specs/scheduling-routes.spec.md`, `/specs/contact-address-move-and-merge.spec.md`
 

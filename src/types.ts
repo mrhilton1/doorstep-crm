@@ -1,5 +1,6 @@
 export type PropertyStatus = 'Not Visited' | 'Knocked' | 'No Answer' | 'Interested' | 'Follow-Up Needed';
 export type PropertyType = 'Residential' | 'Commercial';
+export type PropertySubStatus = 'not_interested' | 'loss' | 'scheduled';
 
 export interface Contact {
   id: string;
@@ -115,6 +116,17 @@ export interface Settings {
   discounts: Discount[];
   labels: AppLabels;
   businessInfo: BusinessInfo;
+  defaultPremisesType?: PropertyType;
+  stageConfig?: Record<PropertyStage, {
+    color: string;
+    description: string;
+  }>;
+  subStatusConfig?: Record<PropertySubStatus, {
+    label: string;
+    parentStages: PropertyStage[];
+    color: string;
+    description: string;
+  }>;
   operationalTargets?: {
     weeklyKnocks: number;
     monthlyConverted: number;
@@ -209,6 +221,9 @@ export interface PropertyContact {
   invoices?: Invoice[];
   customData?: Record<string, any>;
   stage: PropertyStage;
+  subStatus?: PropertySubStatus | null;
+  subStatusSetAt?: number | null;
+  subStatusSetBy?: string | null;
   updatedAt: number;
   createdAt: number;
 }

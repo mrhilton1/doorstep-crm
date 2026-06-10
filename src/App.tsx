@@ -7985,6 +7985,13 @@ function QuoteOverlay({
     ));
   };
 
+  const setItemQuantity = (id: string, rawValue: string) => {
+    const nextQuantity = Math.max(1, Math.floor(Number(rawValue) || 1));
+    setItems(prev => prev.map(item =>
+      item.id === id ? { ...item, quantity: nextQuantity } : item
+    ));
+  };
+
   const handleSave = () => {
     if (items.length === 0) return;
     const quote: Quote = {
@@ -8123,12 +8130,25 @@ function QuoteOverlay({
                   <div className="divide-y divide-slate-200/50">
                     {items.map(item => (
                       <div key={item.id} className="py-4 flex items-center gap-4 group">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-200 shrink-0 font-black text-xs">
-                          {item.quantity}x
+                        <div className="w-20 shrink-0">
+                          <label className="block text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1 text-center">
+                            Qty
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={item.quantity}
+                            onChange={event => setItemQuantity(item.id, event.target.value)}
+                            className="w-full h-10 bg-white rounded-xl border border-slate-200 text-center font-black text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                            aria-label={`Quantity for ${item.name}`}
+                          />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-black text-slate-800 uppercase tracking-tight truncate">{item.name}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">${(item.price * item.quantity).toLocaleString()}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                            ${item.price.toLocaleString()} each • ${(item.price * item.quantity).toLocaleString()} line total
+                          </p>
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-slate-200 rounded-lg"><MinusCircle className="w-4 h-4 text-slate-400" /></button>

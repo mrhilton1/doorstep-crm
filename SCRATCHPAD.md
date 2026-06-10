@@ -12,7 +12,7 @@
 - [x] Make the map route icon toggle route-builder mode on/off.
 - [x] Stop map control click/pointer events from reaching the map.
 - [x] Run verification.
-- [ ] Commit, push, and deploy if verification passes.
+- [x] Commit, push, and deploy if verification passes.
 
 ## Assumptions
 - The right-side route icon should mean "build/select route addresses" rather than only "show route overlay."

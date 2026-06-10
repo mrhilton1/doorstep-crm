@@ -33,6 +33,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Invoices use dedicated tables with JSON adjustment/line data for MVP.
 - Record Transaction remains the action label when text is shown.
 - Compact action controls should sit in the top-right stage/header area beside the stage progress dots; do not use a bottom floating footer that covers record content.
+- App-level navigation should be a shared shell-level hamburger menu, not separate floating account/nav controls per page.
 - All sections and CTAs must be role-ready via a config object, defaulting visible/editable for MVP.
 
 ## Edge Cases
@@ -78,8 +79,10 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-09: Keep Record Transaction action.
 - 2026-06-09: Notes use dedicated `doorstep.notes` with related `doorstep.activities` feed entries.
 - 2026-06-10: Move Schedule, Quote, and Transaction actions to top-right icon buttons beside the stage progress dots; remove the bottom floating action bar.
+- 2026-06-10: Replace the oversized floating workspace pill with a shared hamburger navigation menu in the app shell.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.
 - 2026-06-09: First implementation slice added role-ready section config, normalized schema foundation, unified dashboard entry routing, event-note persistence, and compact sticky address actions.
 - 2026-06-10: Corrected quick-action placement from bottom sticky bar to top-right icon cluster.
+- 2026-06-10: Added shared shell hamburger nav and reserved page-header space to avoid top-right collisions.

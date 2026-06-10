@@ -468,7 +468,7 @@ export default function HomeDashboard({
         <div className="flex-1 max-w-7xl mx-auto w-full p-6 space-y-6 pb-24 animate-in fade-in duration-300">
           
           {/* Dashboard Header Banner */}
-          <div className="bg-white border border-[#E2E8F0] p-6 rounded-3xl flex flex-col md:flex-row md:items-center md:justify-between gap-6 shadow-sm">
+          <div className="bg-white border border-[#E2E8F0] p-6 pr-20 rounded-3xl flex flex-col md:flex-row md:items-center md:justify-between gap-6 shadow-sm">
             <div>
               <div className="flex items-center gap-1.5 mb-1 bg-blue-50 text-[#2563EB] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full w-fit">
                 <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Live Operational Systems
@@ -805,7 +805,7 @@ export default function HomeDashboard({
         <div className="flex-1 w-full flex flex-col h-full min-h-0 animate-in fade-in duration-300">
           
           {/* Top Search Controls Header bar */}
-          <div className="bg-white border-b border-[#E2E8F0] p-6 shrink-0 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="bg-white border-b border-[#E2E8F0] p-6 pr-20 shrink-0 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <span className="text-[10px] font-black uppercase text-[#2563EB] tracking-wider bg-blue-50 px-2.5 py-1 rounded-full w-fit block mb-1">
                 CRM Client Database
@@ -1000,7 +1000,7 @@ export default function HomeDashboard({
       {activeTab === 'appointments' && (
         <div className="flex-1 w-full p-6 space-y-6 pb-24 animate-in fade-in duration-300 max-w-7xl mx-auto">
           
-          <div className="bg-white border border-[#E2E8F0] p-6 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="bg-white border border-[#E2E8F0] p-6 pr-20 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <span className="text-[10.5px] font-black bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full uppercase tracking-wider block mb-1 w-fit">
                 Field Agenda Schedule

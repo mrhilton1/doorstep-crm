@@ -384,6 +384,142 @@ const getStatusForEvent = (payload: LiveEventPayload, currentStatus: PropertySta
   return currentStatus;
 };
 
+type AppHeaderNavProps = {
+  workspaceId: string | null;
+  workspaceName: string;
+  userEmail: string | null;
+  dataStatus: 'local' | 'loading' | 'synced' | 'error';
+  dataError: string | null;
+  currentView: string;
+  isProspectsOpen: boolean;
+  isCatalogOpen: boolean;
+  isSettingsOpen: boolean;
+  isOverdueInvoicesOpen: boolean;
+  onOpenDashboard: () => void;
+  onOpenContacts: () => void;
+  onOpenMap: () => void;
+  onOpenAppointments: () => void;
+  onOpenRoutes: () => void;
+  onOpenCatalog: () => void;
+  onOpenInvoices: () => void;
+  onOpenSettings: () => void;
+  onSignOut: () => void;
+};
+
+function AppHeaderNav({
+  workspaceId,
+  workspaceName,
+  userEmail,
+  dataStatus,
+  dataError,
+  currentView,
+  isProspectsOpen,
+  isCatalogOpen,
+  isSettingsOpen,
+  isOverdueInvoicesOpen,
+  onOpenDashboard,
+  onOpenContacts,
+  onOpenMap,
+  onOpenAppointments,
+  onOpenRoutes,
+  onOpenCatalog,
+  onOpenInvoices,
+  onOpenSettings,
+  onSignOut,
+}: AppHeaderNavProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const runAndClose = (action: () => void) => {
+    action();
+    setIsOpen(false);
+  };
+  const navItems = [
+    { label: 'Home', icon: <Home className="w-4 h-4" />, onClick: onOpenDashboard, active: currentView === 'dashboard' },
+    { label: 'Contacts', icon: <Users className="w-4 h-4" />, onClick: onOpenContacts, active: currentView === 'contacts' },
+    { label: 'Map', icon: <MapIcon className="w-4 h-4" />, onClick: onOpenMap, active: currentView === 'map' },
+    { label: 'Schedule', icon: <Calendar className="w-4 h-4" />, onClick: onOpenAppointments, active: currentView === 'appointments' },
+    { label: 'Routes', icon: <Navigation className="w-4 h-4" />, onClick: onOpenRoutes, active: isProspectsOpen },
+    { label: 'Catalog', icon: <Package className="w-4 h-4" />, onClick: onOpenCatalog, active: isCatalogOpen },
+    { label: 'Invoices', icon: <DollarSign className="w-4 h-4" />, onClick: onOpenInvoices, active: isOverdueInvoicesOpen },
+    { label: 'Settings', icon: <SettingsIcon className="w-4 h-4" />, onClick: onOpenSettings, active: isSettingsOpen },
+  ];
+
+  return (
+    <div className="absolute top-3 right-3 z-[1400]">
+      <button
+        type="button"
+        onClick={() => setIsOpen(prev => !prev)}
+        className="h-11 w-11 rounded-2xl bg-white/95 border border-slate-200 shadow-lg text-slate-700 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
+        title="Open navigation"
+        aria-label="Open navigation"
+        aria-expanded={isOpen}
+      >
+        {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-[1390]" onClick={() => setIsOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              transition={{ duration: 0.15 }}
+              className="absolute top-14 right-0 z-[1410] w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-300/50 overflow-hidden p-2"
+            >
+              <div className="px-3 py-3 border-b border-slate-100 mb-1">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{workspaceName}</p>
+                    <p className="text-xs font-bold text-slate-700 truncate">
+                      {userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      'h-2.5 w-2.5 rounded-full shrink-0',
+                      dataStatus === 'error' ? 'bg-red-500' : dataStatus === 'loading' ? 'bg-yellow-400' : workspaceId ? 'bg-green-500' : 'bg-slate-300'
+                    )}
+                    title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1">
+                {navItems.map(item => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => runAndClose(item.onClick)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-black uppercase tracking-wider transition-all",
+                      item.active ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-50"
+                    )}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {workspaceId && (
+                <button
+                  type="button"
+                  onClick={() => runAndClose(onSignOut)}
+                  className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl bg-slate-100 text-slate-700 px-3 py-2 text-[11px] font-black uppercase tracking-wider hover:bg-slate-200 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </button>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 const createDefaultCatalog = (): { products: Product[], bundles: Bundle[] } => ({
   products: [
     { id: 'p1', name: 'Standard Solar Panel', price: 500, description: 'Single efficiency panel', category: 'Solar' },
@@ -2360,32 +2496,61 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     workingRouteId ? routes.find(r => r.id === workingRouteId) : null
   , [workingRouteId, routes]);
 
+  const closeAppOverlays = () => {
+    setIsProspectsOpen(false);
+    setIsLeadsOpen(false);
+    setIsCatalogOpen(false);
+    setIsSettingsOpen(false);
+    setIsMoreMenuOpen(false);
+  };
+
+  const openAppView = (view: 'dashboard' | 'contacts' | 'map' | 'appointments') => {
+    closeAppOverlays();
+    setCurrentView(view as any);
+  };
+
+  const openAppRoutes = () => {
+    closeAppOverlays();
+    setIsProspectsOpen(true);
+  };
+
+  const openAppCatalog = () => {
+    closeAppOverlays();
+    setIsCatalogOpen(true);
+  };
+
+  const openAppSettings = () => {
+    closeAppOverlays();
+    setIsSettingsOpen(true);
+  };
+
+  const openAppOverdueInvoices = () => {
+    setIsOverdueInvoicesOpen(true);
+  };
+
   return (
     <div id="top-brand-main" className="flex flex-col h-screen bg-[#F1F5F9] relative overflow-hidden text-[#1E293B]">
-      <div className="absolute top-3 right-3 z-[900] flex items-center gap-2 bg-white/95 border border-slate-200 shadow-lg rounded-xl px-3 py-2">
-        <div className="hidden sm:block text-right">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{workspaceName}</p>
-          <p className="text-xs font-bold text-slate-600 max-w-[180px] truncate">
-            {userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}
-          </p>
-        </div>
-        <div
-          className={cn(
-            'h-2.5 w-2.5 rounded-full',
-            dataStatus === 'error' ? 'bg-red-500' : dataStatus === 'loading' ? 'bg-yellow-400' : workspaceId ? 'bg-green-500' : 'bg-slate-300'
-          )}
-          title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')}
-        />
-        {workspaceId && (
-          <button
-            onClick={onSignOut}
-            title="Sign out"
-            className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors"
-          >
-            <LogOut size={16} />
-          </button>
-        )}
-      </div>
+      <AppHeaderNav
+        workspaceId={workspaceId}
+        workspaceName={workspaceName}
+        userEmail={userEmail}
+        dataStatus={dataStatus}
+        dataError={dataError}
+        currentView={currentView}
+        isProspectsOpen={isProspectsOpen}
+        isCatalogOpen={isCatalogOpen}
+        isSettingsOpen={isSettingsOpen}
+        isOverdueInvoicesOpen={isOverdueInvoicesOpen}
+        onOpenDashboard={() => openAppView('dashboard')}
+        onOpenContacts={() => openAppView('contacts')}
+        onOpenMap={() => openAppView('map')}
+        onOpenAppointments={() => openAppView('appointments')}
+        onOpenRoutes={openAppRoutes}
+        onOpenCatalog={openAppCatalog}
+        onOpenInvoices={openAppOverdueInvoices}
+        onOpenSettings={openAppSettings}
+        onSignOut={onSignOut}
+      />
 
       {currentView !== 'map' ? (
         <HomeDashboard 

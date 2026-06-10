@@ -1,6 +1,28 @@
 # Scratchpad
 
 ## 2026-06-10 — Current Objective
+**Task:** Replace the top-right floating workspace pill with a shared hamburger navigation menu that does not cover page actions.
+**Target spec:** `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and relevant specs.
+- [x] Inspect current app/page header ownership.
+- [x] Add shared app-shell hamburger nav component.
+- [x] Remove oversized floating workspace pill.
+- [x] Wire menu actions to existing page/navigation handlers.
+- [x] Reserve header space where needed so page buttons are not covered.
+- [x] Run verification.
+- [ ] Commit, push, and deploy if verification passes.
+
+## Assumptions
+- This pass should avoid rewriting all page headers; the shared hamburger can live at the app shell level and control existing views/actions.
+- Existing bottom nav can remain until we intentionally replace it.
+- The menu should show workspace/user status and sign out without permanently occupying header width.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-10 — Current Objective
 **Task:** Move Unified Address Record quick actions out of the floating footer and into top-right icon buttons beside the stage progress dots.
 **Target spec:** `/specs/unified-address-record.spec.md`
 

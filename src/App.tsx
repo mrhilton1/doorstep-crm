@@ -1708,6 +1708,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const [goals, setGoals] = useState<Goal[]>([]);
 
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [pendingActivityProperty, setPendingActivityProperty] = useState<PropertyContact | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -2236,8 +2237,9 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   // Address persistence is handled by the Supabase sync effect above.
 
   const selectedProperty = useMemo(() =>
-    properties.find(p => p.id === selectedPropertyId),
-  [properties, selectedPropertyId]);
+    properties.find(p => p.id === selectedPropertyId) ||
+    (pendingActivityProperty?.id === selectedPropertyId ? pendingActivityProperty : undefined),
+  [pendingActivityProperty, properties, selectedPropertyId]);
 
   // Helpers
   const addProductToQuote = (product: Product) => {
@@ -2389,12 +2391,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         return;
       }
 
-      // Logic for ascension: if we click non-selection mode (knocking) and it's a prospect, upgrade to lead
-      if (!isSelectionMode && existing.stage === 'prospect') {
-        updateProperty(existing.id, { stage: 'lead' });
-      }
-
       if (!isSelectionMode) {
+        setPendingActivityProperty(null);
         setSelectedPropertyId(existing.id);
         setIsDrawerOpen(true);
       }
@@ -2425,6 +2423,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         if (existingByAddr) {
           const existingAddressDistance = distanceMeters([existingByAddr.lat, existingByAddr.lng], [lat, lng]);
           if (existingAddressDistance <= ADDRESS_CLICK_HIT_RADIUS_METERS) {
+            setPendingActivityProperty(null);
             setSelectedPropertyId(existingByAddr.id);
             setIsDrawerOpen(true);
             return;
@@ -2485,49 +2484,36 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       };
 
       if (!isSelectionMode) {
-        setPromptConfig({
-          title: 'Add New Lead',
-          type: 'form',
-          defaultValue: address.trim().replace(/, ,/g, ','),
-          fields: [
-            { key: 'address', label: 'Home Address' },
-            { key: 'firstName', label: 'First Name' },
-            { key: 'lastName', label: 'Last Name' },
-            { key: 'phone', label: 'Phone', type: 'tel' },
-            { key: 'email', label: 'Email', type: 'email' },
-          ],
-          onConfirm: (dataStr) => {
-            const data = JSON.parse(dataStr);
-            const newProperty: PropertyContact = {
-              id: uuidv4(),
-              address: data.address || address.trim().replace(/, ,/g, ','),
-              firstName: data.firstName || '',
-              lastName: data.lastName || '',
-              phone: data.phone || '',
-              email: data.email || '',
-              role: '',
-              isDecisionMaker: false,
-              lat,
-              lng,
-              status: 'Not Visited',
-              type: settings.defaultPremisesType || 'Residential',
-              notes: '',
-              tags: [],
-              contacts: [],
-              quotes: [],
-              sales: [],
-              interactions: [],
-              appointments: [],
-              stage: 'lead',
-              subStatus: null,
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            };
-            setProperties(prev => [newProperty, ...prev]);
-            setSelectedPropertyId(newProperty.id);
-            setIsDrawerOpen(true);
-          }
-        });
+        const draftProperty: PropertyContact = {
+          id: uuidv4(),
+          address: address.trim().replace(/, ,/g, ','),
+          firstName: '',
+          lastName: '',
+          phone: '',
+          email: '',
+          role: '',
+          isDecisionMaker: false,
+          lat,
+          lng,
+          status: 'Not Visited',
+          type: settings.defaultPremisesType || 'Residential',
+          notes: '',
+          tags: [],
+          contacts: [],
+          quotes: [],
+          sales: [],
+          interactions: [],
+          appointments: [],
+          stage: 'prospect',
+          subStatus: null,
+          customData: { isDraftActivityAddress: true },
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+
+        setPendingActivityProperty(draftProperty);
+        setSelectedPropertyId(draftProperty.id);
+        setIsDrawerOpen(true);
       } else {
         addLeadAction();
       }
@@ -2569,6 +2555,18 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   };
 
   const updateProperty = (id: string, updates: Partial<PropertyContact>) => {
+    if (pendingActivityProperty?.id === id) {
+      setPendingActivityProperty(prev => {
+        if (!prev) return prev;
+        const merged = { ...prev, ...updates, updatedAt: Date.now() };
+        if (!updates.stage) {
+          merged.stage = deriveForwardStage(merged);
+        }
+        return merged;
+      });
+      return;
+    }
+
     setProperties(prev => prev.map(p => {
       if (p.id !== id) return p;
       const merged = { ...p, ...updates, updatedAt: Date.now() };
@@ -2580,6 +2578,16 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   };
 
   const createAddressContact = async (property: PropertyContact, idempotencyKey: string): Promise<Contact> => {
+    if (property.customData?.isDraftActivityAddress) {
+      return {
+        id: uuidv4(),
+        firstName: '',
+        lastName: '',
+        isDecisionMaker: false,
+        customData: { idempotencyKey, pendingAddressContact: true }
+      };
+    }
+
     if (!workspaceId || !userId) {
       throw new Error('Workspace session is not ready. Please refresh and try again.');
     }
@@ -2912,9 +2920,32 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   };
 
   const logAddressEvent = async (propertyId: string, payload: LiveEventPayload) => {
-    const property = properties.find(p => p.id === propertyId);
+    const property = properties.find(p => p.id === propertyId) ||
+      (pendingActivityProperty?.id === propertyId ? pendingActivityProperty : undefined);
     if (!property || !workspaceId || !userId) {
       throw new Error('Workspace session is not ready. Please refresh and try again.');
+    }
+
+    const isDraftActivityAddress = Boolean(property.customData?.isDraftActivityAddress);
+    const addressProperty: PropertyContact = isDraftActivityAddress
+      ? {
+          ...property,
+          stage: 'prospect',
+          customData: {
+            ...(property.customData || {}),
+            isDraftActivityAddress: undefined
+          }
+        }
+      : property;
+
+    if (isDraftActivityAddress) {
+      const { error: addressError } = await doorstepDb
+        .from('addresses')
+        .upsert(propertyToAddressRow(addressProperty, workspaceId, userId), { onConflict: 'id' });
+
+      if (addressError) {
+        throw new Error(addressError.message);
+      }
     }
 
     const title = buildEventTitle(payload);
@@ -2991,14 +3022,27 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     }
 
     const interaction = activityRowToInteraction(data);
-    const nextStage = getStageForEvent(payload, property.stage);
-    const nextStatus = getStatusForEvent(payload, property.status);
+    const nextStage = getStageForEvent(payload, addressProperty.stage);
+    const nextStatus = getStatusForEvent(payload, addressProperty.status);
 
-    updateProperty(propertyId, {
+    const finalProperty: PropertyContact = {
+      ...addressProperty,
       stage: nextStage,
       status: nextStatus,
-      interactions: [interaction, ...(property.interactions || [])],
-    });
+      interactions: [interaction, ...(addressProperty.interactions || [])],
+      updatedAt: Date.now()
+    };
+
+    if (isDraftActivityAddress) {
+      setProperties(prev => [finalProperty, ...prev.filter(item => item.id !== propertyId)]);
+      setPendingActivityProperty(null);
+    } else {
+      updateProperty(propertyId, {
+        stage: nextStage,
+        status: nextStatus,
+        interactions: [interaction, ...(property.interactions || [])],
+      });
+    }
 
     return interaction;
   };
@@ -4257,7 +4301,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             onLogEvent={logAddressEvent}
             onAddContact={createAddressContact}
             onMoveContacts={handleMoveContactsToAddress}
-            onClose={() => setIsDrawerOpen(false)}
+            onClose={() => {
+              if (pendingActivityProperty?.id === selectedProperty.id) {
+                setPendingActivityProperty(null);
+                setSelectedPropertyId(null);
+              }
+              setIsDrawerOpen(false);
+            }}
             onSchedule={() => {
               setIsDrawerOpen(false);
               setIsCalendarOpen(true);

@@ -1,6 +1,28 @@
 # Scratchpad
 
 ## 2026-06-10 — Current Objective
+**Task:** Change default house-click flow so it opens activity logging first and only creates/persists the prospect address after an activity is logged.
+**Target specs:** `/specs/address-crm-core.spec.md`, `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and current scratchpad.
+- [ ] Inspect map click, selected address, and activity logging code.
+- [ ] Implement draft address selection for non-route map clicks.
+- [ ] Persist draft address only when logging activity.
+- [ ] Verify route creation still creates route/prospect records while in route mode.
+- [ ] Run verification.
+- [ ] Push to GitHub and deploy to Cloudflare first.
+- [ ] Update docs after deploy.
+
+## Assumptions
+- Existing address marker clicks should still open the existing record.
+- Route Creation mode keeps its current behavior of creating address/prospect route records as homes are tapped.
+- A draft address may be visible in the drawer before persistence but must not be added to `properties` until activity save succeeds.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-10 — Current Objective
 **Task:** Finish the remaining PRD implementation after migration 007 succeeded: wire normalized Add Contact idempotency, Move to New Address RPC flow, and admin displaced contacts visibility.
 **Target specs:** `/specs/unified-address-record.spec.md`, `/specs/contact-address-move-and-merge.spec.md`, `/specs/address-crm-core.spec.md`
 

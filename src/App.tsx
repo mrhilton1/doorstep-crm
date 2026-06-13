@@ -2919,6 +2919,72 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     });
   };
 
+  const deleteAddressContact = async (
+    property: PropertyContact,
+    contact: Contact,
+    isPrimary: boolean
+  ) => {
+    const contactId = contact.id;
+    const hasNormalizedContactId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contactId || '');
+
+    if (workspaceId && !property.customData?.isDraftActivityAddress && hasNormalizedContactId) {
+      const { error: linkError } = await doorstepDb
+        .from('address_contacts')
+        .delete()
+        .eq('address_id', property.id)
+        .eq('contact_id', contactId);
+
+      if (linkError) {
+        throw new Error(linkError.message);
+      }
+
+      const { error: contactError } = await doorstepDb
+        .from('contacts')
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: userId,
+          updated_by: userId,
+        })
+        .eq('id', contactId);
+
+      if (contactError) {
+        throw new Error(contactError.message);
+      }
+    }
+
+    if (isPrimary) {
+      updateProperty(property.id, {
+        firstName: '',
+        lastName: '',
+        phone: '',
+        email: '',
+        role: '',
+        isDecisionMaker: false,
+        customData: {
+          ...(property.customData || {}),
+          primaryContactId: null
+        }
+      });
+    } else {
+      updateProperty(property.id, {
+        contacts: (property.contacts || []).filter(item => item.id !== contactId)
+      });
+    }
+  };
+
+  const handleDeleteAddressFromDrawer = (property: PropertyContact) => {
+    if (!window.confirm(`Delete ${property.address}? This hides the address from normal views.`)) return;
+
+    if (pendingActivityProperty?.id === property.id) {
+      setPendingActivityProperty(null);
+      setSelectedPropertyId(null);
+      setIsDrawerOpen(false);
+      return;
+    }
+
+    handleDeleteProperty(property.id);
+  };
+
   const logAddressEvent = async (propertyId: string, payload: LiveEventPayload) => {
     const property = properties.find(p => p.id === propertyId) ||
       (pendingActivityProperty?.id === propertyId ? pendingActivityProperty : undefined);
@@ -4301,6 +4367,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             onLogEvent={logAddressEvent}
             onAddContact={createAddressContact}
             onMoveContacts={handleMoveContactsToAddress}
+            onDeleteAddress={handleDeleteAddressFromDrawer}
+            onDeleteContact={deleteAddressContact}
             onClose={() => {
               if (pendingActivityProperty?.id === selectedProperty.id) {
                 setPendingActivityProperty(null);
@@ -4504,6 +4572,8 @@ function PropertyDrawer({
   onLogEvent,
   onAddContact,
   onMoveContacts,
+  onDeleteAddress,
+  onDeleteContact,
   onClose,
   onSchedule,
   onQuote,
@@ -4515,6 +4585,8 @@ function PropertyDrawer({
   onLogEvent: (propertyId: string, payload: LiveEventPayload) => Promise<Interaction>,
   onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
   onMoveContacts: (property: PropertyContact) => void,
+  onDeleteAddress: (property: PropertyContact) => void,
+  onDeleteContact: (property: PropertyContact, contact: Contact, isPrimary: boolean) => Promise<void>,
   onClose: () => void,
   onSchedule: () => void,
   onQuote: () => void,
@@ -4706,6 +4778,14 @@ function PropertyDrawer({
           </button>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => onDeleteAddress(property)}
+            className="p-2 bg-red-50 rounded-xl text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+            title="Delete address"
+            aria-label="Delete address"
+          >
+            <Trash2 className="w-6 h-6" />
+          </button>
           <button onClick={onClose} className="p-2 bg-gray-50 rounded-xl">
             <X className="w-6 h-6 text-gray-400" />
           </button>
@@ -5283,10 +5363,47 @@ function PropertyDrawer({
             {/* Primary Fields (Preserved for compatibility) */}
             <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl relative group">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-2 flex-1">
+                  <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase text-blue-600 tracking-tighter">Primary Contact Card</span>
                 </div>
-                <span className="text-[10px] font-black uppercase text-blue-600 tracking-tighter">Primary Contact Card</span>
+                {sectionPermissions.contactsAtAddress.editable && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const hasPrimaryData = Boolean(firstName || lastName || phone || email || role);
+                      if (!hasPrimaryData) return;
+                      if (!window.confirm('Delete the primary contact from this address?')) return;
+                      try {
+                        await onDeleteContact(property, {
+                          id: property.customData?.primaryContactId || '',
+                          firstName,
+                          lastName,
+                          phone,
+                          email,
+                          role,
+                          isDecisionMaker,
+                          customData: property.customData || {}
+                        }, true);
+                        setFirstName('');
+                        setLastName('');
+                        setPhone('');
+                        setEmail('');
+                        setRole('');
+                        setIsDecisionMaker(false);
+                      } catch (error: any) {
+                        setAddContactError(error.message || 'Contact could not be deleted.');
+                      }
+                    }}
+                    className="text-slate-300 hover:text-red-500 transition-colors"
+                    title="Delete primary contact"
+                    aria-label="Delete primary contact"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-3">
@@ -5434,10 +5551,14 @@ function PropertyDrawer({
                     <span className="text-[10px] font-black uppercase text-slate-500 tracking-tighter">Contact #{idx + 2}</span>
                   </div>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!sectionPermissions.contactsAtAddress.editable) return;
-                      const updated = property.contacts.filter(c => c.id !== contact.id);
-                      updateProperty(property.id, { contacts: updated });
+                      if (!window.confirm('Delete this contact from the address?')) return;
+                      try {
+                        await onDeleteContact(property, contact, false);
+                      } catch (error: any) {
+                        setAddContactError(error.message || 'Contact could not be deleted.');
+                      }
                     }}
                     disabled={!sectionPermissions.contactsAtAddress.editable}
                     className="text-gray-300 hover:text-red-500 transition-colors"

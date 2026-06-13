@@ -1,5 +1,27 @@
 # Scratchpad
 
+## 2026-06-12 — Current Objective
+**Task:** Add UI actions to delete addresses and contacts from the Unified Address Record.
+**Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Confirm local/GitHub/deploy state are up to date.
+- [x] Re-read operating docs and impacted specs.
+- [x] Inspect current delete handlers and contact persistence paths.
+- [x] Add address delete action using existing soft-delete behavior.
+- [x] Add primary/additional contact delete actions from Contact Info edit mode.
+- [x] Run verification.
+- [x] Update specs/decisions if shipped behavior changes.
+- [ ] Commit, push, and deploy.
+
+## Assumptions
+- Address delete should soft-delete the address row and remove it from normal app views/routes.
+- Contact delete should remove the address-contact relationship from the current record and soft-delete normalized contact rows when the app knows their normalized ID.
+- Primary contact delete clears the primary contact card; additional contact delete removes that contact card.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-10 — Current Objective
 **Task:** Change default house-click flow so it opens activity logging first and only creates/persists the prospect address after an activity is logged.
 **Target specs:** `/specs/address-crm-core.spec.md`, `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`

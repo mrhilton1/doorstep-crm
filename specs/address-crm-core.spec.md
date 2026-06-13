@@ -27,6 +27,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Address is the MVP primary object.
 - `normalized_address` is used for duplicate prevention within a workspace.
 - Deletes are soft deletes when persisted to Supabase.
+- Address delete must be available from the Unified Address Record and should soft-delete the address from normal views while preserving the row for investigation.
 - Stage and status are separate concepts.
 - Active Stage system keys are locked to `prospect`, `lead`, `opportunity`, and `customer`; admin label settings may control display labels/descriptions/colors, but implementation logic must use the locked keys.
 - Automatic stage advancement is forward-only: address with no contact data is Prospect, address plus any contact data is Lead, issued quote is Opportunity, and logged payment is Customer.
@@ -71,6 +72,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Given the user logs an activity from that draft record, then the address is persisted as a Prospect and the activity is saved against it.
 - Given the user closes the draft record without logging activity, then no address row is created.
 - Given a user deletes an address, when sync succeeds, then `deleted_at` is set and normal views hide it.
+- Given a user opens an address record, when they choose Delete Address and confirm, then the address is removed from the current UI, removed from routes, and soft-deleted in Supabase.
 - Given local mode is active, when the user adds records, then the local demo still behaves.
 
 ## Validation Plan
@@ -95,9 +97,11 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - 2026-06-10: Active Stage system keys are locked in application logic, while admin settings can still manage labels, colors, and descriptions.
 - 2026-06-10: Appointment scheduling should set Scheduled sub-status when valid.
 - 2026-06-10: Normal map taps should open activity logging first and only create a prospect address after activity is logged; Route Creation mode still creates route/prospect records immediately.
+- 2026-06-12: Unified Address Record exposes Delete Address using existing soft-delete behavior.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.
 - 2026-06-09: Unified Address Record direction added.
 - 2026-06-10: Map click selection changed from broad degree-based nearest-record matching to tight meter-based hit testing.
 - 2026-06-10: Changed untracked house taps from Add Lead prompt/immediate creation to draft activity logging before persistence.
+- 2026-06-12: Added address delete action to the Unified Address Record.

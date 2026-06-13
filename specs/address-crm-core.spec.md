@@ -28,7 +28,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - `normalized_address` is used for duplicate prevention within a workspace.
 - Deletes are soft deletes when persisted to Supabase.
 - Address delete must be available from the Unified Address Record and address/contact card views, and should soft-delete the address from normal views while preserving the row for investigation.
-- Address delete must wait for Supabase to confirm exactly one row was soft-deleted before removing the record from the UI.
+- Address delete uses the `doorstep.soft_delete_address` RPC and must wait for Supabase to confirm the soft delete before removing the record from the UI.
 - Destructive actions must use in-app confirmation modals; do not use browser-native `alert`, `confirm`, or `prompt` for app UX.
 - Primary page and opened-record state must be URL-backed so refresh, deployment reloads, and browser back/forward do not return the user to the home page unexpectedly.
 - Stage and status are separate concepts.
@@ -77,6 +77,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Given a user deletes an address, when sync succeeds, then `deleted_at` is set and normal views hide it.
 - Given a user opens an address record or address card, when they choose Delete Address and confirm in the app modal, then the address is removed from the current UI, removed from routes, and soft-deleted in Supabase.
 - Given Supabase does not confirm an address delete, then the address remains visible and the app surfaces an error instead of pretending the delete succeeded.
+- Given the delete request hangs or fails, then the confirmation modal stops showing a working state and displays the backend/network error.
 - Given a user is on Contacts, Appointments, Map, or an opened address record, when the browser refreshes, then the app restores that page/record from the URL after data loads.
 - Given local mode is active, when the user adds records, then the local demo still behaves.
 
@@ -103,7 +104,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - 2026-06-10: Appointment scheduling should set Scheduled sub-status when valid.
 - 2026-06-10: Normal map taps should open activity logging first and only create a prospect address after activity is logged; Route Creation mode still creates route/prospect records immediately.
 - 2026-06-12: Unified Address Record and card views expose Delete Address using existing soft-delete behavior with app modal confirmation.
-- 2026-06-12: Address delete is backend-confirmed before UI removal; MVP pages and address records are URL-backed.
+- 2026-06-12: Address delete is backend-confirmed through `doorstep.soft_delete_address` before UI removal; MVP pages and address records are URL-backed.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.

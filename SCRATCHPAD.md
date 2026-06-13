@@ -1,6 +1,27 @@
 # Scratchpad
 
 ## 2026-06-12 — Current Objective
+**Task:** Fix the stuck Delete Address modal by moving address soft delete to a Supabase RPC and surfacing modal errors.
+**Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Verify live Supabase rows are not receiving `deleted_at`.
+- [x] Add `doorstep.soft_delete_address` as a `SECURITY INVOKER` RPC with explicit permission checks.
+- [x] Add matching migration file.
+- [x] Wire frontend delete to the RPC instead of direct table update.
+- [x] Add modal-visible error handling and timeout guard.
+- [x] Run verification.
+- [ ] Commit, push, and deploy.
+
+## Assumptions
+- Delete must stay a soft delete.
+- The RPC should not be `SECURITY DEFINER`; it should continue to respect current RLS/permission helpers.
+- If backend delete fails or hangs, the user should see the error in the modal and the record should remain visible.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-12 — Current Objective
 **Task:** Fix address delete persistence and add URL-backed navigation so refreshes/updates preserve the user's place.
 **Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`
 

@@ -1029,11 +1029,13 @@ type ConfirmActionConfig = {
 function ConfirmActionModal({
   config,
   isWorking,
+  error,
   onCancel,
   onConfirm
 }: {
   config: ConfirmActionConfig;
   isWorking: boolean;
+  error?: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -1061,6 +1063,11 @@ function ConfirmActionModal({
           </div>
           <h2 className="text-xl font-black text-slate-900 tracking-tight">{config.title}</h2>
           <p className="mt-2 text-sm font-semibold text-slate-500 leading-relaxed">{config.message}</p>
+          {error && (
+            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+              {error}
+            </div>
+          )}
         </div>
         <div className="px-6 pb-6 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
           <button
@@ -1889,6 +1896,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   } | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmActionConfig | null>(null);
   const [isConfirmActionWorking, setIsConfirmActionWorking] = useState(false);
+  const [confirmActionError, setConfirmActionError] = useState<string | null>(null);
   const confirmCancelResolver = useRef<(() => void) | null>(null);
   const [dataStatus, setDataStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(workspaceId ? 'loading' : 'local');
   const [dataError, setDataError] = useState<string | null>(null);
@@ -1897,6 +1905,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
   const showNotice = useCallback((title: string, message: string, tone: ConfirmActionConfig['tone'] = 'default') => {
     confirmCancelResolver.current = null;
+    setConfirmActionError(null);
     setConfirmAction({
       title,
       message,
@@ -1909,6 +1918,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const requestUserConfirmation = useCallback((config: Omit<ConfirmActionConfig, 'onConfirm'>) => {
     return new Promise<boolean>((resolve) => {
       confirmCancelResolver.current = () => resolve(false);
+      setConfirmActionError(null);
       setConfirmAction({
         ...config,
         onConfirm: () => resolve(true)
@@ -2267,15 +2277,15 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   }, [hasInitializedLocation, settings.businessInfo.city, properties.length]);
 
   const handleDeleteProperty = useCallback(async (id: string) => {
-    const deletedAt = new Date().toISOString();
-
     if (workspaceId) {
-      const { error, count } = await doorstepDb
-        .from('addresses')
-        .update({ deleted_at: deletedAt, deleted_by: userId, updated_by: userId }, { count: 'exact' })
-        .eq('id', id)
-        .eq('workspace_id', workspaceId)
-        .is('deleted_at', null);
+      const deletePromise = doorstepDb.rpc('soft_delete_address', {
+        p_workspace_id: workspaceId,
+        p_address_id: id
+      });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error('Delete request timed out. Please check your connection and try again.')), 12000);
+      });
+      const { data, error } = await Promise.race([deletePromise, timeoutPromise]);
 
       if (error) {
         setDataStatus('error');
@@ -2283,8 +2293,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         throw new Error(error.message);
       }
 
-      if (count !== 1) {
-        const message = 'Address could not be deleted. It may already be deleted, or your role may not have permission.';
+      if (data !== true) {
+        const message = 'Address could not be deleted. Supabase did not confirm the soft delete.';
         setDataStatus('error');
         setDataError(message);
         throw new Error(message);
@@ -3140,6 +3150,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   };
 
   const requestDeleteAddress = (property: PropertyContact) => {
+    setConfirmActionError(null);
     setConfirmAction({
       title: 'Delete Address?',
       message: `Delete ${property.address}? This hides the address from normal views while preserving history for investigation.`,
@@ -3155,6 +3166,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     isPrimary: boolean,
     onDeleted?: () => void
   ) => {
+    setConfirmActionError(null);
     setConfirmAction({
       title: isPrimary ? 'Delete Primary Contact?' : 'Delete Contact?',
       message: isPrimary
@@ -3171,14 +3183,17 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
   const handleConfirmAction = async () => {
     if (!confirmAction) return;
+    setConfirmActionError(null);
     setIsConfirmActionWorking(true);
     try {
       await confirmAction.onConfirm();
       confirmCancelResolver.current = null;
       setConfirmAction(null);
     } catch (error: any) {
+      const message = error.message || 'Action could not be completed. Please try again.';
+      setConfirmActionError(message);
       setDataStatus('error');
-      setDataError(error.message || 'Action could not be completed. Please try again.');
+      setDataError(message);
     } finally {
       setIsConfirmActionWorking(false);
     }
@@ -4743,10 +4758,12 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           <ConfirmActionModal
             config={confirmAction}
             isWorking={isConfirmActionWorking}
+            error={confirmActionError}
             onCancel={() => {
               if (isConfirmActionWorking) return;
               confirmCancelResolver.current?.();
               confirmCancelResolver.current = null;
+              setConfirmActionError(null);
               setConfirmAction(null);
             }}
             onConfirm={handleConfirmAction}

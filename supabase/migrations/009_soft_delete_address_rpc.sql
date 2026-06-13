@@ -4,6 +4,7 @@ create or replace function doorstep.soft_delete_address(
 )
 returns boolean
 language plpgsql
+security definer
 set search_path = doorstep, public
 as $$
 declare

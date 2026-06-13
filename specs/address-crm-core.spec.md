@@ -28,7 +28,8 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - `normalized_address` is used for duplicate prevention within a workspace.
 - Deletes are soft deletes when persisted to Supabase.
 - Address delete must be available from the Unified Address Record and address/contact card views, and should soft-delete the address from normal views while preserving the row for investigation.
-- Address delete uses the `doorstep.soft_delete_address` RPC and must wait for Supabase to confirm the soft delete before removing the record from the UI.
+- Address delete uses the `doorstep.soft_delete_address` `SECURITY DEFINER` RPC and must wait for Supabase to confirm the soft delete before removing the record from the UI.
+- RPCs that intentionally change RLS visibility, such as setting `deleted_at`, must perform explicit authentication, workspace, and permission checks before mutation, use a fixed `search_path`, and grant execute only to the minimum role set.
 - Destructive actions must use in-app confirmation modals; do not use browser-native `alert`, `confirm`, or `prompt` for app UX.
 - Primary page and opened-record state must be URL-backed so refresh, deployment reloads, and browser back/forward do not return the user to the home page unexpectedly.
 - Stage and status are separate concepts.
@@ -105,6 +106,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - 2026-06-10: Normal map taps should open activity logging first and only create a prospect address after activity is logged; Route Creation mode still creates route/prospect records immediately.
 - 2026-06-12: Unified Address Record and card views expose Delete Address using existing soft-delete behavior with app modal confirmation.
 - 2026-06-12: Address delete is backend-confirmed through `doorstep.soft_delete_address` before UI removal; MVP pages and address records are URL-backed.
+- 2026-06-13: `doorstep.soft_delete_address` is `SECURITY DEFINER` because setting `deleted_at` intentionally makes the row fail active-record RLS. The function must keep explicit permission checks and restricted grants.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.

@@ -40,7 +40,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Contact Info edit mode exposes "Move to New Address" and delegates safe move/merge behavior to `/specs/contact-address-move-and-merge.spec.md`.
 - Contact Info edit mode exposes contact delete actions. Primary contact delete clears the primary contact card; additional contact delete removes that contact card and soft-deletes normalized contact rows when available.
 - Address delete is available from the Unified Address Record header and address/contact card views, uses address soft-delete behavior, and confirms through an in-app modal.
-- Address delete must not remove the record from the UI until the `doorstep.soft_delete_address` RPC confirms the intended address row was soft-deleted.
+- Address delete must not remove the record from the UI until the `doorstep.soft_delete_address` `SECURITY DEFINER` RPC confirms the intended address row was soft-deleted.
 - Native browser alerts/confirms/prompts are not acceptable app UX; use app modal/dialog components.
 - Opened address records must be represented in the browser URL so refreshes and browser history restore the user's working context.
 - Activity Feed edit controls render behind a permission flag that defaults visible/editable for MVP.
@@ -113,6 +113,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-10: Untracked normal map taps open the Unified Address Record as a draft activity session and do not persist until the first activity is logged.
 - 2026-06-12: Contact delete is available in Contact Info edit mode; Address delete is available from the record header and card views; delete confirmation uses an app modal.
 - 2026-06-12: Opened address records are URL-backed, and address delete waits for the `doorstep.soft_delete_address` RPC before UI removal.
+- 2026-06-13: Address delete uses a scoped definer RPC because the soft-delete transition changes row visibility under active-record RLS.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

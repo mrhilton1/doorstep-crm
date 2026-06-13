@@ -19,6 +19,7 @@ DoorStep CRM is a multi-user, object-oriented CRM for field sales and service te
 - Use Supabase RLS and workspace scoping for multi-user data.
 - Never expose Supabase service-role keys or private secrets in frontend code.
 - Add migrations for database changes; do not hand-edit production schema without recording it.
+- For Supabase endpoints/RPCs, design against RLS visibility changes. If an endpoint intentionally changes row visibility, such as setting `deleted_at`, use a narrowly scoped RPC with explicit auth/workspace/permission checks, fixed `search_path`, restricted grants, and matching migration/docs.
 - Prefer Leaflet/OpenStreetMap paths unless a spec intentionally reintroduces Google Maps.
 - Run `npm run build` and `npm run lint` before pushing deployable changes.
 - Update specs and decisions after shipping when reality changed.
@@ -29,6 +30,7 @@ DoorStep CRM is a multi-user, object-oriented CRM for field sales and service te
 - Do not use `localStorage` or `sessionStorage` for CRM data, auth tokens, workspace state, settings, routes, catalog, or user-owned records; persist through Supabase-backed APIs/tables instead.
 - Do not put secret values in `.env.example`, docs, commits, or browser code.
 - Do not make destructive database changes without a migration and explicit approval.
+- Do not create or change `SECURITY DEFINER` functions without documenting why RLS cannot safely handle the transition and verifying explicit permission checks before any data mutation.
 - Do not rename schema/table/column contracts without a migration plan.
 - Do not reintroduce Google Maps as the default map provider without approval.
 - Do not add new browser-native alerts or confirms; destructive and notification flows must use app modals.

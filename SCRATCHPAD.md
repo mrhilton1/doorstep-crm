@@ -1,6 +1,28 @@
 # Scratchpad
 
 ## 2026-06-12 — Current Objective
+**Task:** Add delete from contact/address card view and replace native delete confirmations with in-app modals.
+**Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Confirm local/GitHub state is synced before changes.
+- [x] Re-read operating docs and locate current card/delete flows.
+- [x] Add card-view delete action that uses the existing soft-delete path.
+- [x] Replace native delete `confirm` calls with an app modal.
+- [x] Add "no native alerts/confirms; use modals" to the rules docs.
+- [x] Update impacted specs after implementation.
+- [x] Run verification.
+- [ ] Commit, push, and deploy.
+
+## Assumptions
+- Card-view delete should delete the address record, not just the visible contact card, because addresses remain the primary object.
+- Delete remains a soft delete that hides addresses from normal views while preserving records for investigation.
+- Destructive UX should be handled with in-app modal dialogs, not browser-native alerts or confirms.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-12 — Current Objective
 **Task:** Add UI actions to delete addresses and contacts from the Unified Address Record.
 **Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`
 

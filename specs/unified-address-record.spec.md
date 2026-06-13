@@ -1,7 +1,7 @@
 # Feature: Unified Address Record
 
 **Status:** In Progress  
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-12
 **Owner:** Mike Hilton
 
 ---
@@ -39,7 +39,8 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Contact Info and Job Info have independent edit modes; editing one section must not switch the other section into edit mode.
 - Contact Info edit mode exposes "Move to New Address" and delegates safe move/merge behavior to `/specs/contact-address-move-and-merge.spec.md`.
 - Contact Info edit mode exposes contact delete actions. Primary contact delete clears the primary contact card; additional contact delete removes that contact card and soft-deletes normalized contact rows when available.
-- Address delete is available from the Unified Address Record header and uses address soft-delete behavior.
+- Address delete is available from the Unified Address Record header and address/contact card views, uses address soft-delete behavior, and confirms through an in-app modal.
+- Native browser alerts/confirms/prompts are not acceptable app UX; use app modal/dialog components.
 - Activity Feed edit controls render behind a permission flag that defaults visible/editable for MVP.
 - Activity Feed includes a session-only "Notes Only" filter that shows only human-entered note/message events, not system-generated stage or audit logs.
 - Residential/Commercial designation should move out of the top header badge and become inline address metadata below the address line; it is only tappable in edit mode.
@@ -75,8 +76,8 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given Add Contact is used, then the UI creates a `doorstep.contacts` row, links it through `doorstep.address_contacts`, and records an idempotency key in `doorstep.contact_idempotency_keys`.
 - Given the optional `create_address_contact_idempotent` RPC is available, then Add Contact uses that RPC; otherwise the deployed frontend falls back to table-level idempotency until migration 008 is applied.
 - Given the record is opened from an untracked normal map tap, then logging an activity creates the address and closing without logging does not.
-- Given Contact Info is in edit mode, when a user deletes a primary or additional contact, then the contact disappears from the current record and normalized contact rows are soft-deleted when the app has their ID.
-- Given a user confirms Delete Address, then the record closes and disappears from normal views.
+- Given Contact Info is in edit mode, when a user deletes a primary or additional contact and confirms through the app modal, then the contact disappears from the current record and normalized contact rows are soft-deleted when the app has their ID.
+- Given a user confirms Delete Address from the record header or card view, then the record closes when open and disappears from normal views.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -106,7 +107,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-10: Add Contact requires backend idempotency, not only frontend debounce/spinner.
 - 2026-06-10: Add Contact now writes normalized contacts and address links. Migration 008 adds the preferred one-call RPC, while the frontend also supports a table-backed fallback.
 - 2026-06-10: Untracked normal map taps open the Unified Address Record as a draft activity session and do not persist until the first activity is logged.
-- 2026-06-12: Contact delete is available in Contact Info edit mode; Address delete is available from the record header.
+- 2026-06-12: Contact delete is available in Contact Info edit mode; Address delete is available from the record header and card views; delete confirmation uses an app modal.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.
@@ -115,4 +116,4 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-10: Added shared shell hamburger nav and reserved page-header space to avoid top-right collisions.
 - 2026-06-10: Wired normalized contact loading, Supabase-backed Add Contact idempotency, and Move to New Address access from Contact Info edit mode.
 - 2026-06-10: Added draft address support so normal map taps go directly to activity logging instead of the Add Lead form.
-- 2026-06-12: Added delete controls for addresses, primary contacts, and additional contacts.
+- 2026-06-12: Added delete controls for addresses, address/contact cards, primary contacts, and additional contacts.

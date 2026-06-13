@@ -976,6 +976,77 @@ const StatusBadge = ({ status, className }: { status: PropertyStatus, className?
   </span>
 );
 
+type ConfirmActionConfig = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: 'danger' | 'default';
+  onConfirm: () => void | Promise<void>;
+};
+
+function ConfirmActionModal({
+  config,
+  isWorking,
+  onCancel,
+  onConfirm
+}: {
+  config: ConfirmActionConfig;
+  isWorking: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isDanger = config.tone === 'danger';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[10000] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-6"
+    >
+      <motion.div
+        initial={{ y: 16, scale: 0.97, opacity: 0 }}
+        animate={{ y: 0, scale: 1, opacity: 1 }}
+        exit={{ y: 16, scale: 0.97, opacity: 0 }}
+        className="bg-white rounded-3xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden"
+      >
+        <div className="p-6">
+          <div className={cn(
+            "w-12 h-12 rounded-2xl flex items-center justify-center mb-4",
+            isDanger ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
+          )}>
+            {isDanger ? <Trash2 className="w-6 h-6" /> : <Info className="w-6 h-6" />}
+          </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">{config.title}</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-500 leading-relaxed">{config.message}</p>
+        </div>
+        <div className="px-6 pb-6 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isWorking}
+            className="px-5 py-3 rounded-2xl bg-slate-100 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-200 disabled:opacity-50 transition-colors"
+          >
+            {config.cancelLabel || 'Cancel'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isWorking}
+            className={cn(
+              "px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-white disabled:opacity-60 transition-all active:scale-95 min-w-36",
+              isDanger ? "bg-red-600 hover:bg-red-700 shadow-lg shadow-red-100" : "bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100"
+            )}
+          >
+            {isWorking ? 'Working...' : (config.confirmLabel || 'Confirm')}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function PromptModal({
   config,
   onClose,
@@ -1773,10 +1844,34 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     options?: { label: string, value: string }[];
     onConfirm: (val: string) => void;
   } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmActionConfig | null>(null);
+  const [isConfirmActionWorking, setIsConfirmActionWorking] = useState(false);
+  const confirmCancelResolver = useRef<(() => void) | null>(null);
   const [dataStatus, setDataStatus] = useState<'local' | 'loading' | 'synced' | 'error'>(workspaceId ? 'loading' : 'local');
   const [dataError, setDataError] = useState<string | null>(null);
   const hasLoadedRemoteAddresses = useRef(!workspaceId);
   const hasLoadedRemoteAppState = useRef(!workspaceId);
+
+  const showNotice = useCallback((title: string, message: string, tone: ConfirmActionConfig['tone'] = 'default') => {
+    confirmCancelResolver.current = null;
+    setConfirmAction({
+      title,
+      message,
+      confirmLabel: 'OK',
+      tone,
+      onConfirm: () => {}
+    });
+  }, []);
+
+  const requestUserConfirmation = useCallback((config: Omit<ConfirmActionConfig, 'onConfirm'>) => {
+    return new Promise<boolean>((resolve) => {
+      confirmCancelResolver.current = () => resolve(false);
+      setConfirmAction({
+        ...config,
+        onConfirm: () => resolve(true)
+      });
+    });
+  }, []);
 
   const refreshWorkspaceAddresses = useCallback(async () => {
     if (!workspaceId) return;
@@ -2332,7 +2427,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
   const saveRouteDraft = (routeName?: string) => {
     if (newRoute.selectedIds.length === 0) {
-      alert('Select at least one address for this route.');
+      showNotice('Route Needs Addresses', 'Select at least one address for this route.');
       return;
     }
 
@@ -2824,14 +2919,14 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       ],
       onConfirm: async (dataStr) => {
         if (!workspaceId || !userId) {
-          alert('Workspace session is not ready. Please refresh and try again.');
+          showNotice('Workspace Not Ready', 'Workspace session is not ready. Please refresh and try again.', 'danger');
           return;
         }
 
         const formData = JSON.parse(dataStr);
         const destinationAddress = String(formData.address || '').trim();
         if (!destinationAddress) {
-          alert('Choose a destination address first.');
+          showNotice('Destination Required', 'Choose a destination address first.');
           return;
         }
 
@@ -2891,7 +2986,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             ? 'The destination already has contacts. Existing destination contacts will be moved to the admin-only Contacts Without Address queue. Continue?'
             : 'Move all contacts to this destination address?';
 
-          if (!window.confirm(warning)) return;
+          const shouldMove = await requestUserConfirmation({
+            title: 'Move Contacts?',
+            message: warning,
+            confirmLabel: 'Move Contacts',
+            tone: destinationHasContacts ? 'danger' : 'default'
+          });
+          if (!shouldMove) return;
 
           const { error: moveError } = await doorstepDb.rpc('move_address_contacts', {
             p_workspace_id: workspaceId,
@@ -2911,9 +3012,9 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
 
           setSelectedPropertyId(destination.id);
           setIsDrawerOpen(true);
-          alert('Contacts moved successfully.');
+          showNotice('Contacts Moved', 'Contacts moved successfully.');
         } catch (error: any) {
-          alert(error.message || 'Contacts could not be moved. Please try again.');
+          showNotice('Move Failed', error.message || 'Contacts could not be moved. Please try again.', 'danger');
         }
       }
     });
@@ -2972,9 +3073,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     }
   };
 
-  const handleDeleteAddressFromDrawer = (property: PropertyContact) => {
-    if (!window.confirm(`Delete ${property.address}? This hides the address from normal views.`)) return;
-
+  const executeAddressDelete = (property: PropertyContact) => {
     if (pendingActivityProperty?.id === property.id) {
       setPendingActivityProperty(null);
       setSelectedPropertyId(null);
@@ -2983,6 +3082,51 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     }
 
     handleDeleteProperty(property.id);
+  };
+
+  const requestDeleteAddress = (property: PropertyContact) => {
+    setConfirmAction({
+      title: 'Delete Address?',
+      message: `Delete ${property.address}? This hides the address from normal views while preserving history for investigation.`,
+      confirmLabel: 'Delete Address',
+      tone: 'danger',
+      onConfirm: () => executeAddressDelete(property)
+    });
+  };
+
+  const requestDeleteContact = (
+    property: PropertyContact,
+    contact: Contact,
+    isPrimary: boolean,
+    onDeleted?: () => void
+  ) => {
+    setConfirmAction({
+      title: isPrimary ? 'Delete Primary Contact?' : 'Delete Contact?',
+      message: isPrimary
+        ? 'Delete the primary contact from this address? The address record will remain.'
+        : 'Delete this contact from the address? The address record will remain.',
+      confirmLabel: 'Delete Contact',
+      tone: 'danger',
+      onConfirm: async () => {
+        await deleteAddressContact(property, contact, isPrimary);
+        onDeleted?.();
+      }
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    setIsConfirmActionWorking(true);
+    try {
+      await confirmAction.onConfirm();
+      confirmCancelResolver.current = null;
+      setConfirmAction(null);
+    } catch (error: any) {
+      setDataStatus('error');
+      setDataError(error.message || 'Action could not be completed. Please try again.');
+    } finally {
+      setIsConfirmActionWorking(false);
+    }
   };
 
   const logAddressEvent = async (propertyId: string, payload: LiveEventPayload) => {
@@ -3156,7 +3300,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     // This is a placeholder for real OAuth flow since set_up_oauth tool is not available
     // and we are in a client-side SPA. OAuth tokens must be stored server-side.
     setGoogleTokens(prev => ({ ...prev, [memberId]: 'connected_this_session' }));
-    alert(`Google Account marked connected for this session only.`);
+    showNotice('Google Calendar Placeholder', 'Google Account marked connected for this session only.');
   };
 
   const scheduleAppointment = async (propertyId: string, memberId: string, details: any) => {
@@ -3356,6 +3500,10 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           onOpenPropertyEditor={(id) => {
             setSelectedPropertyId(id);
             setIsDrawerOpen(true);
+          }}
+          onDeleteProperty={(id) => {
+            const property = properties.find(prop => prop.id === id);
+            if (property) requestDeleteAddress(property);
           }}
           activeTab={currentView === 'dashboard' ? 'dashboard' : currentView === 'contacts' ? 'contacts' : 'appointments'}
           setActiveTab={(tab) => {
@@ -3883,7 +4031,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
                   setMapZoom(18);
                 }, (err) => {
                   console.error("Location error", err);
-                  alert("Could not get your location. Please check permissions.");
+                  showNotice('Location Unavailable', 'Could not get your location. Please check permissions.', 'danger');
                 }, { enableHighAccuracy: true });
               }
             }}
@@ -4302,6 +4450,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             onClose={() => setIsSettingsOpen(false)}
             properties={properties}
             setPromptConfig={setPromptConfig}
+            onNotice={showNotice}
             initialTab={settingsActiveTab}
           />
         )}
@@ -4333,6 +4482,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             goals={goals}
             properties={properties}
             settings={settings}
+            onNotice={showNotice}
             onClose={() => setIsTeamOpen(false)}
           />
         )}
@@ -4367,8 +4517,8 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
             onLogEvent={logAddressEvent}
             onAddContact={createAddressContact}
             onMoveContacts={handleMoveContactsToAddress}
-            onDeleteAddress={handleDeleteAddressFromDrawer}
-            onDeleteContact={deleteAddressContact}
+            onDeleteAddress={requestDeleteAddress}
+            onDeleteContact={requestDeleteContact}
             onClose={() => {
               if (pendingActivityProperty?.id === selectedProperty.id) {
                 setPendingActivityProperty(null);
@@ -4506,6 +4656,22 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmAction && (
+          <ConfirmActionModal
+            config={confirmAction}
+            isWorking={isConfirmActionWorking}
+            onCancel={() => {
+              if (isConfirmActionWorking) return;
+              confirmCancelResolver.current?.();
+              confirmCancelResolver.current = null;
+              setConfirmAction(null);
+            }}
+            onConfirm={handleConfirmAction}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -4586,7 +4752,7 @@ function PropertyDrawer({
   onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
   onMoveContacts: (property: PropertyContact) => void,
   onDeleteAddress: (property: PropertyContact) => void,
-  onDeleteContact: (property: PropertyContact, contact: Contact, isPrimary: boolean) => Promise<void>,
+  onDeleteContact: (property: PropertyContact, contact: Contact, isPrimary: boolean, onDeleted?: () => void) => void,
   onClose: () => void,
   onSchedule: () => void,
   onQuote: () => void,
@@ -5372,12 +5538,10 @@ function PropertyDrawer({
                 {sectionPermissions.contactsAtAddress.editable && (
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       const hasPrimaryData = Boolean(firstName || lastName || phone || email || role);
                       if (!hasPrimaryData) return;
-                      if (!window.confirm('Delete the primary contact from this address?')) return;
-                      try {
-                        await onDeleteContact(property, {
+                      onDeleteContact(property, {
                           id: property.customData?.primaryContactId || '',
                           firstName,
                           lastName,
@@ -5386,16 +5550,14 @@ function PropertyDrawer({
                           role,
                           isDecisionMaker,
                           customData: property.customData || {}
-                        }, true);
+                        }, true, () => {
                         setFirstName('');
                         setLastName('');
                         setPhone('');
                         setEmail('');
                         setRole('');
                         setIsDecisionMaker(false);
-                      } catch (error: any) {
-                        setAddContactError(error.message || 'Contact could not be deleted.');
-                      }
+                      });
                     }}
                     className="text-slate-300 hover:text-red-500 transition-colors"
                     title="Delete primary contact"
@@ -5551,14 +5713,9 @@ function PropertyDrawer({
                     <span className="text-[10px] font-black uppercase text-slate-500 tracking-tighter">Contact #{idx + 2}</span>
                   </div>
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       if (!sectionPermissions.contactsAtAddress.editable) return;
-                      if (!window.confirm('Delete this contact from the address?')) return;
-                      try {
-                        await onDeleteContact(property, contact, false);
-                      } catch (error: any) {
-                        setAddContactError(error.message || 'Contact could not be deleted.');
-                      }
+                      onDeleteContact(property, contact, false);
                     }}
                     disabled={!sectionPermissions.contactsAtAddress.editable}
                     className="text-gray-300 hover:text-red-500 transition-colors"
@@ -7096,6 +7253,7 @@ function SettingsOverlay({
   onClose,
   properties,
   setPromptConfig,
+  onNotice,
   initialTab = 'business'
 }: {
   settings: AppSettings,
@@ -7109,6 +7267,7 @@ function SettingsOverlay({
   onClose: () => void,
   properties: PropertyContact[],
   setPromptConfig: any,
+  onNotice: (title: string, message: string, tone?: ConfirmActionConfig['tone']) => void,
   initialTab?: 'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'
 }) {
   const [activeConfig, setActiveConfig] = useState<'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'>(initialTab);
@@ -7836,7 +7995,10 @@ function SettingsOverlay({
               <button
                 onClick={() => {
                   const memberId = team[0]?.id; // Default to first
-                  if (!memberId) return alert('Add team members first');
+                  if (!memberId) {
+                    onNotice('Team Member Required', 'Add team members first.');
+                    return;
+                  }
 
                   setPromptConfig({
                     title: 'New Goal',
@@ -7875,11 +8037,12 @@ function SettingsOverlay({
   );
 }
 
-function TeamOverlay({ team, goals, properties, settings, onClose }: {
+function TeamOverlay({ team, goals, properties, settings, onNotice, onClose }: {
   team: Member[],
   goals: Goal[],
   properties: PropertyContact[],
   settings: AppSettings,
+  onNotice: (title: string, message: string, tone?: ConfirmActionConfig['tone']) => void,
   onClose: () => void
 }) {
   const stats = useMemo(() => {
@@ -7950,7 +8113,7 @@ function TeamOverlay({ team, goals, properties, settings, onClose }: {
                       </p>
                       <button
                         className="text-[9px] font-bold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded mt-1 hover:bg-blue-100 transition-colors"
-                        onClick={() => alert(`Connecting Google Account for ${member.name}...`)}
+                        onClick={() => onNotice('Google Calendar Placeholder', `Connecting Google Account for ${member.name}...`)}
                       >
                         Connect Google
                       </button>

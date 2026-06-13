@@ -22,6 +22,7 @@ DoorStep CRM is a multi-user, object-oriented CRM for field sales and service te
 - Prefer Leaflet/OpenStreetMap paths unless a spec intentionally reintroduces Google Maps.
 - Run `npm run build` and `npm run lint` before pushing deployable changes.
 - Update specs and decisions after shipping when reality changed.
+- Do not use browser-native `alert`, `confirm`, or `prompt` for app UX; use in-app modal/dialog components.
 
 ## Forbidden Patterns
 - Do not model the product as lead-first; addresses are the MVP primary object.
@@ -30,6 +31,7 @@ DoorStep CRM is a multi-user, object-oriented CRM for field sales and service te
 - Do not make destructive database changes without a migration and explicit approval.
 - Do not rename schema/table/column contracts without a migration plan.
 - Do not reintroduce Google Maps as the default map provider without approval.
+- Do not add new browser-native alerts or confirms; destructive and notification flows must use app modals.
 
 ## Before You Write Any Code
 1. Read this file completely.

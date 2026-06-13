@@ -31,7 +31,8 @@ import {
   Settings as SettingsIcon,
   Package,
   Layers,
-  Sparkle
+  Sparkle,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -62,6 +63,7 @@ interface HomeDashboardProps {
   onOpenSettings: () => void;
   onAddNewLead: () => void;
   onOpenPropertyEditor: (id: string) => void;
+  onDeleteProperty: (id: string) => void;
   settings: Settings;
   onOpenOverdueInvoices?: () => void;
 }
@@ -79,6 +81,7 @@ export default function HomeDashboard({
   onOpenSettings,
   onAddNewLead,
   onOpenPropertyEditor,
+  onDeleteProperty,
   settings,
   onOpenOverdueInvoices
 }: HomeDashboardProps) {
@@ -939,14 +942,28 @@ export default function HomeDashboard({
                               </div>
                             </div>
 
-                            <span className={cn(
-                              "px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider shrink-0",
-                              p.stage === 'customer' ? "bg-emerald-100 text-emerald-800" :
-                              p.stage === 'opportunity' ? "bg-amber-100 text-amber-800" :
-                              p.stage === 'lead' ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-600"
-                            )}>
-                              {p.stage}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider",
+                                p.stage === 'customer' ? "bg-emerald-100 text-emerald-800" :
+                                p.stage === 'opportunity' ? "bg-amber-100 text-amber-800" :
+                                p.stage === 'lead' ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-600"
+                              )}>
+                                {p.stage}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onDeleteProperty(p.id);
+                                }}
+                                className="w-7 h-7 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                                title="Delete address"
+                                aria-label={`Delete ${p.address}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
 
                           {/* Address positioning details */}

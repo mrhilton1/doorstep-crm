@@ -240,6 +240,47 @@ type WorkspaceContext = {
   onSignOut: () => void;
 };
 
+type AppView = 'dashboard' | 'contacts' | 'appointments' | 'map';
+
+const APP_VIEW_PATHS: Record<AppView, string> = {
+  dashboard: '/',
+  contacts: '/contacts',
+  appointments: '/appointments',
+  map: '/map',
+};
+
+const isAppView = (value: string): value is AppView =>
+  ['dashboard', 'contacts', 'appointments', 'map'].includes(value);
+
+const parseAppRoute = (): { view: AppView; propertyId: string | null } => {
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  let view: AppView = 'dashboard';
+  let propertyId: string | null = null;
+
+  if (segments[0] && isAppView(segments[0])) {
+    view = segments[0];
+  }
+
+  const addressIndex = segments.findIndex(segment => segment === 'address' || segment === 'addresses');
+  if (addressIndex >= 0 && segments[addressIndex + 1]) {
+    propertyId = decodeURIComponent(segments[addressIndex + 1]);
+    if (!segments[0] || segments[0] === 'address' || segments[0] === 'addresses') {
+      view = 'contacts';
+    }
+  }
+
+  return { view, propertyId };
+};
+
+const buildAppPath = (view: AppView, propertyId?: string | null) => {
+  const basePath = APP_VIEW_PATHS[view];
+  if (!propertyId) return basePath;
+  const encodedId = encodeURIComponent(propertyId);
+  return view === 'dashboard'
+    ? `/dashboard/address/${encodedId}`
+    : `${basePath}/address/${encodedId}`;
+};
+
 type WorkspaceMembership = {
   workspace_id: string;
   workspaces?: { name?: string | null } | { name?: string | null }[] | null;
@@ -1769,6 +1810,8 @@ function UpdatePasswordScreen({ onComplete }: { onComplete: () => void }) {
 }
 
 function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: WorkspaceContext) {
+  const initialRoute = useMemo(() => parseAppRoute(), []);
+  const isApplyingBrowserRoute = useRef(false);
   // State
   const [properties, setProperties] = useState<PropertyContact[]>([]);
   const [catalog, setCatalog] = useState<{ products: Product[], bundles: Bundle[] }>(createDefaultCatalog);
@@ -1778,15 +1821,15 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   ]);
   const [goals, setGoals] = useState<Goal[]>([]);
 
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(initialRoute.propertyId);
   const [pendingActivityProperty, setPendingActivityProperty] = useState<PropertyContact | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(Boolean(initialRoute.propertyId));
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTeamOpen, setIsTeamOpen] = useState(false);
   const [isProspectsOpen, setIsProspectsOpen] = useState(false);
   const [isLeadsOpen, setIsLeadsOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'map'>('dashboard');
+  const [currentView, setCurrentView] = useState<AppView>(initialRoute.view);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isOverdueInvoicesOpen, setIsOverdueInvoicesOpen] = useState(false);
   const [isDisplacedContactsOpen, setIsDisplacedContactsOpen] = useState(false);
@@ -2223,20 +2266,32 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     initializeMap();
   }, [hasInitializedLocation, settings.businessInfo.city, properties.length]);
 
-  const handleDeleteProperty = useCallback((id: string) => {
-    setProperties(prev => prev.filter(p => p.id !== id));
+  const handleDeleteProperty = useCallback(async (id: string) => {
+    const deletedAt = new Date().toISOString();
+
     if (workspaceId) {
-      doorstepDb
+      const { error, count } = await doorstepDb
         .from('addresses')
-        .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
+        .update({ deleted_at: deletedAt, deleted_by: userId, updated_by: userId }, { count: 'exact' })
         .eq('id', id)
-        .then(({ error }) => {
-          if (error) {
-            setDataStatus('error');
-            setDataError(error.message);
-          }
-        });
+        .eq('workspace_id', workspaceId)
+        .is('deleted_at', null);
+
+      if (error) {
+        setDataStatus('error');
+        setDataError(error.message);
+        throw new Error(error.message);
+      }
+
+      if (count !== 1) {
+        const message = 'Address could not be deleted. It may already be deleted, or your role may not have permission.';
+        setDataStatus('error');
+        setDataError(message);
+        throw new Error(message);
+      }
     }
+
+    setProperties(prev => prev.filter(p => p.id !== id));
     setRoutes(prev => prev.map(r => ({
       ...r,
       propertyIds: r.propertyIds.filter(pid => pid !== id)
@@ -3073,7 +3128,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     }
   };
 
-  const executeAddressDelete = (property: PropertyContact) => {
+  const executeAddressDelete = async (property: PropertyContact) => {
     if (pendingActivityProperty?.id === property.id) {
       setPendingActivityProperty(null);
       setSelectedPropertyId(null);
@@ -3081,7 +3136,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
       return;
     }
 
-    handleDeleteProperty(property.id);
+    await handleDeleteProperty(property.id);
   };
 
   const requestDeleteAddress = (property: PropertyContact) => {
@@ -3416,18 +3471,18 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
     workingRouteId ? routes.find(r => r.id === workingRouteId) : null
   , [workingRouteId, routes]);
 
-  const closeAppOverlays = () => {
+  const closeAppOverlays = useCallback(() => {
     setIsProspectsOpen(false);
     setIsLeadsOpen(false);
     setIsCatalogOpen(false);
     setIsSettingsOpen(false);
     setIsMoreMenuOpen(false);
     setIsDisplacedContactsOpen(false);
-  };
+  }, []);
 
-  const openAppView = (view: 'dashboard' | 'contacts' | 'map' | 'appointments') => {
+  const openAppView = (view: AppView) => {
     closeAppOverlays();
-    setCurrentView(view as any);
+    setCurrentView(view);
   };
 
   const openAppRoutes = () => {
@@ -3448,6 +3503,32 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
   const openAppOverdueInvoices = () => {
     setIsOverdueInvoicesOpen(true);
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = parseAppRoute();
+      isApplyingBrowserRoute.current = true;
+      closeAppOverlays();
+      setCurrentView(route.view);
+      setSelectedPropertyId(route.propertyId);
+      setIsDrawerOpen(Boolean(route.propertyId));
+      window.setTimeout(() => {
+        isApplyingBrowserRoute.current = false;
+      }, 0);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [closeAppOverlays]);
+
+  useEffect(() => {
+    if (isApplyingBrowserRoute.current) return;
+
+    const targetPath = buildAppPath(currentView, isDrawerOpen ? selectedPropertyId : null);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+  }, [currentView, isDrawerOpen, selectedPropertyId]);
 
   return (
     <div id="top-brand-main" className="flex flex-col h-screen bg-[#F1F5F9] relative overflow-hidden text-[#1E293B]">

@@ -1,6 +1,28 @@
 # Scratchpad
 
 ## 2026-06-12 — Current Objective
+**Task:** Fix address delete persistence and add URL-backed navigation so refreshes/updates preserve the user's place.
+**Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, impacted specs, and Supabase workflow.
+- [x] Inspect delete persistence path, Supabase address row mapping, and RLS/update behavior.
+- [x] Inspect current `currentView`, selected record, drawer, and overlay state ownership.
+- [x] Fix delete persistence so deleted address rows stay hidden after refresh.
+- [x] Add URL structure for primary pages and opened address records.
+- [x] Update specs/rules for URL-backed navigation.
+- [x] Run verification.
+- [ ] Commit, push, and deploy.
+
+## Assumptions
+- Address delete must not be optimistic-only; if Supabase cannot mark `deleted_at`, the UI should surface the failure.
+- URL structure should cover the current MVP pages first: dashboard/home, contacts, appointments, map, and address record.
+- Browser refresh should restore the user's page/record where possible after data loads.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-12 — Current Objective
 **Task:** Add delete from contact/address card view and replace native delete confirmations with in-app modals.
 **Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`
 

@@ -46,6 +46,7 @@ All authenticated app pages render through one shared app shell:
 - Given any primary app route, when the user is authenticated, then the same top header is visible.
 - Given the nav menu opens, then workspace info, user email, sync state, app routes, operational tools, and sign-out are available in the same drawer.
 - Given the hamburger is clicked, then the nav appears as a full-height right-side slide-out tray rather than a floating popover, partial under-header panel, or page-obscuring modal.
+- Given the tray is open, then it occupies the full viewport height and only the stacked menu region scrolls.
 - Given the tray is open, then the header hamburger remains the trigger and the tray provides the close affordance; the user should not see two competing X buttons.
 - Given the tray is open, then all primary workspace routes and operational tools appear as visible stacked menu rows before sign out.
 - Given the signed-in user is Platform Owner, then Platform appears in the nav's Platform section.

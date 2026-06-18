@@ -1,6 +1,21 @@
 # Scratchpad
 
 ## 2026-06-18 — Current Objective
+**Task:** Force the hamburger slide-out tray to occupy 100% viewport height so the full stacked menu is visible and only the menu area scrolls.
+**Target specs:** `/specs/app-shell-navigation.spec.md`
+
+## Micro-Steps
+- [x] Re-read current drawer code and app shell acceptance criteria.
+- [x] Patch tray sizing from inferred `inset-y-0` to explicit viewport height.
+- [x] Run verification and deploy.
+
+## Assumptions
+- The deployed browser is collapsing the fixed tray height despite `inset-y-0`; explicit `100dvh` plus flex `min-h-0` should remove ambiguity.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-18 — Current Objective
 **Task:** Aggressively rebuild the hamburger tray body to match the support-tool menu reference: app identity, user/status row, stacked nav items, Platform Admin section, bottom sign out.
 **Target specs:** `/specs/app-shell-navigation.spec.md`
 

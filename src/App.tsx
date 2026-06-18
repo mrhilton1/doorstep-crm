@@ -798,7 +798,7 @@ function AppHeaderNav({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed inset-y-0 right-0 z-[1610] w-80 max-w-[calc(100vw-12px)] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col"
+              className="fixed top-0 right-0 bottom-auto z-[1610] h-[100dvh] min-h-screen max-h-[100dvh] w-80 max-w-[calc(100vw-12px)] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col overflow-hidden"
             >
               <div className="relative p-4 border-b border-slate-200 bg-white">
                 <div className="flex items-center gap-3 pr-9">
@@ -839,7 +839,7 @@ function AppHeaderNav({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto py-4 bg-white">
+              <div className="flex-1 min-h-0 overflow-y-auto py-4 bg-white">
                 <nav className="space-y-1 px-2">
                   {primaryMenuItems.map(renderMenuItem)}
                 </nav>

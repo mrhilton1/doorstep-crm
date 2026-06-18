@@ -33,6 +33,7 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - Stripe payment affordances must not be customer-visible until explicitly enabled.
 - Additional charges/discounts can be added during/after visit before invoice finalization.
 - Record Transaction remains a first-class action label.
+- Accounts Receivable can create a manual receivable/expense-style invoice entry directly from the AR page after selecting an address/contact by name, address, email, or phone.
 - Quote and invoice line items must support quantity. Totals must calculate from unit price times quantity, so a $4 product with quantity 46 totals $184.
 - Product catalog prices are unit prices.
 - Catalog products and bundles need full create/read/update/delete controls in the workspace UI.
@@ -65,6 +66,7 @@ Sales reps can create/read/update/soft-delete quotes until accepted. Quotes live
 - Given a catalog product is deleted, when it belonged to bundles, then bundle references are cleaned up and empty bundles are removed.
 - Given a global discount is edited, when the user changes name/value/type, then the discount persists through workspace settings.
 - Given quote, invoice, or transaction records exist, when the unified address record opens, then history can query dedicated tables instead of parsing generic activity JSON.
+- Given the AR page is open, when a user clicks the add button, then they can search existing address/contact records and add an unpaid receivable entry with amount, description, due date, and note.
 - Given contacts are moved to a new address, when the move succeeds, then invoices are associated to the new address and quotes remain with the original address.
 
 ## Validation Plan

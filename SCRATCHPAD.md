@@ -1,6 +1,27 @@
 # Scratchpad
 
 ## 2026-06-18 — Current Objective
+**Task:** Improve admin trays, add AR entry creation, and add audited platform workspace switching with confirmation reason.
+**Target specs:** `/specs/platform-owner-admin.spec.md`, `/specs/quotes-invoices-payments.spec.md`, `/specs/app-shell-navigation.spec.md`
+
+## Micro-Steps
+- [x] Re-read relevant specs and inspect AR overlay/admin tray/workspace code.
+- [x] Update specs for half-width admin trays, AR add-entry flow, and audited platform workspace access.
+- [x] Implement half-width desktop trays.
+- [x] Implement AR Add button and form with contact/address search.
+- [x] Implement audited platform workspace access session and workspace switch UI.
+- [x] Run verification and apply migration.
+- [x] Push and deploy.
+
+## Assumptions
+- "Expense" on the AR page means a manually logged receivable/invoice-like charge tied to an address/contact.
+- Platform workspace viewing should be audited before access and should not restore broad platform-owner RLS access.
+- Existing `platform_audit_events` is the correct audit table for platform workspace viewing events.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-18 — Current Objective
 **Task:** Stop Platform Owner status from broadening normal workspace membership/RLS, clarify dashboard workspace identity, and explain why Mike saw data that felt like another workspace.
 **Target specs:** `/specs/supabase-workspace-auth.spec.md`, `/specs/platform-owner-admin.spec.md`, `/specs/app-shell-navigation.spec.md`
 

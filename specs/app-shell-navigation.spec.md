@@ -30,6 +30,7 @@ All authenticated app pages render through one shared app shell:
 - One nav drawer/menu with workspace navigation, operational tools, and platform-owner tools.
 - The hamburger opens a right-side slide-out tray modeled after support-tool `AppNav`; the tray should slide in from the right edge, own the menu surface, avoid dimming the workspace page, and avoid duplicate close controls.
 - The tray body uses the support-tool visual structure: app identity header, signed-in user/status row, stacked menu rows with icon/label/description/chevron, optional `Platform Admin` section, and bottom-pinned sign out.
+- Admin and utility slide-out panels should use a half-screen desktop tray when they are supporting tools, while staying full-width on mobile.
 - Platform Owner controls are separated from workspace controls.
 - Future impersonation/stealth status appears globally in the shell, not inside one page.
 - Entitlement-locked or platform-only items can be hidden or marked locked from one central nav model.
@@ -49,6 +50,7 @@ All authenticated app pages render through one shared app shell:
 - Given the tray is open, then it occupies the full viewport height and only the stacked menu region scrolls.
 - Given the tray is open, then the header hamburger remains the trigger and the tray provides the close affordance; the user should not see two competing X buttons.
 - Given the tray is open, then all primary workspace routes and operational tools appear as visible stacked menu rows before sign out.
+- Given a desktop user opens a supporting admin/utility tray, then it uses about half the viewport width instead of covering the entire app.
 - Given the signed-in user is Platform Owner, then Platform appears in the nav's Platform section.
 - Given the signed-in user is not Platform Owner, then Platform Owner nav items are hidden.
 - Given the user opens map view, then map overlays do not cover the shared app header.

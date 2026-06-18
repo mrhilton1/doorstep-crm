@@ -13,7 +13,8 @@ import {
   Calendar,
   Building,
   User,
-  ExternalLink
+  ExternalLink,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -35,6 +36,14 @@ export default function OverdueInvoicesOverlay({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Unpaid' | 'Overdue'>('all');
   const [simulatedReminderSent, setSimulatedReminderSent] = useState<string | null>(null);
+  const [isAddEntryOpen, setIsAddEntryOpen] = useState(false);
+  const [entrySearch, setEntrySearch] = useState('');
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
+  const [entryDescription, setEntryDescription] = useState('');
+  const [entryAmount, setEntryAmount] = useState('');
+  const [entryDueDate, setEntryDueDate] = useState(() => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  const [entryNote, setEntryNote] = useState('');
+  const [entryError, setEntryError] = useState<string | null>(null);
 
   // Flatten all invoices with associated property data
   const outstandingInvoices = useMemo(() => {
@@ -77,6 +86,32 @@ export default function OverdueInvoicesOverlay({
     });
   }, [outstandingInvoices, searchQuery, statusFilter]);
 
+  const entrySearchResults = useMemo(() => {
+    const normalized = entrySearch.trim().toLowerCase();
+    if (!normalized) return properties.slice(0, 8);
+
+    return properties.filter(property => {
+      const contactFields = property.contacts.flatMap(contact => [
+        contact.firstName,
+        contact.lastName,
+        contact.email,
+        contact.phone,
+        contact.role
+      ]);
+      const haystack = [
+        property.address,
+        property.firstName,
+        property.lastName,
+        property.email,
+        property.phone,
+        property.businessName,
+        ...contactFields
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      return haystack.includes(normalized);
+    }).slice(0, 8);
+  }, [entrySearch, properties]);
+
   // Total calculated outstanding sum
   const totalOutstanding = useMemo(() => {
     return outstandingInvoices.reduce((sum, item) => sum + item.invoice.total, 0);
@@ -117,6 +152,87 @@ export default function OverdueInvoicesOverlay({
     });
   };
 
+  const resetEntryForm = () => {
+    setEntrySearch('');
+    setSelectedPropertyId('');
+    setEntryDescription('');
+    setEntryAmount('');
+    setEntryDueDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+    setEntryNote('');
+    setEntryError(null);
+  };
+
+  const handleCreateEntry = (event: React.FormEvent) => {
+    event.preventDefault();
+    setEntryError(null);
+
+    const property = properties.find(p => p.id === selectedPropertyId);
+    const amount = Number(entryAmount);
+    const description = entryDescription.trim();
+
+    if (!property) {
+      setEntryError('Choose an address or contact before adding the AR entry.');
+      return;
+    }
+    if (!description) {
+      setEntryError('Add a short description for the charge.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setEntryError('Enter an amount greater than zero.');
+      return;
+    }
+
+    const createdAt = Date.now();
+    const dueDate = entryDueDate
+      ? new Date(`${entryDueDate}T12:00:00`).getTime()
+      : createdAt;
+    const invoiceNumber = `AR-${String(createdAt).slice(-6)}`;
+    const id = crypto.randomUUID();
+
+    const invoice: Invoice = {
+      id,
+      invoiceNumber,
+      lineItems: [{
+        id: crypto.randomUUID(),
+        productId: 'manual-ar-entry',
+        name: description,
+        price: amount,
+        quantity: 1,
+        description: entryNote.trim(),
+        category: 'Manual AR',
+        isSelected: true
+      }],
+      subtotal: amount,
+      total: amount,
+      status: dueDate < createdAt ? 'Overdue' : 'Unpaid',
+      createdAt,
+      dueDate,
+      notes: entryNote.trim() || undefined
+    };
+
+    const newInteraction = {
+      id: crypto.randomUUID(),
+      type: 'Note' as const,
+      content: `Manual AR entry ${invoiceNumber} created for $${amount.toFixed(2)}: ${description}${entryNote.trim() ? ` — ${entryNote.trim()}` : ''}`,
+      createdAt,
+      authorId: 'system',
+      metadata: {
+        invoiceId: id,
+        invoiceNumber,
+        source: 'ar_overlay'
+      }
+    };
+
+    updateProperty(property.id, {
+      invoices: [...(property.invoices || []), invoice],
+      interactions: [...(property.interactions || []), newInteraction]
+    });
+
+    resetEntryForm();
+    setIsAddEntryOpen(false);
+  };
+
   // Simulating payment reminder message trigger
   const handleSendReminder = (item: typeof outstandingInvoices[0]) => {
     const phone = item.property.phone || 'Customer';
@@ -135,7 +251,7 @@ export default function OverdueInvoicesOverlay({
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-[4000] bg-zinc-50 flex flex-col h-full text-slate-800"
+      className="fixed top-0 right-0 bottom-0 z-[4000] w-full lg:w-1/2 bg-zinc-50 border-l border-slate-200 shadow-2xl flex flex-col h-full text-slate-800"
     >
       {/* Header */}
       <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center bg-white shadow-sm shrink-0">
@@ -155,7 +271,156 @@ export default function OverdueInvoicesOverlay({
             </div>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setIsAddEntryOpen(true)}
+          className="h-11 w-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm hover:bg-blue-700 active:scale-95 transition-all"
+          title="Add AR entry"
+          aria-label="Add AR entry"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
       </div>
+
+      <AnimatePresence>
+        {isAddEntryOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[4100] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.form
+              initial={{ y: 18, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 18, opacity: 0, scale: 0.98 }}
+              onSubmit={handleCreateEntry}
+              className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 p-6 space-y-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Manual AR Entry</p>
+                  <h3 className="mt-1 text-2xl font-black text-slate-900">Add Expense / Receivable</h3>
+                  <p className="mt-1 text-xs font-bold text-slate-500">Find the address or contact, then log the amount due.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetEntryForm();
+                    setIsAddEntryOpen(false);
+                  }}
+                  className="h-10 w-10 rounded-2xl bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100"
+                  aria-label="Close add AR entry"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Search Address / Contact</label>
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    value={entrySearch}
+                    onChange={(event) => setEntrySearch(event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-bold text-slate-800 outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    placeholder="Search by address, name, email, phone..."
+                  />
+                </div>
+                <div className="max-h-44 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-2 space-y-1">
+                  {entrySearchResults.length === 0 ? (
+                    <p className="px-3 py-4 text-center text-xs font-bold text-slate-400">No matching contacts or addresses.</p>
+                  ) : entrySearchResults.map(property => {
+                    const selected = selectedPropertyId === property.id;
+                    const label = `${property.firstName || ''} ${property.lastName || ''}`.trim() || property.businessName || 'Unnamed contact';
+                    return (
+                      <button
+                        key={property.id}
+                        type="button"
+                        onClick={() => setSelectedPropertyId(property.id)}
+                        className={cn(
+                          "w-full rounded-xl px-3 py-3 text-left transition-all border",
+                          selected ? "bg-blue-50 border-blue-200 text-blue-900" : "bg-white border-transparent hover:border-slate-200"
+                        )}
+                      >
+                        <span className="block text-sm font-black truncate">{property.address}</span>
+                        <span className="block text-xs font-bold text-slate-500 truncate">{label} {property.email ? `• ${property.email}` : ''} {property.phone ? `• ${property.phone}` : ''}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Description</span>
+                  <input
+                    value={entryDescription}
+                    onChange={(event) => setEntryDescription(event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    placeholder="Window cleaning balance"
+                  />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={entryAmount}
+                    onChange={(event) => setEntryAmount(event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    placeholder="184.00"
+                  />
+                </label>
+              </div>
+
+              <label className="space-y-2 block">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Due Date</span>
+                <input
+                  type="date"
+                  value={entryDueDate}
+                  onChange={(event) => setEntryDueDate(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                />
+              </label>
+
+              <label className="space-y-2 block">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Note</span>
+                <textarea
+                  value={entryNote}
+                  onChange={(event) => setEntryNote(event.target.value)}
+                  className="min-h-24 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                  placeholder="Optional internal note..."
+                />
+              </label>
+
+              {entryError && (
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{entryError}</div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetEntryForm();
+                    setIsAddEntryOpen(false);
+                  }}
+                  className="flex-1 rounded-2xl bg-slate-100 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 rounded-2xl bg-blue-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-blue-700"
+                >
+                  Add Entry
+                </button>
+              </div>
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Overview Cards Panel */}
       <div className="border-b border-[#E2E8F0] bg-white p-6 shrink-0 grid grid-cols-1 md:grid-cols-3 gap-4">

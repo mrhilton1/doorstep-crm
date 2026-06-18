@@ -24,6 +24,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 4. Platform dashboard shows workspace/user counts, recent workspaces, recent users, usage totals, and recent audit/session events.
 5. When Platform Owner views platform data, the backend records the audited platform action.
 6. Future impersonation or "view as" actions require a reason, visible banner, and audit entry before any target account/workspace is viewed or acted on.
+7. Platform Owner can choose a workspace from the workspace control, confirm the access, optionally enter a reason, and view that workspace through a short-lived audited access session.
 
 ## Business Rules
 - Platform Owner is a platform-wide control plane role, not a workspace role.
@@ -37,6 +38,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 - Platform Owner may see soft-deleted records only through approved investigation/admin surfaces.
 - Normal workspace users remain constrained to their workspace by RLS.
 - Platform-wide reads belong behind approved platform RPCs/routes, not shared workspace membership helper functions.
+- Platform workspace access sessions must create a dedicated audit row with actor, target workspace, reason, timestamp, and source app context before normal workspace views can load target workspace data.
 
 ## MVP Usage Metrics
 - Total workspaces, including active and deleted counts.
@@ -68,6 +70,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 - Given a user signs in or refreshes with a valid session, then a session/login audit event is recorded without storing secrets.
 - Given platform admin RPCs exist, then they are documented as internal APIs in the API registry.
 - Given browser code queries platform data, then it uses authenticated Supabase RPC/table access only, never a service-role key.
+- Given a Platform Owner chooses another workspace from the workspace switcher, when they confirm the modal, then an audited workspace access session is created before the dashboard switches.
 
 ## Validation Plan
 - Apply migration in Supabase.

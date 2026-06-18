@@ -238,6 +238,8 @@ type WorkspaceContext = {
   userId: string | null;
   userEmail: string | null;
   isPlatformOwner: boolean;
+  platformWorkspaces: PlatformWorkspaceOverview[];
+  onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string) => Promise<void>;
   onSignOut: () => void;
 };
 
@@ -652,6 +654,7 @@ type AppHeaderNavProps = {
   dataStatus: 'local' | 'loading' | 'synced' | 'error';
   dataError: string | null;
   currentView: string;
+  platformWorkspaces: PlatformWorkspaceOverview[];
   isProspectsOpen: boolean;
   isCatalogOpen: boolean;
   isSettingsOpen: boolean;
@@ -667,6 +670,7 @@ type AppHeaderNavProps = {
   onOpenInvoices: () => void;
   onOpenDisplacedContacts: () => void;
   onOpenSettings: () => void;
+  onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string) => Promise<void>;
   onSignOut: () => void;
 };
 
@@ -678,6 +682,7 @@ function AppHeaderNav({
   dataStatus,
   dataError,
   currentView,
+  platformWorkspaces,
   isProspectsOpen,
   isCatalogOpen,
   isSettingsOpen,
@@ -693,9 +698,15 @@ function AppHeaderNav({
   onOpenInvoices,
   onOpenDisplacedContacts,
   onOpenSettings,
+  onRequestWorkspaceAccess,
   onSignOut,
 }: AppHeaderNavProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+  const [workspaceReason, setWorkspaceReason] = useState('');
+  const [workspaceAccessError, setWorkspaceAccessError] = useState<string | null>(null);
+  const [isWorkspaceAccessing, setIsWorkspaceAccessing] = useState(false);
   const runAndClose = (action: () => void) => {
     action();
     setIsOpen(false);
@@ -709,6 +720,32 @@ function AppHeaderNav({
   };
   const activeMeta = pageMeta[currentView] || pageMeta.dashboard;
   const statusTone = dataStatus === 'error' ? 'bg-red-500' : dataStatus === 'loading' ? 'bg-yellow-400' : workspaceId ? 'bg-green-500' : 'bg-slate-300';
+  const selectedWorkspace = platformWorkspaces.find(workspace => workspace.id === selectedWorkspaceId) || null;
+  const openWorkspaceSwitcher = () => {
+    if (!isPlatformOwner || platformWorkspaces.length === 0) return;
+    setSelectedWorkspaceId(workspaceId || '');
+    setWorkspaceReason('');
+    setWorkspaceAccessError(null);
+    setIsWorkspaceSwitcherOpen(true);
+  };
+  const confirmWorkspaceAccess = async () => {
+    if (!selectedWorkspace) {
+      setWorkspaceAccessError('Choose a workspace to view.');
+      return;
+    }
+    setIsWorkspaceAccessing(true);
+    setWorkspaceAccessError(null);
+    try {
+      await onRequestWorkspaceAccess(selectedWorkspace, workspaceReason);
+      setIsWorkspaceSwitcherOpen(false);
+      setWorkspaceReason('');
+      setSelectedWorkspaceId('');
+    } catch (accessError: any) {
+      setWorkspaceAccessError(accessError?.message || 'Workspace access could not be started.');
+    } finally {
+      setIsWorkspaceAccessing(false);
+    }
+  };
   const primaryMenuItems = [
     { label: 'Dashboard', description: 'View workspace reports', icon: <LayoutGrid className="w-5 h-5" />, onClick: onOpenDashboard, active: currentView === 'dashboard' },
     { label: 'Contacts', description: 'Address and contact records', icon: <Users className="w-5 h-5" />, onClick: onOpenContacts, active: currentView === 'contacts' },
@@ -769,13 +806,23 @@ function AppHeaderNav({
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 max-w-[280px]">
+          <button
+            type="button"
+            onClick={openWorkspaceSwitcher}
+            disabled={!isPlatformOwner || platformWorkspaces.length === 0}
+            className={cn(
+              "hidden sm:flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 max-w-[280px] text-left transition-all",
+              isPlatformOwner && platformWorkspaces.length > 0 ? "hover:bg-white hover:border-blue-200 hover:shadow-sm" : "cursor-default"
+            )}
+            title={isPlatformOwner ? 'Switch audited workspace view' : undefined}
+          >
             <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusTone)} title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')} />
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{workspaceName}</p>
               <p className="text-xs font-bold text-slate-700 truncate">{userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}</p>
             </div>
-          </div>
+            {isPlatformOwner && platformWorkspaces.length > 0 && <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+          </button>
           <button
             type="button"
             onClick={() => setIsOpen(prev => !prev)}
@@ -868,6 +915,102 @@ function AppHeaderNav({
               )}
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isWorkspaceSwitcherOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2400] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ y: 18, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 18, opacity: 0, scale: 0.98 }}
+              className="w-full max-w-3xl rounded-3xl bg-white border border-slate-200 shadow-2xl p-6"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Platform Workspace Access</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Choose Workspace</h2>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">This creates an audit record before you view another workspace dashboard.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsWorkspaceSwitcherOpen(false)}
+                  className="h-10 w-10 rounded-2xl bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100"
+                  aria-label="Close workspace switcher"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_0.9fr] gap-4">
+                <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-2 space-y-1">
+                  {platformWorkspaces.map(workspace => {
+                    const selected = selectedWorkspaceId === workspace.id;
+                    return (
+                      <button
+                        key={workspace.id}
+                        type="button"
+                        onClick={() => setSelectedWorkspaceId(workspace.id)}
+                        className={cn(
+                          "w-full rounded-xl border px-3 py-3 text-left transition-all",
+                          selected ? "border-blue-200 bg-blue-50 text-blue-900" : "border-transparent bg-white hover:border-slate-200"
+                        )}
+                      >
+                        <span className="block text-sm font-black truncate">{workspace.name || workspace.slug || 'Unnamed workspace'}</span>
+                        <span className="mt-1 block text-xs font-bold text-slate-500">
+                          {workspace.activeMemberCount ?? workspace.memberCount ?? 0} members • {workspace.addressCount ?? 0} addresses • {workspace.activityCount ?? 0} activities
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Selected</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{selectedWorkspace?.name || selectedWorkspace?.slug || 'No workspace selected'}</p>
+                  </div>
+                  <label className="block space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Reason</span>
+                    <textarea
+                      value={workspaceReason}
+                      onChange={(event) => setWorkspaceReason(event.target.value)}
+                      className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                      placeholder="Optional: support, QA, billing review..."
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {workspaceAccessError && (
+                <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{workspaceAccessError}</div>
+              )}
+
+              <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsWorkspaceSwitcherOpen(false)}
+                  className="flex-1 rounded-2xl bg-slate-100 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmWorkspaceAccess}
+                  disabled={!selectedWorkspace || isWorkspaceAccessing}
+                  className="flex-1 rounded-2xl bg-blue-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isWorkspaceAccessing ? 'Opening...' : 'Confirm Access'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </header>
@@ -1762,6 +1905,7 @@ function SupabaseShell() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState('DoorStep Workspace');
   const [isPlatformOwner, setIsPlatformOwner] = useState(false);
+  const [platformWorkspaces, setPlatformWorkspaces] = useState<PlatformWorkspaceOverview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -1810,7 +1954,16 @@ function SupabaseShell() {
       if (!isMounted) return;
 
       if (!profileError) {
-        setIsPlatformOwner(Boolean((profile as any)?.is_platform_owner));
+        const profileIsPlatformOwner = Boolean((profile as any)?.is_platform_owner);
+        setIsPlatformOwner(profileIsPlatformOwner);
+        if (profileIsPlatformOwner) {
+          const { data: platformOverview } = await doorstepDb.rpc('platform_dashboard_overview');
+          if (isMounted) {
+            setPlatformWorkspaces(((platformOverview as PlatformOverview | null)?.workspaces || []) as PlatformWorkspaceOverview[]);
+          }
+        } else {
+          setPlatformWorkspaces([]);
+        }
       }
 
       if (recordedSessionUserId.current !== session.user.id) {
@@ -1884,6 +2037,25 @@ function SupabaseShell() {
     };
   }, [session]);
 
+  const handlePlatformWorkspaceAccess = useCallback(async (workspace: PlatformWorkspaceOverview, reason: string) => {
+    if (!session?.user || !isPlatformOwner) {
+      throw new Error('Platform owner access is required.');
+    }
+
+    const { error: accessError } = await doorstepDb.rpc('start_platform_workspace_access', {
+      p_target_workspace_id: workspace.id,
+      p_reason: reason.trim() || null,
+      p_source: 'app_header_workspace_switcher',
+    });
+
+    if (accessError) {
+      throw new Error(accessError.message);
+    }
+
+    setWorkspaceId(workspace.id);
+    setWorkspaceName(workspace.name || workspace.slug || 'DoorStep Workspace');
+  }, [isPlatformOwner, session?.user]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -1936,6 +2108,8 @@ function SupabaseShell() {
       userId={session.user.id}
       userEmail={session.user.email || null}
       isPlatformOwner={isPlatformOwner}
+      platformWorkspaces={platformWorkspaces}
+      onRequestWorkspaceAccess={handlePlatformWorkspaceAccess}
       onSignOut={() => supabase.auth.signOut()}
     />
   );
@@ -2172,7 +2346,16 @@ function UpdatePasswordScreen({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner, onSignOut }: WorkspaceContext) {
+function CrmApp({
+  workspaceId,
+  workspaceName,
+  userId,
+  userEmail,
+  isPlatformOwner,
+  platformWorkspaces,
+  onRequestWorkspaceAccess,
+  onSignOut
+}: WorkspaceContext) {
   const initialRoute = useMemo(() => parseAppRoute(), []);
   const isApplyingBrowserRoute = useRef(false);
   // State
@@ -3914,6 +4097,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
         dataStatus={dataStatus}
         dataError={dataError}
         currentView={currentView}
+        platformWorkspaces={platformWorkspaces}
         isProspectsOpen={isProspectsOpen}
         isCatalogOpen={isCatalogOpen}
         isSettingsOpen={isSettingsOpen}
@@ -3933,6 +4117,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
           setIsDisplacedContactsOpen(true);
         }}
         onOpenSettings={openAppSettings}
+        onRequestWorkspaceAccess={onRequestWorkspaceAccess}
         onSignOut={onSignOut}
       />
 
@@ -6334,7 +6519,7 @@ function DisplacedContactsOverlay({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-        className="w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col"
+        className="w-full lg:w-1/2 lg:max-w-none h-full bg-white shadow-2xl flex flex-col"
       >
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <div>
@@ -6432,7 +6617,7 @@ function RouteDetailOverlay({
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
-      className="fixed inset-0 z-[5000] bg-white flex flex-col"
+      className="fixed top-0 right-0 bottom-0 z-[5000] w-full lg:w-1/2 bg-white border-l border-slate-200 shadow-2xl flex flex-col"
     >
       <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
         <div className="flex items-center gap-3 text-[#1E293B]">
@@ -6714,7 +6899,7 @@ function ProspectsOverlay({
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-[4000] bg-white flex flex-col"
+      className="fixed top-0 right-0 bottom-0 z-[4000] w-full lg:w-1/2 bg-white border-l border-slate-200 shadow-2xl flex flex-col"
     >
       <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
         <div className="flex items-center gap-3 text-[#1E293B]">
@@ -7036,7 +7221,7 @@ function LeadsOverlay({
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-[4000] bg-white flex flex-col"
+      className="fixed top-0 right-0 bottom-0 z-[4000] w-full lg:w-1/2 bg-white border-l border-slate-200 shadow-2xl flex flex-col"
     >
       <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
         <div className="flex items-center gap-3 text-[#1E293B]">
@@ -7282,7 +7467,7 @@ function CatalogOverlay({
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-[3000] bg-white flex flex-col shadow-2xl"
+      className="fixed top-0 right-0 bottom-0 z-[3000] w-full lg:w-1/2 bg-white border-l border-slate-200 shadow-2xl flex flex-col"
     >
       <div className="px-6 py-6 border-b border-gray-100 flex justify-between items-center bg-white">
         <div className="flex items-center gap-3 text-[#1E293B]">
@@ -7740,7 +7925,7 @@ function SettingsOverlay({
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-[4000] bg-white flex flex-col"
+      className="fixed top-0 right-0 bottom-0 z-[4000] w-full lg:w-1/2 bg-white border-l border-slate-200 shadow-2xl flex flex-col"
     >
       <div className="px-6 py-4 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
         <div className="flex items-center gap-3 text-[#1E293B]">
@@ -8524,7 +8709,7 @@ function TeamOverlay({ team, goals, properties, settings, onNotice, onClose }: {
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-[4000] bg-white flex flex-col"
+      className="fixed top-0 right-0 bottom-0 z-[4000] w-full lg:w-1/2 bg-white border-l border-slate-200 shadow-2xl flex flex-col"
     >
       <div className="px-6 py-4 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
         <div className="flex items-center gap-3 text-[#1E293B]">

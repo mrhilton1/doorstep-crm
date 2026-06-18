@@ -28,7 +28,7 @@ DoorStep has a reusable `AppHeaderNav` component, but it is rendered as a floati
 All authenticated app pages render through one shared app shell:
 - Sticky top header with app/workspace context.
 - One nav drawer/menu with workspace navigation, operational tools, and platform-owner tools.
-- The hamburger opens a right-side slide-out tray modeled after support-tool `AppNav`; the tray should slide in from the right, keep the shared header visible, and avoid dimming or covering the workspace page.
+- The hamburger opens a right-side slide-out tray modeled after support-tool `AppNav`; the tray should slide in from the right edge, own the menu surface, avoid dimming the workspace page, and avoid duplicate close controls.
 - Platform Owner controls are separated from workspace controls.
 - Future impersonation/stealth status appears globally in the shell, not inside one page.
 - Entitlement-locked or platform-only items can be hidden or marked locked from one central nav model.
@@ -44,7 +44,8 @@ All authenticated app pages render through one shared app shell:
 ## Acceptance Criteria
 - Given any primary app route, when the user is authenticated, then the same top header is visible.
 - Given the nav menu opens, then workspace info, user email, sync state, app routes, operational tools, and sign-out are available in the same drawer.
-- Given the hamburger is clicked, then the nav appears as a right-side slide-out tray below the shared header rather than a floating popover or page-obscuring modal.
+- Given the hamburger is clicked, then the nav appears as a full-height right-side slide-out tray rather than a floating popover, partial under-header panel, or page-obscuring modal.
+- Given the tray is open, then the header hamburger remains the trigger and the tray provides the close affordance; the user should not see two competing X buttons.
 - Given the signed-in user is Platform Owner, then Platform appears in the nav's Platform section.
 - Given the signed-in user is not Platform Owner, then Platform Owner nav items are hidden.
 - Given the user opens map view, then map overlays do not cover the shared app header.
@@ -63,7 +64,7 @@ All authenticated app pages render through one shared app shell:
 ## Decisions Made
 - 2026-06-18: Use support-tool `AppHeader` + `AppNav` as the conceptual reference, but implement in DoorStep's existing React/Vite app without adding a new UI library.
 - 2026-06-18: Keep true impersonation deferred until the backend audited flow is specified.
-- 2026-06-18: Match support-tool's side-tray behavior more closely: header owns the trigger, nav content slides from the right as a tray, and the app page is not dimmed.
+- 2026-06-18: Match support-tool's side-tray behavior more closely: header owns the trigger, nav content slides from the right as a full-height tray, and the app page is not dimmed.
 
 ## Iteration History
 - 2026-06-18: Initial shared app shell navigation spec created.

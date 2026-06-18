@@ -777,7 +777,7 @@ function AppHeaderNav({
             aria-label="Open navigation"
             aria-expanded={isOpen}
           >
-            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <Menu className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -785,15 +785,15 @@ function AppHeaderNav({
       <AnimatePresence>
         {isOpen && (
           <>
-            <div className="fixed top-16 right-0 bottom-0 left-0 z-[1490]" onClick={() => setIsOpen(false)} />
+            <div className="fixed inset-0 z-[1590]" onClick={() => setIsOpen(false)} />
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed top-16 right-0 bottom-0 z-[1500] w-80 max-w-[calc(100vw-12px)] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col"
+              className="fixed inset-y-0 right-0 z-[1610] w-80 max-w-[calc(100vw-12px)] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col"
             >
-              <div className="p-4 border-b border-slate-100 bg-slate-50">
+              <div className="p-4 border-b border-slate-100 bg-slate-50 pt-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">DoorStep Workspace</p>

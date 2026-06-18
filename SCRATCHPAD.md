@@ -1,6 +1,24 @@
 # Scratchpad
 
 ## 2026-06-18 — Current Objective
+**Task:** Correct the hamburger navigation so it is a proper support-tool-style slide-out menu tray instead of a partial under-header panel with duplicated close controls.
+**Target specs:** `/specs/app-shell-navigation.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and app shell spec.
+- [x] Inspect current `AppHeaderNav` implementation and screenshot symptoms.
+- [x] Update the spec with the corrected tray expectation.
+- [x] Patch `AppHeaderNav` so the hamburger remains the trigger and the tray owns the full slide-out menu.
+- [x] Run verification before pushing/deploying.
+
+## Assumptions
+- The tray should slide from the right edge like support-tool `SheetContent side="right"`, not appear as a below-header partial panel.
+- The header hamburger should not turn into a second competing close button while the tray also has its own close affordance.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-18 — Current Objective
 **Task:** Fix the shared hamburger menu to behave like the support-tool slide-out tray and force ordinary workspace dashboards to show only the active workspace's data, even for Platform Owners.
 **Target specs:** `/specs/app-shell-navigation.spec.md`, `/specs/supabase-workspace-auth.spec.md`
 

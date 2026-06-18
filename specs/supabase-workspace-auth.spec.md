@@ -1,7 +1,7 @@
 # Feature: Supabase Workspace Auth
 
 **Status:** In Progress  
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-18
 **Owner:** Mike Hilton
 
 ---
@@ -10,7 +10,7 @@
 Enable DoorStep CRM to operate as a multi-user, multi-workspace app backed by Supabase Auth, RLS, roles, permissions, and entitlements.
 
 ## Current Behavior
-Production renders a Supabase sign-in/sign-up screen when runtime config is present. Users can request a password reset email and set a new password after opening the Supabase recovery link. On first authenticated load, the app attempts to find an active workspace membership and calls `doorstep.create_workspace` if none exists. Address records are loaded from `doorstep.addresses`; nested MVP data such as quotes, invoices, interactions, appointments, tags, and child contacts still rides through the address `custom_data` bridge until those flows are normalized. Workspace-level app state such as catalog, settings, team, goals, and routes persists through `doorstep.workspace_app_state` as a bridge table. Browser storage is not used as a CRM data source.
+Production renders a Supabase sign-in/sign-up screen when runtime config is present. Users can request a password reset email and set a new password after opening the Supabase recovery link. On first authenticated load, the app attempts to find an active workspace membership and calls `doorstep.create_workspace` if none exists. The app reads `doorstep.profiles.is_platform_owner` for the signed-in user and shows the `/platform` dashboard only for Platform Owners. Address records are loaded from `doorstep.addresses`; nested MVP data such as quotes, invoices, interactions, appointments, tags, and child contacts still rides through the address `custom_data` bridge until those flows are normalized. Workspace-level app state such as catalog, settings, team, goals, and routes persists through `doorstep.workspace_app_state` as a bridge table. Browser storage is not used as a CRM data source.
 
 ## Desired Behavior
 Every authenticated user belongs to one or more workspaces. Signup is open to anyone for MVP, but users must use real email addresses. Workspace membership controls access to address/contact/quote/appointment data through Supabase RLS. Roles are renameable and cloneable later, with MVP defaults for Owner, Admin, Sales Rep, Scheduler, and Technician.
@@ -33,7 +33,8 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Supabase service-role keys must never be used in browser code.
 - RLS must be enabled on workspace-owned tables.
 - Owner/Admin can manage workspace configuration later.
-- Platform Owner capabilities are separate from Workspace Owner capabilities.
+- Platform Owner capabilities are separate from Workspace Owner capabilities and are controlled by `doorstep.profiles.is_platform_owner`.
+- Platform-owner cross-workspace reads must use audited, explicit RPCs or policies; service-role credentials must never be used in browser code.
 - Entitlements are hardcoded for MVP but must remain updateable via future platform APIs.
 
 ## Edge Cases
@@ -44,7 +45,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Dependency failures: Supabase outage should show a clear login/load error, not a blank app.
 
 ## Non-Goals
-- Full platform-owner UI.
+- Full platform-owner UI beyond the first read-only dashboard.
 - Full role cloning UI.
 - Territory-based access control for MVP.
 - SSO or OAuth login.
@@ -60,6 +61,8 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Given address CRM data changes in the app, when persistence is needed, then data is written through `doorstep.addresses` rather than browser storage.
 - Given workspace-level app state changes in the app, when persistence is needed, then catalog, settings, team, goals, and routes are written through `doorstep.workspace_app_state` rather than browser storage.
 - Given catalog products, bundles, or global discounts are created/edited/deleted, when persistence is needed, then those workspace-level changes are saved through `doorstep.workspace_app_state`.
+- Given a Platform Owner signs in, when the app loads, then the Platform dashboard is available from the global nav and `/platform`.
+- Given a non-platform user signs in, when the app loads, then the Platform dashboard is not visible and platform overview RPCs deny access.
 
 ## Validation Plan
 - Verify Supabase migrations exist and are listed in Supabase.
@@ -80,6 +83,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - 2026-06-09: Browser storage is not an acceptable source of truth for CRM data; Supabase is required.
 - 2026-06-09: Use `doorstep.workspace_app_state` as a bridge for workspace-level JSON state until normalized tables are implemented.
 - 2026-06-10: Catalog product/bundle CRUD and global discount CRUD continue to use `doorstep.workspace_app_state` until normalized catalog tables are implemented.
+- 2026-06-18: Platform Owner is modeled on `doorstep.profiles.is_platform_owner`; cross-workspace dashboard reads go through audited internal RPCs.
 
 ## Iteration History
 - 2026-06-08: Initial auth/workspace bootstrap shipped.
@@ -88,3 +92,4 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - 2026-06-09: Removed local CRM persistence and local demo fallback from the live app.
 - 2026-06-09: Added Supabase workspace app-state bridge for catalog, settings, team, goals, and routes.
 - 2026-06-10: Confirmed catalog and discount CRUD changes persist through the workspace app-state bridge.
+- 2026-06-18: Added Platform Owner dashboard foundation and session/platform audit logging.

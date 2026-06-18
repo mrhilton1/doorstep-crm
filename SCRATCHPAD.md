@@ -1,5 +1,29 @@
 # Scratchpad
 
+## 2026-06-18 — Current Objective
+**Task:** Add platform-owner foundation for cross-workspace visibility, usage rollups, audit logging, and future audited impersonation.
+**Target specs:** `/specs/platform-owner-admin.spec.md`, `/specs/supabase-workspace-auth.spec.md`, `/specs/platform-api-governance.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, Supabase workflow, workspace auth spec, and API governance spec.
+- [x] Inspect current workspace/RLS/schema and app routing.
+- [x] Verify live Supabase does not already have platform audit/API registry tables.
+- [x] Create/update platform-owner spec and decisions.
+- [x] Add a new migration for platform audit events, API registry, session login logging, and platform overview RPC.
+- [x] Add a platform dashboard route visible only to platform owners.
+- [x] Register new RPC/API contracts as internal APIs.
+- [x] Run build/lint and Supabase verification.
+- [ ] Commit, push, deploy, then document final learnings.
+
+## Assumptions
+- Platform Owner is a platform-wide role stored on `doorstep.profiles.is_platform_owner`, separate from workspace Owner.
+- True "login as any user" must not be implemented in browser code and needs a separately approved backend-only, fully audited flow.
+- MVP usage should start with counts and recency: workspaces, users, members, addresses, contacts, activities, and login/audit events.
+- A lightweight staging path is worthwhile now because RLS and cross-workspace admin behavior are high-risk.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-12 — Current Objective
 **Task:** Fix the stuck Delete Address modal by moving address soft delete to a Supabase RPC and surfacing modal errors.
 **Target specs:** `/specs/address-crm-core.spec.md`, `/specs/unified-address-record.spec.md`

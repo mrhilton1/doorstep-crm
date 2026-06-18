@@ -237,20 +237,22 @@ type WorkspaceContext = {
   workspaceName: string;
   userId: string | null;
   userEmail: string | null;
+  isPlatformOwner: boolean;
   onSignOut: () => void;
 };
 
-type AppView = 'dashboard' | 'contacts' | 'appointments' | 'map';
+type AppView = 'dashboard' | 'contacts' | 'appointments' | 'map' | 'platform';
 
 const APP_VIEW_PATHS: Record<AppView, string> = {
   dashboard: '/',
   contacts: '/contacts',
   appointments: '/appointments',
   map: '/map',
+  platform: '/platform',
 };
 
 const isAppView = (value: string): value is AppView =>
-  ['dashboard', 'contacts', 'appointments', 'map'].includes(value);
+  ['dashboard', 'contacts', 'appointments', 'map', 'platform'].includes(value);
 
 const parseAppRoute = (): { view: AppView; propertyId: string | null } => {
   const segments = window.location.pathname.split('/').filter(Boolean);
@@ -284,6 +286,62 @@ const buildAppPath = (view: AppView, propertyId?: string | null) => {
 type WorkspaceMembership = {
   workspace_id: string;
   workspaces?: { name?: string | null } | { name?: string | null }[] | null;
+};
+
+type PlatformOverviewTotals = {
+  workspaces?: number;
+  activeWorkspaces?: number;
+  deletedWorkspaces?: number;
+  profiles?: number;
+  platformOwners?: number;
+  activeMembers?: number;
+  addresses?: number;
+  deletedAddresses?: number;
+  contacts?: number;
+  activities?: number;
+  auditEvents?: number;
+};
+
+type PlatformWorkspaceOverview = {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
+  createdAt?: string | null;
+  deletedAt?: string | null;
+  memberCount?: number;
+  activeMemberCount?: number;
+  addressCount?: number;
+  contactCount?: number;
+  activityCount?: number;
+  lastActivityAt?: string | null;
+};
+
+type PlatformUserOverview = {
+  id: string;
+  email?: string | null;
+  fullName?: string | null;
+  username?: string | null;
+  isPlatformOwner?: boolean;
+  createdAt?: string | null;
+  workspaceCount?: number;
+};
+
+type PlatformAuditEventOverview = {
+  id: string;
+  action?: string | null;
+  actorUserId?: string | null;
+  targetUserId?: string | null;
+  targetWorkspaceId?: string | null;
+  createdAt?: string | null;
+  metadata?: Record<string, any>;
+};
+
+type PlatformOverview = {
+  generatedAt?: string;
+  totals?: PlatformOverviewTotals;
+  workspaces?: PlatformWorkspaceOverview[];
+  recentUsers?: PlatformUserOverview[];
+  recentAuditEvents?: PlatformAuditEventOverview[];
 };
 
 type WorkspaceAppStateKey = 'catalog' | 'settings' | 'team' | 'goals' | 'routes';
@@ -590,6 +648,7 @@ type AppHeaderNavProps = {
   workspaceId: string | null;
   workspaceName: string;
   userEmail: string | null;
+  isPlatformOwner: boolean;
   dataStatus: 'local' | 'loading' | 'synced' | 'error';
   dataError: string | null;
   currentView: string;
@@ -602,6 +661,7 @@ type AppHeaderNavProps = {
   onOpenContacts: () => void;
   onOpenMap: () => void;
   onOpenAppointments: () => void;
+  onOpenPlatform: () => void;
   onOpenRoutes: () => void;
   onOpenCatalog: () => void;
   onOpenInvoices: () => void;
@@ -614,6 +674,7 @@ function AppHeaderNav({
   workspaceId,
   workspaceName,
   userEmail,
+  isPlatformOwner,
   dataStatus,
   dataError,
   currentView,
@@ -626,6 +687,7 @@ function AppHeaderNav({
   onOpenContacts,
   onOpenMap,
   onOpenAppointments,
+  onOpenPlatform,
   onOpenRoutes,
   onOpenCatalog,
   onOpenInvoices,
@@ -643,6 +705,12 @@ function AppHeaderNav({
     { label: 'Contacts', icon: <Users className="w-4 h-4" />, onClick: onOpenContacts, active: currentView === 'contacts' },
     { label: 'Map', icon: <MapIcon className="w-4 h-4" />, onClick: onOpenMap, active: currentView === 'map' },
     { label: 'Schedule', icon: <Calendar className="w-4 h-4" />, onClick: onOpenAppointments, active: currentView === 'appointments' },
+    ...(isPlatformOwner ? [{
+      label: 'Platform',
+      icon: <ShieldCheck className="w-4 h-4" />,
+      onClick: onOpenPlatform,
+      active: currentView === 'platform'
+    }] : []),
     { label: 'Routes', icon: <Navigation className="w-4 h-4" />, onClick: onOpenRoutes, active: isProspectsOpen },
     { label: 'Catalog', icon: <Package className="w-4 h-4" />, onClick: onOpenCatalog, active: isCatalogOpen },
     { label: 'Invoices', icon: <DollarSign className="w-4 h-4" />, onClick: onOpenInvoices, active: isOverdueInvoicesOpen },
@@ -729,6 +797,189 @@ function AppHeaderNav({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function PlatformOwnerDashboard({ isPlatformOwner }: { isPlatformOwner: boolean }) {
+  const [overview, setOverview] = useState<PlatformOverview | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(isPlatformOwner ? 'loading' : 'error');
+  const [error, setError] = useState<string | null>(isPlatformOwner ? null : 'Platform owner access is required.');
+
+  const loadOverview = useCallback(async () => {
+    if (!isPlatformOwner) {
+      setStatus('error');
+      setError('Platform owner access is required.');
+      return;
+    }
+
+    setStatus('loading');
+    setError(null);
+    const { data, error: overviewError } = await doorstepDb.rpc('platform_dashboard_overview');
+    if (overviewError) {
+      setStatus('error');
+      setError(overviewError.message);
+      return;
+    }
+
+    setOverview((data || {}) as PlatformOverview);
+    setStatus('ready');
+  }, [isPlatformOwner]);
+
+  useEffect(() => {
+    loadOverview();
+  }, [loadOverview]);
+
+  const totals = overview?.totals || {};
+  const metricCards = [
+    { label: 'Workspaces', value: totals.activeWorkspaces ?? totals.workspaces ?? 0, sub: `${totals.deletedWorkspaces ?? 0} deleted` },
+    { label: 'Users', value: totals.profiles ?? 0, sub: `${totals.platformOwners ?? 0} platform owners` },
+    { label: 'Members', value: totals.activeMembers ?? 0, sub: 'Active memberships' },
+    { label: 'Addresses', value: totals.addresses ?? 0, sub: `${totals.deletedAddresses ?? 0} deleted` },
+    { label: 'Contacts', value: totals.contacts ?? 0, sub: 'Active contact rows' },
+    { label: 'Activities', value: totals.activities ?? 0, sub: `${totals.auditEvents ?? 0} audit events` },
+  ];
+
+  return (
+    <main className="h-full overflow-y-auto bg-[#F8FAFC] px-6 py-8 lg:px-12">
+      <div className="max-w-7xl mx-auto space-y-7">
+        <header className="flex flex-col gap-4 pr-16 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Platform Control Plane</p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Workspace & Usage Dashboard</h1>
+            <p className="text-sm font-semibold text-slate-500 mt-2 max-w-2xl">
+              Cross-workspace visibility for platform ownership. Normal CRM data remains workspace-scoped for non-platform users.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadOverview}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-600 shadow-sm hover:bg-slate-50"
+          >
+            <RefreshCw className={cn('w-4 h-4', status === 'loading' && 'animate-spin')} />
+            Refresh
+          </button>
+        </header>
+
+        {status === 'error' && (
+          <section className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">
+            {error || 'Platform dashboard could not load.'}
+          </section>
+        )}
+
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+          {metricCards.map(card => (
+            <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{card.label}</p>
+              <p className="text-3xl font-black text-slate-900 mt-2">{card.value}</p>
+              <p className="text-xs font-bold text-slate-500 mt-1">{card.sub}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-5">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Accounts</p>
+                <h2 className="text-lg font-black text-slate-900">Workspace Usage</h2>
+              </div>
+              <Building2 className="w-5 h-5 text-blue-500" />
+            </div>
+            <div className="divide-y divide-slate-100">
+              {(overview?.workspaces || []).length > 0 ? (overview?.workspaces || []).map(workspace => (
+                <div key={workspace.id} className="px-5 py-4 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-slate-900 truncate">{workspace.name || 'Unnamed Workspace'}</h3>
+                      {workspace.deletedAt && (
+                        <span className="rounded-full bg-red-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-600">Deleted</span>
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-slate-400 truncate">{workspace.slug || workspace.id}</p>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-right">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{workspace.activeMemberCount ?? 0}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Users</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{workspace.addressCount ?? 0}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Addr</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{workspace.contactCount ?? 0}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Contacts</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{workspace.activityCount ?? 0}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Logs</p>
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <div className="px-5 py-10 text-center text-sm font-bold text-slate-400">No workspaces found.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">People</p>
+                <h2 className="text-lg font-black text-slate-900">Recent Users</h2>
+              </div>
+              <Users className="w-5 h-5 text-blue-500" />
+            </div>
+            <div className="divide-y divide-slate-100">
+              {(overview?.recentUsers || []).length > 0 ? (overview?.recentUsers || []).slice(0, 10).map(user => (
+                <div key={user.id} className="px-5 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-900 truncate">{user.email || user.username || user.id}</p>
+                      <p className="text-xs font-bold text-slate-400 truncate">{user.fullName || `${user.workspaceCount ?? 0} active workspace(s)`}</p>
+                    </div>
+                    {user.isPlatformOwner && (
+                      <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-blue-600">Platform</span>
+                    )}
+                  </div>
+                </div>
+              )) : (
+                <div className="px-5 py-10 text-center text-sm font-bold text-slate-400">No users found.</div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Audit Trail</p>
+              <h2 className="text-lg font-black text-slate-900">Recent Platform & Session Events</h2>
+            </div>
+            <History className="w-5 h-5 text-blue-500" />
+          </div>
+          <div className="divide-y divide-slate-100">
+            {(overview?.recentAuditEvents || []).length > 0 ? (overview?.recentAuditEvents || []).slice(0, 12).map(event => (
+              <div key={event.id} className="px-5 py-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                <div className="min-w-0">
+                  <p className="font-black text-slate-900">{event.action || 'audit.event'}</p>
+                  <p className="text-xs font-bold text-slate-400 truncate">
+                    Actor {event.actorUserId || 'unknown'}
+                    {event.targetWorkspaceId ? ` · Workspace ${event.targetWorkspaceId}` : ''}
+                    {event.targetUserId ? ` · User ${event.targetUserId}` : ''}
+                  </p>
+                </div>
+                <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+                  {event.createdAt ? new Date(event.createdAt).toLocaleString() : 'Pending'}
+                </p>
+              </div>
+            )) : (
+              <div className="px-5 py-10 text-center text-sm font-bold text-slate-400">No audit events yet.</div>
+            )}
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
 
@@ -1436,9 +1687,11 @@ function SupabaseShell() {
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState('DoorStep Workspace');
+  const [isPlatformOwner, setIsPlatformOwner] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const recordedSessionUserId = useRef<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -1455,6 +1708,7 @@ function SupabaseShell() {
       }
       setSession(nextSession);
       setWorkspaceId(null);
+      setIsPlatformOwner(false);
       setError(null);
     });
 
@@ -1472,6 +1726,33 @@ function SupabaseShell() {
     const loadWorkspace = async () => {
       setIsLoading(true);
       setError(null);
+
+      const { data: profile, error: profileError } = await doorstepDb
+        .from('profiles')
+        .select('is_platform_owner')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (!isMounted) return;
+
+      if (!profileError) {
+        setIsPlatformOwner(Boolean((profile as any)?.is_platform_owner));
+      }
+
+      if (recordedSessionUserId.current !== session.user.id) {
+        recordedSessionUserId.current = session.user.id;
+        doorstepDb.rpc('record_platform_audit_event', {
+          p_action: 'session.authenticated',
+          p_metadata: {
+            source: 'supabase_shell',
+            email: session.user.email || null,
+          },
+        }).then(({ error: auditError }) => {
+          if (auditError) {
+            console.warn('Session audit event was not recorded.', auditError.message);
+          }
+        });
+      }
 
       const membershipQuery = () => doorstepDb
         .from('workspace_members')
@@ -1580,6 +1861,7 @@ function SupabaseShell() {
       workspaceName={workspaceName}
       userId={session.user.id}
       userEmail={session.user.email || null}
+      isPlatformOwner={isPlatformOwner}
       onSignOut={() => supabase.auth.signOut()}
     />
   );
@@ -1816,7 +2098,7 @@ function UpdatePasswordScreen({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: WorkspaceContext) {
+function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner, onSignOut }: WorkspaceContext) {
   const initialRoute = useMemo(() => parseAppRoute(), []);
   const isApplyingBrowserRoute = useRef(false);
   // State
@@ -3551,6 +3833,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         workspaceId={workspaceId}
         workspaceName={workspaceName}
         userEmail={userEmail}
+        isPlatformOwner={isPlatformOwner}
         dataStatus={dataStatus}
         dataError={dataError}
         currentView={currentView}
@@ -3563,6 +3846,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         onOpenContacts={() => openAppView('contacts')}
         onOpenMap={() => openAppView('map')}
         onOpenAppointments={() => openAppView('appointments')}
+        onOpenPlatform={() => openAppView('platform')}
         onOpenRoutes={openAppRoutes}
         onOpenCatalog={openAppCatalog}
         onOpenInvoices={openAppOverdueInvoices}
@@ -3575,7 +3859,9 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, onSignOut }: Wo
         onSignOut={onSignOut}
       />
 
-      {currentView !== 'map' ? (
+      {currentView === 'platform' ? (
+        <PlatformOwnerDashboard isPlatformOwner={isPlatformOwner} />
+      ) : currentView !== 'map' ? (
         <HomeDashboard
           properties={properties}
           updateProperty={updateProperty}

@@ -1,7 +1,7 @@
 # Feature: Platform API Governance
 
-**Status:** Draft  
-**Last updated:** 2026-06-08  
+**Status:** In Progress  
+**Last updated:** 2026-06-18  
 **Owner:** Mike Hilton
 
 ---
@@ -10,7 +10,7 @@
 Ensure every API created for DoorStep CRM is registered, documented, and configurable as internal-only or publicly available from a platform-level settings model.
 
 ## Current Behavior
-The frontend uses Supabase Data API and a Cloudflare Pages `/config` function. Supabase has a foundation entitlement for `platform.api_registry`, but no API registry UI/table is implemented yet.
+The frontend uses Supabase Data API and a Cloudflare Pages `/config` function. Supabase has a foundation entitlement for `platform.api_registry`, and migration 010 adds `doorstep.api_registry` with initial entries for `/config`, platform dashboard/audit RPCs, and the address soft-delete RPC. A registry UI/settings page is not implemented yet.
 
 ## Desired Behavior
 Every internal API, public API, RPC, webhook, edge function, or Pages Function is registered with ownership, exposure level, auth requirements, and entitlement/permission linkage. Platform Owner settings can dictate whether APIs are internal-only or public.
@@ -30,7 +30,7 @@ Every internal API, public API, RPC, webhook, edge function, or Pages Function i
 - Workspace Owner controls workspace-level integrations only where permitted by entitlement.
 
 ## Edge Cases
-- Empty states: Registry starts with known APIs: `/config`, Supabase RPCs, Supabase table access.
+- Empty states: Registry starts with known APIs: `/config`, `doorstep.record_platform_audit_event`, `doorstep.platform_dashboard_overview`, and `doorstep.soft_delete_address`.
 - Error states: Unregistered API should fail review before deployment, once enforcement exists.
 - Permissions: Platform Owner can change global API exposure; workspace roles cannot.
 - Duplicate data: API key/path/version combination should be unique.
@@ -47,17 +47,20 @@ Every internal API, public API, RPC, webhook, edge function, or Pages Function i
 - Given an API has no registry entry, then it is treated as internal-only.
 
 ## Validation Plan
-- Add `doorstep.api_registry` or platform schema table in a future migration.
+- Verify `doorstep.api_registry` exists and RLS is enabled.
 - Document `/config` and Supabase RPCs as initial registry entries.
 - Add PR/deploy checklist item once a PR workflow exists.
 
 ## Open Questions
-- [ ] Should API registry tables live in `doorstep` or a separate platform schema?
-- [ ] Should `/config` be considered public but non-sensitive, or internal platform runtime?
+- [x] Should API registry tables live in `doorstep` or a separate platform schema? Decision: `doorstep` for MVP to match the exposed custom schema and existing platform entitlements.
+- [x] Should `/config` be considered public but non-sensitive, or internal platform runtime? Decision: public but non-sensitive; never include secrets.
 - [ ] What rate-limiting layer should public APIs use: Cloudflare WAF/Rules, Workers, or Supabase only?
 
 ## Decisions Made
 - 2026-06-08: APIs default to internal unless specifically marked public.
+- 2026-06-18: `doorstep.api_registry` lives in the `doorstep` schema for MVP, with Platform Owner RLS and initial internal/public entries.
+- 2026-06-18: `/config` is public but non-sensitive runtime config; all privileged Supabase RPCs are internal.
 
 ## Iteration History
 - 2026-06-08: Initial spec created.
+- 2026-06-18: Added migration-backed API registry foundation.

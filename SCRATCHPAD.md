@@ -13,7 +13,7 @@
 - [x] Add a platform dashboard route visible only to platform owners.
 - [x] Register new RPC/API contracts as internal APIs.
 - [x] Run build/lint and Supabase verification.
-- [ ] Commit, push, deploy, then document final learnings.
+- [x] Commit, push, deploy, then document final learnings.
 
 ## Assumptions
 - Platform Owner is a platform-wide role stored on `doorstep.profiles.is_platform_owner`, separate from workspace Owner.

@@ -1,6 +1,25 @@
 # Scratchpad
 
 ## 2026-06-18 — Current Objective
+**Task:** Aggressively rebuild the hamburger tray body to match the support-tool menu reference: app identity, user/status row, stacked nav items, Platform Admin section, bottom sign out.
+**Target specs:** `/specs/app-shell-navigation.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and app shell spec.
+- [x] Re-inspect support-tool `AppNav` and current DoorStep drawer body.
+- [x] Update spec with visual/menu structure expectations.
+- [x] Replace grouped DoorStep drawer body with support-tool-style stacked menu.
+- [x] Run verification and deploy.
+
+## Assumptions
+- The drawer should prioritize menu clarity over compact grouping.
+- Main workspace routes and operations should be visible as stacked rows with icon, label, description, and chevron.
+- Platform-only options should live under a `Platform Admin` label like the reference.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-18 — Current Objective
 **Task:** Correct the hamburger navigation so it is a proper support-tool-style slide-out menu tray instead of a partial under-header panel with duplicated close controls.
 **Target specs:** `/specs/app-shell-navigation.spec.md`
 

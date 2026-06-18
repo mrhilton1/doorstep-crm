@@ -709,39 +709,46 @@ function AppHeaderNav({
   };
   const activeMeta = pageMeta[currentView] || pageMeta.dashboard;
   const statusTone = dataStatus === 'error' ? 'bg-red-500' : dataStatus === 'loading' ? 'bg-yellow-400' : workspaceId ? 'bg-green-500' : 'bg-slate-300';
-  const navSections = [
-    {
-      title: 'Workspace',
-      items: [
-        { label: 'Home', description: 'Operational dashboard', icon: <Home className="w-5 h-5" />, onClick: onOpenDashboard, active: currentView === 'dashboard' },
-        { label: 'Contacts', description: 'Address and contact records', icon: <Users className="w-5 h-5" />, onClick: onOpenContacts, active: currentView === 'contacts' },
-        { label: 'Map', description: 'Canvassing map and routes', icon: <MapIcon className="w-5 h-5" />, onClick: onOpenMap, active: currentView === 'map' },
-        { label: 'Schedule', description: 'Appointments and visits', icon: <Calendar className="w-5 h-5" />, onClick: onOpenAppointments, active: currentView === 'appointments' },
-      ]
-    },
-    {
-      title: 'Operations',
-      items: [
-        { label: 'Routes', description: 'Route creation and route lists', icon: <Navigation className="w-5 h-5" />, onClick: onOpenRoutes, active: isProspectsOpen },
-        { label: 'Catalog', description: 'Products, bundles, discounts', icon: <Package className="w-5 h-5" />, onClick: onOpenCatalog, active: isCatalogOpen },
-        { label: 'Invoices', description: 'Outstanding AR and payments', icon: <DollarSign className="w-5 h-5" />, onClick: onOpenInvoices, active: isOverdueInvoicesOpen },
-        ...(displacedContactCount > 0 ? [{
-          label: `Review Queue (${displacedContactCount})`,
-          description: 'Contacts needing admin review',
-          icon: <UserPlus className="w-5 h-5" />,
-          onClick: onOpenDisplacedContacts,
-          active: false
-        }] : []),
-        { label: 'Settings', description: 'Workspace configuration', icon: <SettingsIcon className="w-5 h-5" />, onClick: onOpenSettings, active: isSettingsOpen },
-      ]
-    },
-    ...(isPlatformOwner ? [{
-      title: 'Platform',
-      items: [
-        { label: 'Platform Dashboard', description: 'Users, workspaces, usage, audit', icon: <ShieldCheck className="w-5 h-5" />, onClick: onOpenPlatform, active: currentView === 'platform' },
-      ]
-    }] : [])
+  const primaryMenuItems = [
+    { label: 'Dashboard', description: 'View workspace reports', icon: <LayoutGrid className="w-5 h-5" />, onClick: onOpenDashboard, active: currentView === 'dashboard' },
+    { label: 'Contacts', description: 'Address and contact records', icon: <Users className="w-5 h-5" />, onClick: onOpenContacts, active: currentView === 'contacts' },
+    { label: 'Map', description: 'Canvassing map and routes', icon: <MapIcon className="w-5 h-5" />, onClick: onOpenMap, active: currentView === 'map' },
+    { label: 'Schedule', description: 'Appointments and visits', icon: <Calendar className="w-5 h-5" />, onClick: onOpenAppointments, active: currentView === 'appointments' },
+    { label: 'Routes', description: 'Build and manage canvassing routes', icon: <Navigation className="w-5 h-5" />, onClick: onOpenRoutes, active: isProspectsOpen },
+    { label: 'Catalog', description: 'Products, bundles, and discounts', icon: <Package className="w-5 h-5" />, onClick: onOpenCatalog, active: isCatalogOpen },
+    { label: 'Invoices', description: 'Outstanding AR and payments', icon: <DollarSign className="w-5 h-5" />, onClick: onOpenInvoices, active: isOverdueInvoicesOpen },
+    ...(displacedContactCount > 0 ? [{
+      label: `Review Queue (${displacedContactCount})`,
+      description: 'Contacts needing admin review',
+      icon: <UserPlus className="w-5 h-5" />,
+      onClick: onOpenDisplacedContacts,
+      active: false
+    }] : []),
+    { label: 'Settings', description: 'Workspace configuration', icon: <SettingsIcon className="w-5 h-5" />, onClick: onOpenSettings, active: isSettingsOpen },
   ];
+  const platformMenuItems = isPlatformOwner ? [
+    { label: 'Overview', description: 'System-wide statistics', icon: <ShieldCheck className="w-5 h-5" />, onClick: onOpenPlatform, active: currentView === 'platform' },
+  ] : [];
+  const renderMenuItem = (item: typeof primaryMenuItems[number]) => (
+    <button
+      key={item.label}
+      type="button"
+      onClick={() => runAndClose(item.onClick)}
+      className={cn(
+        "group w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors",
+        item.active ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-50"
+      )}
+    >
+      <span className={cn("shrink-0", item.active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600")}>
+        {item.icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold truncate">{item.label}</span>
+        <span className="block text-xs text-slate-500 truncate">{item.description}</span>
+      </span>
+      <ChevronRight className={cn("w-4 h-4 transition-opacity shrink-0", item.active ? "opacity-100" : "opacity-0 group-hover:opacity-100")} />
+    </button>
+  );
 
   return (
     <header className="relative z-[1600] flex-shrink-0 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
@@ -793,74 +800,71 @@ function AppHeaderNav({
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               className="fixed inset-y-0 right-0 z-[1610] w-80 max-w-[calc(100vw-12px)] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col"
             >
-              <div className="p-4 border-b border-slate-100 bg-slate-50 pt-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">DoorStep Workspace</p>
-                    <h2 className="text-base font-black text-slate-900 truncate mt-1">{workspaceName}</h2>
-                    <p className="text-xs font-bold text-slate-500 truncate mt-0.5">{userEmail || 'No user email'}</p>
+              <div className="relative p-4 border-b border-slate-200 bg-white">
+                <div className="flex items-center gap-3 pr-9">
+                  <div className="h-10 w-10 rounded-xl border border-blue-200 bg-white text-blue-600 flex items-center justify-center shadow-sm shrink-0">
+                    <Navigation className="w-5 h-5" />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsOpen(false)}
-                    className="h-9 w-9 rounded-xl bg-white border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-100"
-                    aria-label="Close navigation"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="min-w-0">
+                    <h2 className="text-base font-semibold text-slate-900 truncate">DoorStep CRM</h2>
+                    <p className="text-xs text-slate-500 truncate">{workspaceName || 'doorstep workspace'}</p>
+                  </div>
                 </div>
-                <div className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500">
-                  <span className={cn('h-2.5 w-2.5 rounded-full', statusTone)} />
-                  <span>{dataError || (workspaceId ? `Data ${dataStatus}` : 'Supabase workspace unavailable')}</span>
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="absolute top-4 right-4 h-8 w-8 rounded-lg text-slate-500 flex items-center justify-center hover:bg-slate-100"
+                  aria-label="Close navigation"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="px-4 py-6 border-b border-slate-200 bg-white">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-slate-600 truncate">{userEmail || 'No user email'}</p>
+                  <span className={cn(
+                    "px-2 py-0.5 rounded-full text-xs font-medium shrink-0",
+                    isPlatformOwner ? "bg-purple-100 text-purple-700" : "bg-blue-50 text-blue-700"
+                  )}>
+                    {isPlatformOwner ? 'Owner' : 'Workspace'}
+                  </span>
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+                  <div className="flex items-center gap-3 text-slate-700">
+                    <span className={cn('h-2.5 w-2.5 rounded-full', statusTone)} />
+                    <span>{dataStatus === 'error' ? 'Needs attention' : dataStatus === 'loading' ? 'Syncing' : workspaceId ? 'Online' : 'Offline'}</span>
+                  </div>
+                  <span className="text-xs text-slate-400 truncate">{dataError || (workspaceId ? 'Data synced' : 'Connect workspace')}</span>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-                {navSections.map(section => (
-                  <section key={section.title}>
-                    <p className="px-2 mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{section.title}</p>
-                    <div className="space-y-1">
-                      {section.items.map(item => (
-                        <button
-                          key={item.label}
-                          type="button"
-                          onClick={() => runAndClose(item.onClick)}
-                          className={cn(
-                            "group w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all",
-                            item.active
-                              ? "bg-blue-50 text-blue-700"
-                              : section.title === 'Platform'
-                                ? "text-blue-700 hover:bg-blue-50"
-                                : "text-slate-700 hover:bg-slate-50"
-                          )}
-                        >
-                          <span className={cn(
-                            "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
-                            item.active ? "bg-white text-blue-600 shadow-sm" : "bg-slate-100 text-slate-500"
-                          )}>
-                            {item.icon}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-black truncate">{item.label}</span>
-                            <span className="block text-[11px] font-semibold text-slate-400 truncate">{item.description}</span>
-                          </span>
-                          <ChevronRight className={cn("w-4 h-4 transition-opacity", item.active ? "opacity-100" : "opacity-0 group-hover:opacity-100")} />
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ))}
+              <div className="flex-1 overflow-y-auto py-4 bg-white">
+                <nav className="space-y-1 px-2">
+                  {primaryMenuItems.map(renderMenuItem)}
+                </nav>
+
+                {platformMenuItems.length > 0 && (
+                  <div className="mt-6">
+                    <p className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Platform Admin</p>
+                    <nav className="space-y-1 px-2">
+                      {platformMenuItems.map(renderMenuItem)}
+                    </nav>
+                  </div>
+                )}
               </div>
 
               {workspaceId && (
-                <button
-                  type="button"
-                  onClick={() => runAndClose(onSignOut)}
-                  className="m-4 flex items-center justify-center gap-2 rounded-2xl bg-slate-100 text-slate-700 px-3 py-3 text-[11px] font-black uppercase tracking-wider hover:bg-slate-200 transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sign Out
-                </button>
+                <div className="p-4 border-t border-slate-200 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => runAndClose(onSignOut)}
+                    className="flex items-center gap-3 w-full px-3 py-3 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    Sign Out
+                  </button>
+                </div>
               )}
             </motion.div>
           </>

@@ -29,6 +29,7 @@ All authenticated app pages render through one shared app shell:
 - Sticky top header with app/workspace context.
 - One nav drawer/menu with workspace navigation, operational tools, and platform-owner tools.
 - The hamburger opens a right-side slide-out tray modeled after support-tool `AppNav`; the tray should slide in from the right edge, own the menu surface, avoid dimming the workspace page, and avoid duplicate close controls.
+- The tray body uses the support-tool visual structure: app identity header, signed-in user/status row, stacked menu rows with icon/label/description/chevron, optional `Platform Admin` section, and bottom-pinned sign out.
 - Platform Owner controls are separated from workspace controls.
 - Future impersonation/stealth status appears globally in the shell, not inside one page.
 - Entitlement-locked or platform-only items can be hidden or marked locked from one central nav model.
@@ -46,6 +47,7 @@ All authenticated app pages render through one shared app shell:
 - Given the nav menu opens, then workspace info, user email, sync state, app routes, operational tools, and sign-out are available in the same drawer.
 - Given the hamburger is clicked, then the nav appears as a full-height right-side slide-out tray rather than a floating popover, partial under-header panel, or page-obscuring modal.
 - Given the tray is open, then the header hamburger remains the trigger and the tray provides the close affordance; the user should not see two competing X buttons.
+- Given the tray is open, then all primary workspace routes and operational tools appear as visible stacked menu rows before sign out.
 - Given the signed-in user is Platform Owner, then Platform appears in the nav's Platform section.
 - Given the signed-in user is not Platform Owner, then Platform Owner nav items are hidden.
 - Given the user opens map view, then map overlays do not cover the shared app header.
@@ -65,6 +67,7 @@ All authenticated app pages render through one shared app shell:
 - 2026-06-18: Use support-tool `AppHeader` + `AppNav` as the conceptual reference, but implement in DoorStep's existing React/Vite app without adding a new UI library.
 - 2026-06-18: Keep true impersonation deferred until the backend audited flow is specified.
 - 2026-06-18: Match support-tool's side-tray behavior more closely: header owns the trigger, nav content slides from the right as a full-height tray, and the app page is not dimmed.
+- 2026-06-18: Match support-tool's menu body: app identity, user/status row, stacked nav rows, Platform Admin section, and bottom sign out.
 
 ## Iteration History
 - 2026-06-18: Initial shared app shell navigation spec created.

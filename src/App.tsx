@@ -307,6 +307,7 @@ type PlatformOverviewTotals = {
 type PlatformWorkspaceOverview = {
   id: string;
   name?: string | null;
+  businessName?: string | null;
   slug?: string | null;
   createdAt?: string | null;
   deletedAt?: string | null;
@@ -1107,7 +1108,7 @@ function PlatformOwnerDashboard({ isPlatformOwner }: { isPlatformOwner: boolean 
                 <div key={workspace.id} className="px-5 py-4 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-black text-slate-900 truncate">{workspace.name || 'Unnamed Workspace'}</h3>
+                      <h3 className="font-black text-slate-900 truncate">{workspace.businessName?.trim() || 'Unknown'}</h3>
                       {workspace.deletedAt && (
                         <span className="rounded-full bg-red-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-600">Deleted</span>
                       )}

@@ -46,6 +46,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 - Total active workspace members.
 - Total addresses, contacts, and activities.
 - Per-workspace counts for members, addresses, contacts, activities, and most recent activity.
+- Per-workspace usage rows display the workspace settings business name, with `Unknown` when no business name is configured.
 - Recent login/session audit events recorded by the app.
 
 ## Edge Cases
@@ -71,6 +72,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 - Given platform admin RPCs exist, then they are documented as internal APIs in the API registry.
 - Given browser code queries platform data, then it uses authenticated Supabase RPC/table access only, never a service-role key.
 - Given a Platform Owner chooses another workspace from the workspace switcher, when they confirm the modal, then an audited workspace access session is created before the dashboard switches.
+- Given a workspace has a business name in workspace settings, then Platform dashboard Workspace Usage displays that business name; otherwise it displays `Unknown`.
 
 ## Validation Plan
 - Apply migration in Supabase.

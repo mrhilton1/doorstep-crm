@@ -1,6 +1,27 @@
 # Scratchpad
 
 ## 2026-06-18 — Current Objective
+**Task:** Compare `/Users/mikehilton/Downloads/support-tool-main` and replicate its shared header/nav, platform, stealth/impersonation, roles, permissions, and entitlements patterns in DoorStep CRM where appropriate.
+**Target specs:** `/specs/platform-owner-admin.spec.md`, `/specs/supabase-workspace-auth.spec.md`, `/specs/platform-api-governance.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and relevant platform/workspace specs.
+- [x] Inspect support-tool shared header/nav components and platform-related flows.
+- [x] Inspect support-tool migrations for entitlements, roles/permissions, API registry, and impersonation.
+- [x] Decide which patterns should be copied directly, adapted, or deferred.
+- [x] Update DoorStep specs with the shared app shell/platform-control decisions.
+- [ ] Implement the next safe slice if scope is clear.
+- [ ] Run verification before pushing/deploying.
+
+## Assumptions
+- DoorStep should get a single shared app shell/header/nav component instead of one-off header/menu patterns per page.
+- Support-tool concepts should be adapted to DoorStep's workspace/address CRM model, not copied table-for-table if names or tenancy assumptions differ.
+- True impersonation/stealth mode remains high-risk and must stay backend-only and fully audited.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-18 — Current Objective
 **Task:** Add platform-owner foundation for cross-workspace visibility, usage rollups, audit logging, and future audited impersonation.
 **Target specs:** `/specs/platform-owner-admin.spec.md`, `/specs/supabase-workspace-auth.spec.md`, `/specs/platform-api-governance.spec.md`
 

@@ -15,6 +15,8 @@ DoorStep has Supabase Auth, `doorstep.profiles.is_platform_owner`, workspaces, w
 ## Desired Behavior
 Platform Owner can open a platform dashboard that lists all workspaces, users, active members, and MVP usage metrics. Cross-workspace reads happen through explicit platform-owner RPCs or policies with permission checks, not through browser service-role access. Platform-sensitive actions write audit events with actor, target user/workspace where applicable, action, timestamp, and metadata.
 
+The Platform Owner experience should follow the support-tool pattern where platform-only controls live in a distinct Platform/Admin nav section, impersonation/stealth mode is visible through a global banner/menu state, and workspace/user switching is audited rather than silent.
+
 ## User Flow
 1. Platform Owner signs in with a real Supabase Auth user.
 2. App detects `profiles.is_platform_owner = true`.
@@ -30,6 +32,7 @@ Platform Owner can open a platform dashboard that lists all workspaces, users, a
 - Platform dashboard APIs are internal-only unless explicitly changed in Platform API Governance.
 - Platform actions must be auditable.
 - True impersonation must use a backend-only endpoint or Supabase-approved server path and must not be done by exposing privileged credentials to the frontend.
+- "Stealth" access must still be visible to the Platform Owner through a global banner/control state and recorded in the audit trail; it must not be silent, unlogged access.
 - Platform Owner may see soft-deleted records only through approved investigation/admin surfaces.
 - Normal workspace users remain constrained to their workspace by RLS.
 
@@ -82,6 +85,7 @@ Platform Owner can open a platform dashboard that lists all workspaces, users, a
 - 2026-06-18: Start with platform overview and audit foundation before true impersonation.
 - 2026-06-18: Platform dashboard APIs default to internal-only.
 - 2026-06-18: Lightweight staging is recommended before true impersonation or entitlement editing ships.
+- 2026-06-18: Support-tool platform admin patterns are the reference for DoorStep: distinct Platform nav section, audited impersonation log, visible impersonation banner, workspace overrides, feature/limit registry, and API endpoint registry.
 
 ## Iteration History
 - 2026-06-18: Initial platform-owner administration spec created.

@@ -700,85 +700,155 @@ function AppHeaderNav({
     action();
     setIsOpen(false);
   };
-  const navItems = [
-    { label: 'Home', icon: <Home className="w-4 h-4" />, onClick: onOpenDashboard, active: currentView === 'dashboard' },
-    { label: 'Contacts', icon: <Users className="w-4 h-4" />, onClick: onOpenContacts, active: currentView === 'contacts' },
-    { label: 'Map', icon: <MapIcon className="w-4 h-4" />, onClick: onOpenMap, active: currentView === 'map' },
-    { label: 'Schedule', icon: <Calendar className="w-4 h-4" />, onClick: onOpenAppointments, active: currentView === 'appointments' },
+  const pageMeta: Record<string, { title: string; eyebrow: string; icon: React.ReactNode }> = {
+    dashboard: { title: 'Operator Dashboard', eyebrow: 'DoorStep CRM', icon: <Home className="w-5 h-5" /> },
+    contacts: { title: 'Contacts Directory', eyebrow: 'CRM Client Database', icon: <Users className="w-5 h-5" /> },
+    appointments: { title: 'Schedule', eyebrow: 'Field Operations', icon: <Calendar className="w-5 h-5" /> },
+    map: { title: 'Map View', eyebrow: 'Canvassing Routes', icon: <MapIcon className="w-5 h-5" /> },
+    platform: { title: 'Platform Dashboard', eyebrow: 'Control Plane', icon: <ShieldCheck className="w-5 h-5" /> },
+  };
+  const activeMeta = pageMeta[currentView] || pageMeta.dashboard;
+  const statusTone = dataStatus === 'error' ? 'bg-red-500' : dataStatus === 'loading' ? 'bg-yellow-400' : workspaceId ? 'bg-green-500' : 'bg-slate-300';
+  const navSections = [
+    {
+      title: 'Workspace',
+      items: [
+        { label: 'Home', description: 'Operational dashboard', icon: <Home className="w-5 h-5" />, onClick: onOpenDashboard, active: currentView === 'dashboard' },
+        { label: 'Contacts', description: 'Address and contact records', icon: <Users className="w-5 h-5" />, onClick: onOpenContacts, active: currentView === 'contacts' },
+        { label: 'Map', description: 'Canvassing map and routes', icon: <MapIcon className="w-5 h-5" />, onClick: onOpenMap, active: currentView === 'map' },
+        { label: 'Schedule', description: 'Appointments and visits', icon: <Calendar className="w-5 h-5" />, onClick: onOpenAppointments, active: currentView === 'appointments' },
+      ]
+    },
+    {
+      title: 'Operations',
+      items: [
+        { label: 'Routes', description: 'Route creation and route lists', icon: <Navigation className="w-5 h-5" />, onClick: onOpenRoutes, active: isProspectsOpen },
+        { label: 'Catalog', description: 'Products, bundles, discounts', icon: <Package className="w-5 h-5" />, onClick: onOpenCatalog, active: isCatalogOpen },
+        { label: 'Invoices', description: 'Outstanding AR and payments', icon: <DollarSign className="w-5 h-5" />, onClick: onOpenInvoices, active: isOverdueInvoicesOpen },
+        ...(displacedContactCount > 0 ? [{
+          label: `Review Queue (${displacedContactCount})`,
+          description: 'Contacts needing admin review',
+          icon: <UserPlus className="w-5 h-5" />,
+          onClick: onOpenDisplacedContacts,
+          active: false
+        }] : []),
+        { label: 'Settings', description: 'Workspace configuration', icon: <SettingsIcon className="w-5 h-5" />, onClick: onOpenSettings, active: isSettingsOpen },
+      ]
+    },
     ...(isPlatformOwner ? [{
-      label: 'Platform',
-      icon: <ShieldCheck className="w-4 h-4" />,
-      onClick: onOpenPlatform,
-      active: currentView === 'platform'
-    }] : []),
-    { label: 'Routes', icon: <Navigation className="w-4 h-4" />, onClick: onOpenRoutes, active: isProspectsOpen },
-    { label: 'Catalog', icon: <Package className="w-4 h-4" />, onClick: onOpenCatalog, active: isCatalogOpen },
-    { label: 'Invoices', icon: <DollarSign className="w-4 h-4" />, onClick: onOpenInvoices, active: isOverdueInvoicesOpen },
-    ...(displacedContactCount > 0 ? [{
-      label: `Queue ${displacedContactCount}`,
-      icon: <UserPlus className="w-4 h-4" />,
-      onClick: onOpenDisplacedContacts,
-      active: false
-    }] : []),
-    { label: 'Settings', icon: <SettingsIcon className="w-4 h-4" />, onClick: onOpenSettings, active: isSettingsOpen },
+      title: 'Platform',
+      items: [
+        { label: 'Platform Dashboard', description: 'Users, workspaces, usage, audit', icon: <ShieldCheck className="w-5 h-5" />, onClick: onOpenPlatform, active: currentView === 'platform' },
+      ]
+    }] : [])
   ];
 
   return (
-    <div className="absolute top-3 right-3 z-[1400]">
-      <button
-        type="button"
-        onClick={() => setIsOpen(prev => !prev)}
-        className="h-11 w-11 rounded-2xl bg-white/95 border border-slate-200 shadow-lg text-slate-700 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
-        title="Open navigation"
-        aria-label="Open navigation"
-        aria-expanded={isOpen}
-      >
-        {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
+    <header className="relative z-[1600] flex-shrink-0 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+      <div className="h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+            {activeMeta.icon}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 truncate">{activeMeta.eyebrow}</p>
+            <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 truncate leading-tight">{activeMeta.title}</h1>
+          </div>
+          {isPlatformOwner && (
+            <span className="hidden md:inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-blue-600">
+              Platform
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 max-w-[280px]">
+            <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusTone)} title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')} />
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{workspaceName}</p>
+              <p className="text-xs font-bold text-slate-700 truncate">{userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpen(prev => !prev)}
+            className="h-11 w-11 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-700 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
+            title="Open navigation"
+            aria-label="Open navigation"
+            aria-expanded={isOpen}
+          >
+            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
 
       <AnimatePresence>
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-[1390]" onClick={() => setIsOpen(false)} />
+            <div className="fixed inset-0 z-[1590] bg-slate-900/10" onClick={() => setIsOpen(false)} />
             <motion.div
-              initial={{ opacity: 0, y: -8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.98 }}
-              transition={{ duration: 0.15 }}
-              className="absolute top-14 right-0 z-[1410] w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-300/50 overflow-hidden p-2"
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 24 }}
+              transition={{ duration: 0.18 }}
+              className="fixed top-0 right-0 bottom-0 z-[1610] w-[min(360px,calc(100vw-24px))] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col"
             >
-              <div className="px-3 py-3 border-b border-slate-100 mb-1">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{workspaceName}</p>
-                    <p className="text-xs font-bold text-slate-700 truncate">
-                      {userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}
-                    </p>
+              <div className="p-4 border-b border-slate-100 bg-slate-50">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">DoorStep Workspace</p>
+                    <h2 className="text-base font-black text-slate-900 truncate mt-1">{workspaceName}</h2>
+                    <p className="text-xs font-bold text-slate-500 truncate mt-0.5">{userEmail || 'No user email'}</p>
                   </div>
-                  <div
-                    className={cn(
-                      'h-2.5 w-2.5 rounded-full shrink-0',
-                      dataStatus === 'error' ? 'bg-red-500' : dataStatus === 'loading' ? 'bg-yellow-400' : workspaceId ? 'bg-green-500' : 'bg-slate-300'
-                    )}
-                    title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="h-9 w-9 rounded-xl bg-white border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-100"
+                    aria-label="Close navigation"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500">
+                  <span className={cn('h-2.5 w-2.5 rounded-full', statusTone)} />
+                  <span>{dataError || (workspaceId ? `Data ${dataStatus}` : 'Supabase workspace unavailable')}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-1">
-                {navItems.map(item => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => runAndClose(item.onClick)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-black uppercase tracking-wider transition-all",
-                      item.active ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-50"
-                    )}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </button>
+              <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+                {navSections.map(section => (
+                  <section key={section.title}>
+                    <p className="px-2 mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{section.title}</p>
+                    <div className="space-y-1">
+                      {section.items.map(item => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => runAndClose(item.onClick)}
+                          className={cn(
+                            "group w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all",
+                            item.active
+                              ? "bg-blue-50 text-blue-700"
+                              : section.title === 'Platform'
+                                ? "text-blue-700 hover:bg-blue-50"
+                                : "text-slate-700 hover:bg-slate-50"
+                          )}
+                        >
+                          <span className={cn(
+                            "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
+                            item.active ? "bg-white text-blue-600 shadow-sm" : "bg-slate-100 text-slate-500"
+                          )}>
+                            {item.icon}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-black truncate">{item.label}</span>
+                            <span className="block text-[11px] font-semibold text-slate-400 truncate">{item.description}</span>
+                          </span>
+                          <ChevronRight className={cn("w-4 h-4 transition-opacity", item.active ? "opacity-100" : "opacity-0 group-hover:opacity-100")} />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
 
@@ -786,7 +856,7 @@ function AppHeaderNav({
                 <button
                   type="button"
                   onClick={() => runAndClose(onSignOut)}
-                  className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl bg-slate-100 text-slate-700 px-3 py-2 text-[11px] font-black uppercase tracking-wider hover:bg-slate-200 transition-colors"
+                  className="m-4 flex items-center justify-center gap-2 rounded-2xl bg-slate-100 text-slate-700 px-3 py-3 text-[11px] font-black uppercase tracking-wider hover:bg-slate-200 transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
                   Sign Out
@@ -796,7 +866,7 @@ function AppHeaderNav({
           </>
         )}
       </AnimatePresence>
-    </div>
+    </header>
   );
 }
 
@@ -3907,7 +3977,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
           )}
         />
       ) : (
-        <>
+        <div className="flex-1 relative min-h-0 overflow-hidden">
           {/* Header Stats */}
           <div className="absolute top-0 left-0 right-0 z-[1000] p-0 pointer-events-none">
         <div className="bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] shadow-sm px-6 py-5 flex justify-center items-center pointer-events-auto min-h-[92px]">
@@ -4046,7 +4116,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
       </div>
 
       {/* Map View */}
-      <div className="flex-1 z-0 relative">
+      <div className="absolute inset-0 z-0">
         {/* Banner Overlays */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[2000] flex flex-col gap-2 pointer-events-none w-full max-w-[90%] items-center">
           {selectingStartForRouteId && (
@@ -4557,7 +4627,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
           </motion.div>
         )}
       </div>
-        </>
+        </div>
       )}      {/* Bottom Navigation */}
       <div className="bg-white border-t border-[#E2E8F0] pb-8 pt-3 px-4 z-[1001]">
         <div className="max-w-2xl mx-auto flex justify-between items-center gap-1">

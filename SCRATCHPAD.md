@@ -1,6 +1,26 @@
 # Scratchpad
 
 ## 2026-06-18 — Current Objective
+**Task:** Fix the shared hamburger menu to behave like the support-tool slide-out tray and force ordinary workspace dashboards to show only the active workspace's data, even for Platform Owners.
+**Target specs:** `/specs/app-shell-navigation.spec.md`, `/specs/supabase-workspace-auth.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs and impacted specs.
+- [x] Inspect support-tool `AppNav` tray pattern.
+- [x] Inspect DoorStep workspace data loading and dashboard log stream source.
+- [x] Update specs with tray behavior and active-workspace dashboard scoping.
+- [x] Implement tray animation/layout and explicit workspace filters.
+- [x] Run verification before pushing/deploying.
+
+## Assumptions
+- The DoorStep workspace dashboard is not a platform-wide dashboard; it should show only rows for the active `workspaceId`.
+- Platform-owner all-workspace visibility should remain isolated to platform routes/RPCs, not leak into normal workspace views.
+- The hamburger menu should be a side tray that slides in from the right without dimming or covering the shared header.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-18 — Current Objective
 **Task:** Compare `/Users/mikehilton/Downloads/support-tool-main` and replicate its shared header/nav, platform, stealth/impersonation, roles, permissions, and entitlements patterns in DoorStep CRM where appropriate.
 **Target specs:** `/specs/platform-owner-admin.spec.md`, `/specs/supabase-workspace-auth.spec.md`, `/specs/platform-api-governance.spec.md`
 

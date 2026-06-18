@@ -785,13 +785,13 @@ function AppHeaderNav({
       <AnimatePresence>
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-[1590] bg-slate-900/10" onClick={() => setIsOpen(false)} />
+            <div className="fixed top-16 right-0 bottom-0 left-0 z-[1490]" onClick={() => setIsOpen(false)} />
             <motion.div
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 24 }}
-              transition={{ duration: 0.18 }}
-              className="fixed top-0 right-0 bottom-0 z-[1610] w-[min(360px,calc(100vw-24px))] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed top-16 right-0 bottom-0 z-[1500] w-80 max-w-[calc(100vw-12px)] bg-white border-l border-slate-200 shadow-2xl shadow-slate-400/30 flex flex-col"
             >
               <div className="p-4 border-b border-slate-100 bg-slate-50">
                 <div className="flex items-start justify-between gap-3">
@@ -2288,6 +2288,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
     const { data, error } = await doorstepDb
       .from('addresses')
       .select('*')
+      .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
       .order('updated_at', { ascending: false });
 
@@ -2309,11 +2310,13 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
         doorstepDb
           .from('activities')
           .select('*')
+          .eq('workspace_id', workspaceId)
           .in('address_id', addressIds)
           .order('created_at', { ascending: false }),
         doorstepDb
           .from('address_contacts')
           .select('address_id,is_primary,relationship_label,contacts(id,first_name,last_name,role_title,email,phone,is_decision_maker,custom_data,deleted_at)')
+          .eq('workspace_id', workspaceId)
           .in('address_id', addressIds)
       ]);
 

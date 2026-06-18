@@ -30,6 +30,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Auth requires real email addresses; do not create synthetic `@doorstep.local` usernames.
 - Existing OAuth/email users must be able to set a password through Supabase password recovery.
 - Workspace data must be scoped by `workspace_id`.
+- Ordinary workspace views must explicitly filter by the active `workspace_id`, even when the signed-in user is a Platform Owner.
 - Supabase service-role keys must never be used in browser code.
 - RLS must be enabled on workspace-owned tables.
 - Owner/Admin can manage workspace configuration later.
@@ -57,6 +58,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - Given a user opens a valid recovery link, when they enter matching passwords, then their Supabase password is updated.
 - Given an authenticated user has no workspace, when the app loads, then a workspace and Owner membership are created.
 - Given a user is not a workspace member, when they query workspace data, then RLS denies access.
+- Given a Platform Owner is inside a normal DoorStep workspace view, when the dashboard, contacts, map, or log stream loads, then it shows only the active workspace's addresses, contacts, activities, appointments, and app state.
 - Given Supabase env vars are missing, when the app loads, then it shows a Supabase configuration-required screen instead of running a separate local CRM.
 - Given address CRM data changes in the app, when persistence is needed, then data is written through `doorstep.addresses` rather than browser storage.
 - Given workspace-level app state changes in the app, when persistence is needed, then catalog, settings, team, goals, and routes are written through `doorstep.workspace_app_state` rather than browser storage.
@@ -84,6 +86,7 @@ Every authenticated user belongs to one or more workspaces. Signup is open to an
 - 2026-06-09: Use `doorstep.workspace_app_state` as a bridge for workspace-level JSON state until normalized tables are implemented.
 - 2026-06-10: Catalog product/bundle CRUD and global discount CRUD continue to use `doorstep.workspace_app_state` until normalized catalog tables are implemented.
 - 2026-06-18: Platform Owner is modeled on `doorstep.profiles.is_platform_owner`; cross-workspace dashboard reads go through audited internal RPCs.
+- 2026-06-18: Platform Owner visibility must not broaden ordinary workspace dashboards; normal app data loads still filter to the active workspace, and all-workspace visibility belongs on explicit platform routes/RPCs.
 
 ## Iteration History
 - 2026-06-08: Initial auth/workspace bootstrap shipped.

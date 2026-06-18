@@ -701,7 +701,7 @@ function AppHeaderNav({
     setIsOpen(false);
   };
   const pageMeta: Record<string, { title: string; eyebrow: string; icon: React.ReactNode }> = {
-    dashboard: { title: 'Operator Dashboard', eyebrow: 'DoorStep CRM', icon: <Home className="w-5 h-5" /> },
+    dashboard: { title: workspaceName || 'DoorStep Workspace', eyebrow: 'DoorStep CRM', icon: <Home className="w-5 h-5" /> },
     contacts: { title: 'Contacts Directory', eyebrow: 'CRM Client Database', icon: <Users className="w-5 h-5" /> },
     appointments: { title: 'Schedule', eyebrow: 'Field Operations', icon: <Calendar className="w-5 h-5" /> },
     map: { title: 'Map View', eyebrow: 'Canvassing Routes', icon: <MapIcon className="w-5 h-5" /> },
@@ -3940,6 +3940,7 @@ function CrmApp({ workspaceId, workspaceName, userId, userEmail, isPlatformOwner
         <PlatformOwnerDashboard isPlatformOwner={isPlatformOwner} />
       ) : currentView !== 'map' ? (
         <HomeDashboard
+          workspaceName={workspaceName}
           properties={properties}
           updateProperty={updateProperty}
           team={team}

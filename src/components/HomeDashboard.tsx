@@ -51,6 +51,7 @@ import {
 } from '../types';
 
 interface HomeDashboardProps {
+  workspaceName: string;
   properties: PropertyContact[];
   updateProperty: (id: string, updates: Partial<PropertyContact>) => void;
   team: Member[];
@@ -69,6 +70,7 @@ interface HomeDashboardProps {
 }
 
 export default function HomeDashboard({
+  workspaceName,
   properties,
   updateProperty,
   team,
@@ -474,11 +476,11 @@ export default function HomeDashboard({
           <div className="bg-white border border-[#E2E8F0] p-6 pr-20 rounded-3xl flex flex-col md:flex-row md:items-center md:justify-between gap-6 shadow-sm">
             <div>
               <div className="flex items-center gap-1.5 mb-1 bg-blue-50 text-[#2563EB] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full w-fit">
-                <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Live Operational Systems
+                <Sparkles className="w-3.5 h-3.5 animate-pulse" /> DoorStep Workspace
               </div>
-              <h1 className="text-2xl font-black text-[#1E293B] tracking-tight">Operator Dashboard</h1>
+              <h1 className="text-2xl font-black text-[#1E293B] tracking-tight">{workspaceName || 'DoorStep Workspace'}</h1>
               <p className="text-xs font-semibold text-[#64748B] mt-1">
-                Real-time tracking of canvassing status, client invoicing outstanding AR, and frontline scheduled consults.
+                Your workspace view for canvassing status, scheduled visits, invoices, and recent activity.
               </p>
             </div>
             

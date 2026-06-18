@@ -1,6 +1,25 @@
 # Scratchpad
 
 ## 2026-06-18 — Current Objective
+**Task:** Stop Platform Owner status from broadening normal workspace membership/RLS, clarify dashboard workspace identity, and explain why Mike saw data that felt like another workspace.
+**Target specs:** `/specs/supabase-workspace-auth.spec.md`, `/specs/platform-owner-admin.spec.md`, `/specs/app-shell-navigation.spec.md`
+
+## Micro-Steps
+- [x] Re-read Supabase/app shell specs and inspect workspace bootstrap/data queries.
+- [x] Query live Supabase memberships and address rows for Mike/Preston workspaces.
+- [x] Identify that live visible rows are currently in Mike's workspace, while RLS helpers still over-grant platform owner workspace membership.
+- [x] Add migration to remove Platform Owner bypass from normal workspace membership/permission helpers.
+- [x] Clarify dashboard copy so the page reads as the current workspace instance, not generic operator dashboard.
+- [x] Run verification, apply migration, push, and deploy.
+
+## Assumptions
+- Platform Owner should see all-workspace data only through explicit platform RPCs/routes, not by being treated as a member of every workspace.
+- Mike's ordinary workspace dashboard should load only `doorstep-ab6c5780`; Preston's workspace remains `doorstep-b0499230`.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-18 — Current Objective
 **Task:** Force the hamburger slide-out tray to occupy 100% viewport height so the full stacked menu is visible and only the menu area scrolls.
 **Target specs:** `/specs/app-shell-navigation.spec.md`
 

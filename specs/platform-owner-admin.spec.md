@@ -27,6 +27,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 
 ## Business Rules
 - Platform Owner is a platform-wide control plane role, not a workspace role.
+- Platform Owner status must not make normal workspace RLS treat the user as an implicit member of every workspace.
 - Workspace Owner/Admin permissions do not grant platform-wide access.
 - Service-role keys must never be shipped to the browser.
 - Platform dashboard APIs are internal-only unless explicitly changed in Platform API Governance.
@@ -35,6 +36,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 - "Stealth" access must still be visible to the Platform Owner through a global banner/control state and recorded in the audit trail; it must not be silent, unlogged access.
 - Platform Owner may see soft-deleted records only through approved investigation/admin surfaces.
 - Normal workspace users remain constrained to their workspace by RLS.
+- Platform-wide reads belong behind approved platform RPCs/routes, not shared workspace membership helper functions.
 
 ## MVP Usage Metrics
 - Total workspaces, including active and deleted counts.

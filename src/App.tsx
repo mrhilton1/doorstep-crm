@@ -2816,6 +2816,7 @@ function CrmApp({
       const { data, error } = await doorstepDb
         .from('workspace_app_state')
         .select('key,value')
+        .eq('workspace_id', workspaceId)
         .in('key', ['catalog', 'settings', 'team', 'goals', 'routes']);
 
       if (!isMounted) return;

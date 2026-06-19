@@ -239,7 +239,7 @@ type WorkspaceContext = {
   userEmail: string | null;
   isPlatformOwner: boolean;
   platformWorkspaces: PlatformWorkspaceOverview[];
-  onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string) => Promise<void>;
+  onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string, targetUserId?: string | null) => Promise<void>;
   onSignOut: () => void;
 };
 
@@ -317,6 +317,15 @@ type PlatformWorkspaceOverview = {
   contactCount?: number;
   activityCount?: number;
   lastActivityAt?: string | null;
+  members?: PlatformWorkspaceMemberOverview[];
+};
+
+type PlatformWorkspaceMemberOverview = {
+  userId: string;
+  email?: string | null;
+  fullName?: string | null;
+  username?: string | null;
+  roleName?: string | null;
 };
 
 type PlatformUserOverview = {
@@ -671,7 +680,7 @@ type AppHeaderNavProps = {
   onOpenInvoices: () => void;
   onOpenDisplacedContacts: () => void;
   onOpenSettings: () => void;
-  onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string) => Promise<void>;
+  onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string, targetUserId?: string | null) => Promise<void>;
   onSignOut: () => void;
 };
 
@@ -807,23 +816,13 @@ function AppHeaderNav({
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={openWorkspaceSwitcher}
-            disabled={!isPlatformOwner || platformWorkspaces.length === 0}
-            className={cn(
-              "hidden sm:flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 max-w-[280px] text-left transition-all",
-              isPlatformOwner && platformWorkspaces.length > 0 ? "hover:bg-white hover:border-blue-200 hover:shadow-sm" : "cursor-default"
-            )}
-            title={isPlatformOwner ? 'Switch audited workspace view' : undefined}
-          >
+          <div className="hidden sm:flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 max-w-[280px] text-left">
             <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusTone)} title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')} />
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{workspaceName}</p>
               <p className="text-xs font-bold text-slate-700 truncate">{userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}</p>
             </div>
-            {isPlatformOwner && platformWorkspaces.length > 0 && <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
-          </button>
+          </div>
           <button
             type="button"
             onClick={() => setIsOpen(prev => !prev)}
@@ -1018,10 +1017,21 @@ function AppHeaderNav({
   );
 }
 
-function PlatformOwnerDashboard({ isPlatformOwner }: { isPlatformOwner: boolean }) {
+function PlatformOwnerDashboard({
+  isPlatformOwner,
+  onRequestWorkspaceAccess
+}: {
+  isPlatformOwner: boolean;
+  onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string, targetUserId?: string | null) => Promise<void>;
+}) {
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(isPlatformOwner ? 'loading' : 'error');
   const [error, setError] = useState<string | null>(isPlatformOwner ? null : 'Platform owner access is required.');
+  const [stealthWorkspace, setStealthWorkspace] = useState<PlatformWorkspaceOverview | null>(null);
+  const [stealthUserId, setStealthUserId] = useState('');
+  const [stealthReason, setStealthReason] = useState('');
+  const [stealthError, setStealthError] = useState<string | null>(null);
+  const [isStartingStealth, setIsStartingStealth] = useState(false);
 
   const loadOverview = useCallback(async () => {
     if (!isPlatformOwner) {
@@ -1056,6 +1066,40 @@ function PlatformOwnerDashboard({ isPlatformOwner }: { isPlatformOwner: boolean 
     { label: 'Contacts', value: totals.contacts ?? 0, sub: 'Active contact rows' },
     { label: 'Activities', value: totals.activities ?? 0, sub: `${totals.auditEvents ?? 0} audit events` },
   ];
+
+  const openStealthModal = (workspace: PlatformWorkspaceOverview) => {
+    const firstMember = (workspace.members || [])[0];
+    setStealthWorkspace(workspace);
+    setStealthUserId(firstMember?.userId || '');
+    setStealthReason('');
+    setStealthError(null);
+  };
+
+  const closeStealthModal = () => {
+    setStealthWorkspace(null);
+    setStealthUserId('');
+    setStealthReason('');
+    setStealthError(null);
+  };
+
+  const confirmStealthAccess = async () => {
+    if (!stealthWorkspace) return;
+    if (!stealthUserId) {
+      setStealthError('Select the workspace user whose permissions you want to view.');
+      return;
+    }
+
+    setIsStartingStealth(true);
+    setStealthError(null);
+    try {
+      await onRequestWorkspaceAccess(stealthWorkspace, stealthReason, stealthUserId);
+      closeStealthModal();
+    } catch (accessError: any) {
+      setStealthError(accessError?.message || 'Stealth access could not be started.');
+    } finally {
+      setIsStartingStealth(false);
+    }
+  };
 
   return (
     <main className="h-full overflow-y-auto bg-[#F8FAFC] px-6 py-8 lg:px-12">
@@ -1112,6 +1156,15 @@ function PlatformOwnerDashboard({ isPlatformOwner }: { isPlatformOwner: boolean 
                       {workspace.deletedAt && (
                         <span className="rounded-full bg-red-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-600">Deleted</span>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => openStealthModal(workspace)}
+                        className="h-8 w-8 rounded-xl border border-blue-100 bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 active:scale-95 transition-all"
+                        title={`Stealth into ${workspace.businessName?.trim() || 'Unknown'}`}
+                        aria-label={`Stealth into ${workspace.businessName?.trim() || 'Unknown'}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                     </div>
                     <p className="text-xs font-bold text-slate-400 truncate">{workspace.slug || workspace.id}</p>
                   </div>
@@ -1196,6 +1249,103 @@ function PlatformOwnerDashboard({ isPlatformOwner }: { isPlatformOwner: boolean 
             )}
           </div>
         </section>
+
+        <AnimatePresence>
+          {stealthWorkspace && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[5000] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ y: 18, opacity: 0, scale: 0.98 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 18, opacity: 0, scale: 0.98 }}
+                className="w-full max-w-2xl rounded-3xl bg-white border border-slate-200 shadow-2xl p-6"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-purple-600">Audited Stealth Access</p>
+                    <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">
+                      {stealthWorkspace.businessName?.trim() || 'Unknown'}
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">
+                      Select the user permission level you want to view before entering this workspace.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeStealthModal}
+                    className="h-10 w-10 rounded-2xl bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100"
+                    aria-label="Close stealth access modal"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-2 space-y-1 max-h-64 overflow-y-auto">
+                    {(stealthWorkspace.members || []).length > 0 ? (stealthWorkspace.members || []).map(member => {
+                      const selected = stealthUserId === member.userId;
+                      const label = member.fullName || member.email || member.username || 'Unnamed user';
+                      return (
+                        <button
+                          key={member.userId}
+                          type="button"
+                          onClick={() => setStealthUserId(member.userId)}
+                          className={cn(
+                            "w-full rounded-xl border px-3 py-3 text-left transition-all",
+                            selected ? "border-purple-200 bg-purple-50 text-purple-950" : "border-transparent bg-white hover:border-slate-200"
+                          )}
+                        >
+                          <span className="block text-sm font-black truncate">{label}</span>
+                          <span className="block text-xs font-bold text-slate-500 truncate">
+                            {member.email || member.username || 'No email'} {member.roleName ? `• ${member.roleName}` : ''}
+                          </span>
+                        </button>
+                      );
+                    }) : (
+                      <p className="px-3 py-6 text-center text-sm font-bold text-slate-400">No active users found for this workspace.</p>
+                    )}
+                  </div>
+
+                  <label className="block space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Reason</span>
+                    <textarea
+                      value={stealthReason}
+                      onChange={(event) => setStealthReason(event.target.value)}
+                      className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-purple-300 focus:ring-4 focus:ring-purple-50"
+                      placeholder="Optional: support, QA, billing review..."
+                    />
+                  </label>
+                </div>
+
+                {stealthError && (
+                  <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{stealthError}</div>
+                )}
+
+                <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={closeStealthModal}
+                    className="flex-1 rounded-2xl bg-slate-100 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmStealthAccess}
+                    disabled={!stealthUserId || isStartingStealth}
+                    className="flex-1 rounded-2xl bg-purple-600 px-4 py-4 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isStartingStealth ? 'Opening...' : 'Confirm Stealth'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </main>
   );
@@ -2038,15 +2188,16 @@ function SupabaseShell() {
     };
   }, [session]);
 
-  const handlePlatformWorkspaceAccess = useCallback(async (workspace: PlatformWorkspaceOverview, reason: string) => {
+  const handlePlatformWorkspaceAccess = useCallback(async (workspace: PlatformWorkspaceOverview, reason: string, targetUserId?: string | null) => {
     if (!session?.user || !isPlatformOwner) {
       throw new Error('Platform owner access is required.');
     }
 
     const { error: accessError } = await doorstepDb.rpc('start_platform_workspace_access', {
       p_target_workspace_id: workspace.id,
+      p_target_user_id: targetUserId || null,
       p_reason: reason.trim() || null,
-      p_source: 'app_header_workspace_switcher',
+      p_source: targetUserId ? 'platform_workspace_usage_stealth' : 'app_header_workspace_switcher',
     });
 
     if (accessError) {
@@ -4123,7 +4274,10 @@ function CrmApp({
       />
 
       {currentView === 'platform' ? (
-        <PlatformOwnerDashboard isPlatformOwner={isPlatformOwner} />
+        <PlatformOwnerDashboard
+          isPlatformOwner={isPlatformOwner}
+          onRequestWorkspaceAccess={onRequestWorkspaceAccess}
+        />
       ) : currentView !== 'map' ? (
         <HomeDashboard
           workspaceName={workspaceName}

@@ -24,7 +24,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 4. Platform dashboard shows workspace/user counts, recent workspaces, recent users, usage totals, and recent audit/session events.
 5. When Platform Owner views platform data, the backend records the audited platform action.
 6. Future impersonation or "view as" actions require a reason, visible banner, and audit entry before any target account/workspace is viewed or acted on.
-7. Platform Owner can click a row-level stealth/access icon in Workspace Usage, confirm the access in a centered modal, select a workspace user, optionally enter a reason, and view that workspace through a short-lived audited access session scoped to the selected user's permissions.
+7. Platform Owner can click a row-level stealth/access icon in Workspace Usage, confirm the access in a centered modal, select a workspace user, optionally enter a reason, and land on that workspace's dashboard through a short-lived audited access session scoped to the selected user's permissions.
 
 ## Business Rules
 - Platform Owner is a platform-wide control plane role, not a workspace role.
@@ -40,6 +40,7 @@ The Platform Owner experience should follow the support-tool pattern where platf
 - Platform-wide reads belong behind approved platform RPCs/routes, not shared workspace membership helper functions.
 - Platform workspace access sessions must create a dedicated audit row with actor, target workspace, selected workspace user, reason, timestamp, and source app context before normal workspace views can load target workspace data.
 - Platform workspace access is launched from the Platform dashboard Workspace Usage row, not from the global workspace pill.
+- After stealth access starts, the app must visibly show the active stealth context in the shared header/nav, including the selected user identity.
 
 ## MVP Usage Metrics
 - Total workspaces, including active and deleted counts.
@@ -74,7 +75,8 @@ The Platform Owner experience should follow the support-tool pattern where platf
 - Given browser code queries platform data, then it uses authenticated Supabase RPC/table access only, never a service-role key.
 - Given a Platform Owner clicks the row-level stealth icon for a Workspace Usage row, then a centered confirmation modal opens.
 - Given the stealth modal is open, then the Platform Owner can select an active user from that workspace before confirming access.
-- Given a Platform Owner confirms stealth access, then an audited workspace access session is created for the selected workspace user before the dashboard switches.
+- Given a Platform Owner confirms stealth access, then an audited workspace access session is created for the selected workspace user before the app switches to that workspace's dashboard.
+- Given stealth access is active, then the shared header/nav shows the selected workspace user being viewed.
 - Given a workspace has a business name in workspace settings, then Platform dashboard Workspace Usage displays that business name; otherwise it displays `Unknown`.
 
 ## Validation Plan

@@ -239,6 +239,7 @@ type WorkspaceContext = {
   userEmail: string | null;
   isPlatformOwner: boolean;
   platformWorkspaces: PlatformWorkspaceOverview[];
+  stealthContext: PlatformStealthContext | null;
   onRequestWorkspaceAccess: (workspace: PlatformWorkspaceOverview, reason: string, targetUserId?: string | null) => Promise<void>;
   onSignOut: () => void;
 };
@@ -325,6 +326,15 @@ type PlatformWorkspaceMemberOverview = {
   email?: string | null;
   fullName?: string | null;
   username?: string | null;
+  roleName?: string | null;
+};
+
+type PlatformStealthContext = {
+  workspaceId: string;
+  workspaceName: string;
+  targetUserId: string;
+  targetUserLabel: string;
+  targetUserEmail?: string | null;
   roleName?: string | null;
 };
 
@@ -661,6 +671,7 @@ type AppHeaderNavProps = {
   workspaceName: string;
   userEmail: string | null;
   isPlatformOwner: boolean;
+  stealthContext: PlatformStealthContext | null;
   dataStatus: 'local' | 'loading' | 'synced' | 'error';
   dataError: string | null;
   currentView: string;
@@ -689,6 +700,7 @@ function AppHeaderNav({
   workspaceName,
   userEmail,
   isPlatformOwner,
+  stealthContext,
   dataStatus,
   dataError,
   currentView,
@@ -813,6 +825,11 @@ function AppHeaderNav({
               Platform
             </span>
           )}
+          {stealthContext && (
+            <span className="hidden lg:inline-flex rounded-full bg-purple-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-purple-700">
+              Stealth: {stealthContext.targetUserLabel}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -820,7 +837,9 @@ function AppHeaderNav({
             <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusTone)} title={dataError || (workspaceId ? `Data ${dataStatus}` : 'Local demo mode')} />
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{workspaceName}</p>
-              <p className="text-xs font-bold text-slate-700 truncate">{userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}</p>
+              <p className="text-xs font-bold text-slate-700 truncate">
+                {stealthContext ? `Viewing as ${stealthContext.targetUserLabel}` : userEmail || (workspaceId ? 'Supabase workspace' : 'Local demo')}
+              </p>
             </div>
           </div>
           <button
@@ -884,6 +903,16 @@ function AppHeaderNav({
                   </div>
                   <span className="text-xs text-slate-400 truncate">{dataError || (workspaceId ? 'Data synced' : 'Connect workspace')}</span>
                 </div>
+                {stealthContext && (
+                  <div className="mt-4 rounded-2xl border border-purple-100 bg-purple-50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-purple-600">Stealth Mode</p>
+                    <p className="mt-1 text-sm font-black text-purple-950 truncate">Viewing as {stealthContext.targetUserLabel}</p>
+                    <p className="text-xs font-bold text-purple-700/75 truncate">
+                      {stealthContext.targetUserEmail || stealthContext.targetUserId}
+                      {stealthContext.roleName ? ` • ${stealthContext.roleName}` : ''}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto py-4 bg-white">
@@ -2057,6 +2086,7 @@ function SupabaseShell() {
   const [workspaceName, setWorkspaceName] = useState('DoorStep Workspace');
   const [isPlatformOwner, setIsPlatformOwner] = useState(false);
   const [platformWorkspaces, setPlatformWorkspaces] = useState<PlatformWorkspaceOverview[]>([]);
+  const [stealthContext, setStealthContext] = useState<PlatformStealthContext | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -2078,6 +2108,7 @@ function SupabaseShell() {
       setSession(nextSession);
       setWorkspaceId(null);
       setIsPlatformOwner(false);
+      setStealthContext(null);
       setError(null);
     });
 
@@ -2174,6 +2205,7 @@ function SupabaseShell() {
       } else if (membership) {
         setWorkspaceId(membership.workspace_id);
         setWorkspaceName(getWorkspaceName(membership as WorkspaceMembership));
+        setStealthContext(null);
       } else {
         setError('Workspace creation finished, but no active membership was found.');
       }
@@ -2204,8 +2236,24 @@ function SupabaseShell() {
       throw new Error(accessError.message);
     }
 
+    const nextWorkspaceName = workspace.businessName?.trim() || workspace.name || workspace.slug || 'DoorStep Workspace';
     setWorkspaceId(workspace.id);
-    setWorkspaceName(workspace.name || workspace.slug || 'DoorStep Workspace');
+    setWorkspaceName(nextWorkspaceName);
+
+    if (targetUserId) {
+      const member = (workspace.members || []).find(item => item.userId === targetUserId);
+      const targetUserLabel = member?.fullName || member?.email || member?.username || targetUserId;
+      setStealthContext({
+        workspaceId: workspace.id,
+        workspaceName: nextWorkspaceName,
+        targetUserId,
+        targetUserLabel,
+        targetUserEmail: member?.email || null,
+        roleName: member?.roleName || null,
+      });
+    } else {
+      setStealthContext(null);
+    }
   }, [isPlatformOwner, session?.user]);
 
   if (isLoading) {
@@ -2261,6 +2309,7 @@ function SupabaseShell() {
       userEmail={session.user.email || null}
       isPlatformOwner={isPlatformOwner}
       platformWorkspaces={platformWorkspaces}
+      stealthContext={stealthContext}
       onRequestWorkspaceAccess={handlePlatformWorkspaceAccess}
       onSignOut={() => supabase.auth.signOut()}
     />
@@ -2505,6 +2554,7 @@ function CrmApp({
   userEmail,
   isPlatformOwner,
   platformWorkspaces,
+  stealthContext,
   onRequestWorkspaceAccess,
   onSignOut
 }: WorkspaceContext) {
@@ -4194,6 +4244,19 @@ function CrmApp({
     setCurrentView(view);
   };
 
+  const requestWorkspaceAccessAndOpenDashboard = useCallback(async (
+    workspace: PlatformWorkspaceOverview,
+    reason: string,
+    targetUserId?: string | null
+  ) => {
+    await onRequestWorkspaceAccess(workspace, reason, targetUserId);
+    closeAppOverlays();
+    setSelectedPropertyId(null);
+    setPendingActivityProperty(null);
+    setIsDrawerOpen(false);
+    setCurrentView('dashboard');
+  }, [closeAppOverlays, onRequestWorkspaceAccess]);
+
   const openAppRoutes = () => {
     closeAppOverlays();
     setIsProspectsOpen(true);
@@ -4246,6 +4309,7 @@ function CrmApp({
         workspaceName={workspaceName}
         userEmail={userEmail}
         isPlatformOwner={isPlatformOwner}
+        stealthContext={stealthContext}
         dataStatus={dataStatus}
         dataError={dataError}
         currentView={currentView}
@@ -4269,14 +4333,14 @@ function CrmApp({
           setIsDisplacedContactsOpen(true);
         }}
         onOpenSettings={openAppSettings}
-        onRequestWorkspaceAccess={onRequestWorkspaceAccess}
+        onRequestWorkspaceAccess={requestWorkspaceAccessAndOpenDashboard}
         onSignOut={onSignOut}
       />
 
       {currentView === 'platform' ? (
         <PlatformOwnerDashboard
           isPlatformOwner={isPlatformOwner}
-          onRequestWorkspaceAccess={onRequestWorkspaceAccess}
+          onRequestWorkspaceAccess={requestWorkspaceAccessAndOpenDashboard}
         />
       ) : currentView !== 'map' ? (
         <HomeDashboard

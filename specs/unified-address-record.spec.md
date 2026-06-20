@@ -13,7 +13,7 @@ Replace the separate PWA Client Management summary drawer and CRM Canvassing edi
 The Unified Address Record is the canonical surface for address detail work. It supports Live Event Logger, read-only-by-default Contact Info and Job Info, top-right quick actions, notes filtering, normalized Add Contact creation, and Move to New Address entry points. Some deeper quote/invoice and reassignment workflows still need later passes.
 
 ## Desired Behavior
-Every address opens into the Unified Address Record. The first implementation may use the existing address editor as the canonical shell while the UI is consolidated, but all entry points should route to the same screen. The layout is role-ready and organized in this order: Address Header, Live Event Logger, Activity Feed, Address/Property Details, Quote & Transaction History, Contacts at Address, compact action menu. Contact-record PRDs should be interpreted as changes to the contact/address sections inside this unified address record, not as a move away from address-first CRM.
+Every address opens into the Unified Address Record. The first implementation may use the existing address editor as the canonical shell while the UI is consolidated, but all entry points should route to the same screen. Contact-record PRDs should be interpreted as changes to the contact/address sections inside this unified address record, not as a move away from address-first CRM. The redesigned record displays primary contact information first, then action controls, Next Action, Activity Timeline, Job/Property Info, People at Address, Additional Details, and compact More actions. The address remains the primary object even when the visual language says "contact record."
 
 ## User Flow
 1. User opens an address from the contact directory, recent activity, appointment list, map, route, or dashboard.
@@ -49,6 +49,14 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Add Contact requires immediate disabled/loading feedback and backend idempotency so double taps cannot create duplicate contacts.
 - Admin Settings include default premises type for new address creation, defaulting to Residential.
 - The Unified Address Record can open for a draft map-tapped address. In that state, activity logging is the creation action; closing without logging discards the draft.
+- The Unified Address Record should visually follow the action-first contact panel reference: large identity summary, primary action buttons, highlighted Next Action card, compact timeline, job/property info, people at address, and a More action menu.
+- Contact information is displayed first in the UI, but address remains the primary persisted CRM object.
+- Header phone displays the primary contact phone. If missing, show an inline `+ Add phone` action that updates the primary contact phone/address-compatible phone field.
+- Next Action persists until completed. MVP persistence may use address `customData.nextAction`; future task/reminder tables can replace it without changing the record layout.
+- New job/property details can persist in address `customData.jobInfo` until dedicated tables/fields are justified.
+- All non-primary sections are collapsed by default. Contact/identity info remains expanded.
+- Desktop More actions can be partially stubbed, but present actions must not pretend to complete unavailable backend workflows.
+- Mobile must provide equivalent actions with a bottom-sheet style More menu.
 
 ## Edge Cases
 - Mobile: header/logger/feed should be attempted above the fold; if cramped, iterate.
@@ -82,6 +90,11 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a user confirms Delete Address from the record header or card view, then the record closes when open and disappears from normal views.
 - Given Delete Address fails or times out, then the confirmation modal shows the error and the address remains visible.
 - Given a user refreshes while an address record is open, then the same address record reopens from the URL when the address still exists.
+- Given a primary contact has no phone, then the record header shows `+ Add phone` and saves the entered phone inline to the primary contact fields.
+- Given a Next Action is added, then it remains visible after record close/reopen until the user marks it complete.
+- Given a user marks Next Action complete, then the highlighted Next Action card is cleared and the completed action is retained only in record history/metadata for later audit expansion.
+- Given the record opens, then Activity Timeline, Job/Property Info, People at Address, and Additional Details are collapsed by default while contact identity remains visible.
+- Given More is opened on mobile, then More actions appear as a bottom sheet rather than a desktop side card.
 
 ## Validation Plan
 - Run `npm run build`.
@@ -114,6 +127,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-12: Contact delete is available in Contact Info edit mode; Address delete is available from the record header and card views; delete confirmation uses an app modal.
 - 2026-06-12: Opened address records are URL-backed, and address delete waits for the `doorstep.soft_delete_address` RPC before UI removal.
 - 2026-06-13: Address delete uses a scoped definer RPC because the soft-delete transition changes row visibility under active-record RLS.
+- 2026-06-19: Contact record redesign approved: address remains primary, contact info displays first, primary contact phone appears in the header with inline add when missing, Next Action persists until completed, existing activities table remains the activity source for now, new fields may use `customData`, non-contact sections collapse by default, mobile More actions are required, and the visual style should match the provided reference while staying inside DoorStep's design system.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

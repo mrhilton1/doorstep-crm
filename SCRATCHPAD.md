@@ -1,5 +1,26 @@
 # Scratchpad
 
+## 2026-06-19 — Current Objective
+**Task:** Revamp the Unified Address Record contact panel to match the provided action-first designs while keeping address as the primary CRM object.
+**Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-activity-logging.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, relevant specs, and current record implementation.
+- [x] Confirm implementation can use existing activities table and address `customData` without a migration.
+- [x] Update the spec with current design decisions.
+- [x] Replace the current record drawer with the action-first contact panel layout.
+- [x] Add persistent Next Action and inline primary-contact phone editing.
+- [x] Keep existing activity logging wired to Supabase and improve mobile More/actions behavior.
+- [x] Run verification, then push/deploy if clean.
+
+## Assumptions
+- Contact info displays first, but all mutations still belong to the address record unless explicitly tied to a normalized contact.
+- Next Action can persist in address `customData.nextAction` for this slice and can later migrate to a dedicated reminders/tasks table.
+- New job/property info fields can persist in address `customData.jobInfo` without adding schema today.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-18 — Current Objective
 **Task:** Improve admin trays, add AR entry creation, and add audited platform workspace switching with confirmation reason.
 **Target specs:** `/specs/platform-owner-admin.spec.md`, `/specs/quotes-invoices-payments.spec.md`, `/specs/app-shell-navigation.spec.md`

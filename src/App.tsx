@@ -97,7 +97,10 @@ import {
   Circle as CircleIcon,
   Grid,
   ChevronRight,
-  MoreHorizontal
+  MoreHorizontal,
+  Flag,
+  Copy,
+  Share2
 } from 'lucide-react';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -493,6 +496,7 @@ const propertyToAddressRow = (property: PropertyContact, workspaceId: string, us
   business_name: property.businessName || null,
   notes: property.notes || '',
   custom_data: {
+    ...(property.customData || {}),
     firstName: property.firstName || '',
     lastName: property.lastName || '',
     phone: property.phone || '',
@@ -5381,6 +5385,7 @@ function CrmApp({
             settings={settings}
             onLogEvent={logAddressEvent}
             onAddContact={createAddressContact}
+            onSaveContact={upsertNormalizedContactForAddress}
             onMoveContacts={handleMoveContactsToAddress}
             onDeleteAddress={requestDeleteAddress}
             onDeleteContact={requestDeleteContact}
@@ -5604,6 +5609,7 @@ function PropertyDrawer({
   settings,
   onLogEvent,
   onAddContact,
+  onSaveContact,
   onMoveContacts,
   onDeleteAddress,
   onDeleteContact,
@@ -5617,6 +5623,7 @@ function PropertyDrawer({
   settings: AppSettings,
   onLogEvent: (propertyId: string, payload: LiveEventPayload) => Promise<Interaction>,
   onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
+  onSaveContact: (property: PropertyContact, contact: Contact, isPrimary: boolean) => Promise<void>,
   onMoveContacts: (property: PropertyContact) => void,
   onDeleteAddress: (property: PropertyContact) => void,
   onDeleteContact: (property: PropertyContact, contact: Contact, isPrimary: boolean, onDeleted?: () => void) => void,
@@ -5649,6 +5656,21 @@ function PropertyDrawer({
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [addContactError, setAddContactError] = useState('');
   const [showNotesOnly, setShowNotesOnly] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isAddingPhoneInline, setIsAddingPhoneInline] = useState(false);
+  const [inlinePhone, setInlinePhone] = useState(property.phone || '');
+  const [nextActionDraft, setNextActionDraft] = useState(property.customData?.nextAction?.title || '');
+  const [nextActionNoteDraft, setNextActionNoteDraft] = useState(property.customData?.nextAction?.note || '');
+  const [nextActionDueDraft, setNextActionDueDraft] = useState(property.customData?.nextAction?.dueLabel || 'Tomorrow');
+  const [jobInfoDraft, setJobInfoDraft] = useState<Record<string, string>>({
+    service: property.customData?.jobInfo?.service || '',
+    estimatedSqFt: property.customData?.jobInfo?.estimatedSqFt || '',
+    estimatedValue: property.customData?.jobInfo?.estimatedValue || '',
+    stories: property.customData?.jobInfo?.stories || '',
+    lastService: property.customData?.jobInfo?.lastService || '',
+    propertyType: property.customData?.jobInfo?.propertyType || '',
+  });
   const addContactIdempotencyRef = useRef<string | null>(null);
   const sectionPermissions = {
     ...DEFAULT_ADDRESS_RECORD_PERMISSIONS,
@@ -5669,6 +5691,30 @@ function PropertyDrawer({
     const nextNotes = property.notes || '';
     setNotes(nextNotes);
     lastSavedNotesRef.current = nextNotes;
+    setFirstName(property.firstName || '');
+    setLastName(property.lastName || '');
+    setPhone(property.phone || '');
+    setInlinePhone(property.phone || '');
+    setEmail(property.email || '');
+    setRole(property.role || '');
+    setIsDecisionMaker(property.isDecisionMaker || false);
+    setBusinessName(property.businessName || '');
+    setIsContactInfoEditing(false);
+    setIsJobInfoEditing(false);
+    setIsMoreOpen(false);
+    setIsAddingPhoneInline(false);
+    setOpenSections({});
+    setNextActionDraft(property.customData?.nextAction?.title || '');
+    setNextActionNoteDraft(property.customData?.nextAction?.note || '');
+    setNextActionDueDraft(property.customData?.nextAction?.dueLabel || 'Tomorrow');
+    setJobInfoDraft({
+      service: property.customData?.jobInfo?.service || '',
+      estimatedSqFt: property.customData?.jobInfo?.estimatedSqFt || '',
+      estimatedValue: property.customData?.jobInfo?.estimatedValue || '',
+      stories: property.customData?.jobInfo?.stories || '',
+      lastService: property.customData?.jobInfo?.lastService || '',
+      propertyType: property.customData?.jobInfo?.propertyType || '',
+    });
   }, [property.id, property.notes]);
 
   const saveAddressNotes = useCallback((nextNotes: string) => {
@@ -5776,22 +5822,171 @@ function PropertyDrawer({
     }
   };
 
+  const primaryDisplayName = `${firstName} ${lastName}`.trim() || businessName || property.address.split(',')[0] || 'Unnamed Lead';
+  const initials = primaryDisplayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || 'U';
+  const addressParts = property.address.split(',').map(part => part.trim()).filter(Boolean);
+  const streetLine = addressParts[0] || property.address;
+  const cityLine = addressParts.slice(1).join(', ');
+  const stageLabel = ((settings.labels.stages as any)[property.stage] || property.stage).toString();
+  const subStatusLabel = property.subStatus
+    ? (settings.subStatusConfig || DEFAULT_SUB_STATUS_CONFIG)[property.subStatus]?.label || property.subStatus
+    : property.status;
+  const nextAction = property.customData?.nextAction && !property.customData.nextAction.completedAt
+    ? property.customData.nextAction
+    : null;
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const savePrimaryContact = async (contactUpdates: Partial<Contact> = {}) => {
+    const contactId = property.customData?.primaryContactId || uuidv4();
+    const nextContact: Contact = {
+      id: contactId,
+      firstName,
+      lastName,
+      phone,
+      email,
+      role,
+      isDecisionMaker,
+      customData: property.customData || {},
+      ...contactUpdates
+    };
+    const nextCustomData = {
+      ...(property.customData || {}),
+      primaryContactId: contactId
+    };
+
+    updateProperty(property.id, {
+      firstName: nextContact.firstName || '',
+      lastName: nextContact.lastName || '',
+      phone: nextContact.phone || '',
+      email: nextContact.email || '',
+      role: nextContact.role || '',
+      isDecisionMaker: Boolean(nextContact.isDecisionMaker),
+      customData: nextCustomData
+    });
+
+    if (!property.customData?.isDraftActivityAddress) {
+      await onSaveContact({ ...property, customData: nextCustomData }, nextContact, true);
+    }
+  };
+
+  const saveInlinePhone = async () => {
+    const nextPhone = inlinePhone.trim();
+    if (!nextPhone) return;
+    setPhone(nextPhone);
+    await savePrimaryContact({ phone: nextPhone });
+    setIsAddingPhoneInline(false);
+  };
+
+  const saveNextAction = () => {
+    if (!nextActionDraft.trim()) return;
+    updateProperty(property.id, {
+      customData: {
+        ...(property.customData || {}),
+        nextAction: {
+          id: property.customData?.nextAction?.id || uuidv4(),
+          title: nextActionDraft.trim(),
+          note: nextActionNoteDraft.trim(),
+          dueLabel: nextActionDueDraft.trim() || 'Tomorrow',
+          ownerName: 'Mike Hilton',
+          createdAt: property.customData?.nextAction?.createdAt || Date.now(),
+          completedAt: null
+        }
+      }
+    });
+  };
+
+  const completeNextAction = () => {
+    if (!nextAction) return;
+    updateProperty(property.id, {
+      customData: {
+        ...(property.customData || {}),
+        nextAction: {
+          ...nextAction,
+          completedAt: Date.now()
+        },
+        completedNextActions: [
+          ...(property.customData?.completedNextActions || []),
+          { ...nextAction, completedAt: Date.now() }
+        ]
+      }
+    });
+  };
+
+  const saveJobInfo = () => {
+    updateProperty(property.id, {
+      customData: {
+        ...(property.customData || {}),
+        jobInfo: jobInfoDraft
+      }
+    });
+    setIsJobInfoEditing(false);
+  };
+
+  const quickEventButtons: { id: LiveEventType; label: string; icon: React.ReactNode; preset?: Partial<{
+    knockResult: KnockResult;
+    answerOutcome: AnswerOutcome;
+    callDirection: CallDirection;
+    noteOpen: boolean;
+  }> }[] = [
+    { id: 'knock', label: 'Knock', icon: <MousePointer2 className="w-4 h-4" /> },
+    { id: 'call', label: 'Call', icon: <Phone className="w-4 h-4" /> },
+    { id: 'record_event', label: 'Text', icon: <MessageCircle className="w-4 h-4" />, preset: { noteOpen: true } },
+    { id: 'knock', label: 'No Answer', icon: <XCircle className="w-4 h-4" />, preset: { knockResult: 'no_answer' } },
+    { id: 'knock', label: 'Quote', icon: <DollarSign className="w-4 h-4" />, preset: { knockResult: 'answer', answerOutcome: 'quote_requested' } },
+    { id: 'record_event', label: 'Note', icon: <FileText className="w-4 h-4" />, preset: { noteOpen: true } },
+  ];
+
+  const moreActions = [
+    { label: 'Edit Contact', description: 'Update contact details', icon: <Edit3 className="w-4 h-4" />, onClick: () => setIsContactInfoEditing(true) },
+    { label: 'Add Person', description: 'Add another person at this address', icon: <UserPlus className="w-4 h-4" />, onClick: () => { setOpenSections(prev => ({ ...prev, people: true })); handleAddContact(); } },
+    { label: 'Add Tag', description: 'Use Additional Details for labels', icon: <Tag className="w-4 h-4" />, onClick: () => setOpenSections(prev => ({ ...prev, details: true })) },
+    { label: 'Set Reminder', description: 'Add or edit the next action', icon: <Bell className="w-4 h-4" />, onClick: () => setOpenSections(prev => ({ ...prev, nextAction: true })) },
+    { label: 'Change Stage', description: 'Move to a different stage', icon: <Flag className="w-4 h-4" />, onClick: () => setOpenSections(prev => ({ ...prev, stage: true })) },
+    { label: 'Merge Contact', description: 'Coming soon', icon: <Users className="w-4 h-4" />, disabled: true },
+    { label: 'Duplicate Contact', description: 'Coming soon', icon: <Copy className="w-4 h-4" />, disabled: true },
+    { label: 'Share Contact', description: 'Coming soon', icon: <Share2 className="w-4 h-4" />, disabled: true },
+  ];
+
   return (
     <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: "spring", damping: 35, stiffness: 400 }}
-      className="fixed top-0 right-0 bottom-0 z-[2000] bg-white shadow-2xl border-l border-gray-100 flex flex-col w-full md:w-[900px] h-full overflow-hidden"
+      className="fixed top-0 right-0 bottom-0 z-[2000] bg-[#F8FAFC] shadow-2xl border-l border-gray-100 flex flex-col w-full lg:w-[980px] h-full overflow-hidden"
     >
-      <div className="px-8 pt-8 pb-4 flex justify-between items-start">
-        <div className="flex-1 pr-4 min-w-0">
-          <h3 className="text-xl font-black text-[#1E293B] leading-tight mb-1 truncate uppercase">
-            {property.lastName ? `${property.lastName}, ${property.firstName}` : property.address.split(',')[0]}
-          </h3>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">
-            {property.lastName ? property.address : property.address.split(',').slice(1).join(', ')}
+      <div className="px-5 pt-5 pb-4 sm:px-8 sm:pt-8">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        <div className="flex justify-between items-start gap-4">
+        <div className="flex flex-1 min-w-0 gap-4">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xl font-black text-slate-800">
+            {initials}
+          </div>
+          <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-2xl font-black text-[#1E293B] leading-tight truncate">
+              {primaryDisplayName}
+            </h3>
+            <span className="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white" style={{ backgroundColor: getStageColor(property.stage, settings) }}>
+              {stageLabel}
+            </span>
+          </div>
+          <p className="mt-1 text-sm font-semibold text-slate-600 truncate">
+            {streetLine}
           </p>
+          {cityLine && (
+            <p className="text-sm font-semibold text-slate-600 truncate">
+              {cityLine}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -5809,6 +6004,46 @@ function PropertyDrawer({
             {property.type === 'Commercial' ? <Building2 className="w-3.5 h-3.5" /> : <Home className="w-3.5 h-3.5" />}
             {property.type}
           </button>
+          <div className="mt-2 text-sm font-semibold text-slate-600">
+            {phone ? (
+              <a href={`tel:${phone}`} className="inline-flex items-center gap-2 text-blue-600">
+                <Phone className="h-4 w-4" />
+                {phone}
+              </a>
+            ) : isAddingPhoneInline ? (
+              <span className="inline-flex items-center gap-2">
+                <Phone className="h-4 w-4 text-slate-400" />
+                <input
+                  autoFocus
+                  value={inlinePhone}
+                  onChange={event => setInlinePhone(event.target.value)}
+                  onBlur={() => { void saveInlinePhone(); }}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void saveInlinePhone();
+                    }
+                    if (event.key === 'Escape') {
+                      setInlinePhone('');
+                      setIsAddingPhoneInline(false);
+                    }
+                  }}
+                  className="h-9 rounded-xl border border-blue-100 bg-blue-50 px-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Phone number"
+                />
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAddingPhoneInline(true)}
+                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700"
+              >
+                <Phone className="h-4 w-4" />
+                + Add phone
+              </button>
+            )}
+          </div>
+          </div>
         </div>
         <div className="flex gap-2">
           <button
@@ -5824,12 +6059,79 @@ function PropertyDrawer({
           </button>
         </div>
       </div>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <button type="button" onClick={() => { setSelectedEventType('call'); setCallDirection('outbound'); setOpenSections(prev => ({ ...prev, activity: true })); }} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-600 bg-blue-600 px-4 text-xs font-bold text-white shadow-lg shadow-blue-100">
+          <Phone className="h-4 w-4" />
+          Call
+        </button>
+        <button type="button" onClick={() => { setSelectedEventType('record_event'); setIsNoteOpen(true); setOpenSections(prev => ({ ...prev, activity: true })); }} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-blue-600">
+          <MessageCircle className="h-4 w-4" />
+          Text
+        </button>
+        <button type="button" onClick={() => setOpenSections(prev => ({ ...prev, activity: true }))} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-xs font-bold text-indigo-600">
+          <MapPin className="h-4 w-4" />
+          Log Visit
+        </button>
+        <button type="button" onClick={onSchedule} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700">
+          <Calendar className="h-4 w-4" />
+          Schedule
+        </button>
+        <button type="button" onClick={onQuote} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-emerald-600">
+          <DollarSign className="h-4 w-4" />
+          Quote
+        </button>
+        <button type="button" onClick={() => setIsMoreOpen(true)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700">
+          <MoreVertical className="h-4 w-4" />
+          More
+        </button>
+      </div>
+      </div>
+      </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-4 space-y-6 pb-8">
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 pb-8 sm:px-8">
+        <section className="rounded-3xl border border-amber-100 bg-white p-4 shadow-sm">
+          <button type="button" onClick={() => toggleSection('nextAction')} className="flex w-full items-center justify-between gap-3 text-left">
+            <span className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+                <Zap className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-[10px] font-black uppercase tracking-widest text-amber-600">Next Action</span>
+                <span className="mt-1 block text-sm font-bold text-slate-800">{nextAction ? nextAction.title : 'No next action on file'}</span>
+              </span>
+            </span>
+            <ChevronDown className={cn("h-5 w-5 text-slate-400 transition-transform", openSections.nextAction && "rotate-180")} />
+          </button>
+          {openSections.nextAction && (
+            <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
+              {nextAction && (
+                <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                  <div>
+                    <p className="text-lg font-black text-slate-900">{nextAction.title}</p>
+                    {nextAction.note && <p className="mt-1 text-sm font-semibold text-slate-600">{nextAction.note}</p>}
+                    <p className="mt-2 text-xs font-bold text-amber-700">Due: {nextAction.dueLabel || 'Tomorrow'}</p>
+                  </div>
+                  <button type="button" onClick={completeNextAction} className="h-11 rounded-xl bg-amber-500 px-5 text-xs font-black uppercase tracking-widest text-white">
+                    Complete
+                  </button>
+                </div>
+              )}
+              <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+                <input value={nextActionDraft} onChange={event => setNextActionDraft(event.target.value)} placeholder="Follow up with wife" className="h-11 rounded-xl border border-amber-100 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500/20" />
+                <input value={nextActionDueDraft} onChange={event => setNextActionDueDraft(event.target.value)} placeholder="Tomorrow" className="h-11 rounded-xl border border-amber-100 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500/20" />
+              </div>
+              <textarea value={nextActionNoteDraft} onChange={event => setNextActionNoteDraft(event.target.value)} placeholder="Context for the follow-up..." className="mt-3 min-h-20 w-full rounded-xl border border-amber-100 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500/20" />
+              <button type="button" onClick={saveNextAction} className="mt-3 h-11 rounded-xl border border-amber-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-amber-700">
+                Save Next Action
+              </button>
+            </div>
+          )}
+        </section>
+
         {/* Stage Selector */}
         {sectionPermissions.stageControls.visible && (
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 cursor-pointer" onClick={() => toggleSection('stage')}>
              <label className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Active Stage</label>
              <div className="flex items-center gap-3">
                {(sectionPermissions.scheduleCTA.visible || sectionPermissions.createQuoteCTA.visible || sectionPermissions.recordTransactionCTA.visible) && (
@@ -5881,8 +6183,11 @@ function PropertyDrawer({
                    <div key={s} className={cn("w-2 h-1 rounded-full transition-all", idx <= ['prospect', 'lead', 'opportunity', 'customer'].indexOf(property.stage) ? "bg-blue-600" : "bg-gray-100")} />
                  ))}
                </div>
+               <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", openSections.stage && "rotate-180")} />
              </div>
           </div>
+          {openSections.stage && (
+          <>
           <div className="flex flex-wrap gap-2">
             {(['prospect', 'lead', 'opportunity', 'customer'] as const).map(s => (
               <button
@@ -5946,13 +6251,15 @@ function PropertyDrawer({
                 </button>
               ))}
           </div>
+          </>
+          )}
         </section>
         )}
 
         {/* Live Event Logger */}
         {(sectionPermissions.liveEventLogger.visible || sectionPermissions.activityFeed.visible) && (
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={() => toggleSection('activity')}>
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
                 <History className="w-3.5 h-3.5" />
@@ -5967,8 +6274,11 @@ function PropertyDrawer({
                 Latest: {latestActivity ? latestActivity.type : 'None'}
               </span>
             </div>
+            <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", openSections.activity && "rotate-180")} />
           </div>
 
+          {openSections.activity && (
+          <>
           {sectionPermissions.liveEventLogger.visible && (
           <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4 space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -6202,22 +6512,29 @@ function PropertyDrawer({
             )}
           </div>
           )}
+          </>
+          )}
         </section>
         )}
 
         {/* Address Level Details & Custom Fields */}
         {sectionPermissions.addressDetails.visible && (
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={() => toggleSection('job')}>
              <div className="flex items-center gap-2">
                <div className="w-6 h-6 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
                  <MapPin className="w-3.5 h-3.5" />
                </div>
                <label className="text-[10px] font-black uppercase text-amber-600 tracking-widest leading-none">Job Info</label>
              </div>
+             <div className="flex items-center gap-2">
              <button
                type="button"
-               onClick={() => setIsJobInfoEditing(prev => !prev)}
+               onClick={(event) => {
+                 event.stopPropagation();
+                 setIsJobInfoEditing(prev => !prev);
+                 setOpenSections(prev => ({ ...prev, job: true }));
+               }}
                className={cn(
                  "text-[10px] font-black uppercase tracking-widest flex items-center gap-1 px-3 py-2 rounded-xl border transition-all",
                  isJobInfoEditing
@@ -6228,7 +6545,11 @@ function PropertyDrawer({
                <Edit3 className="w-3.5 h-3.5" />
                {isJobInfoEditing ? 'Done' : 'Edit'}
              </button>
+             <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", openSections.job && "rotate-180")} />
+             </div>
           </div>
+          {openSections.job && (
+          <>
           {!isJobInfoEditing && (
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               Read-only. Tap Edit to change job details or gate-side notes.
@@ -6291,6 +6612,8 @@ function PropertyDrawer({
                 />
              </div>
           </div>
+          </>
+          )}
         </section>
         )}
 
@@ -6339,7 +6662,7 @@ function PropertyDrawer({
         {/* Note: Multi-contact support */}
         {sectionPermissions.contactsAtAddress.visible && (
         <section className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center cursor-pointer" onClick={() => toggleSection('people')}>
             <div className="flex items-center gap-2">
                <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
                  <User className="w-3.5 h-3.5" />
@@ -6360,7 +6683,11 @@ function PropertyDrawer({
               )}
               <button
                 type="button"
-                onClick={() => setIsContactInfoEditing(prev => !prev)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsContactInfoEditing(prev => !prev);
+                  setOpenSections(prev => ({ ...prev, people: true }));
+                }}
                 className={cn(
                   "text-[10px] font-black uppercase tracking-widest flex items-center gap-1 px-3 py-2 rounded-xl border transition-all",
                   isContactInfoEditing
@@ -6372,15 +6699,22 @@ function PropertyDrawer({
                 {isContactInfoEditing ? 'Done' : 'Edit'}
               </button>
               <button
-                onClick={handleAddContact}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenSections(prev => ({ ...prev, people: true }));
+                  handleAddContact();
+                }}
                 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1 px-3 py-2 rounded-xl border border-blue-100 bg-white hover:bg-blue-50 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!sectionPermissions.contactsAtAddress.editable || isAddingContact}
               >
                 {isAddingContact ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
                 {isAddingContact ? 'Adding...' : 'Add Contact'}
               </button>
+              <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", openSections.people && "rotate-180")} />
             </div>
           </div>
+          {openSections.people && (
+          <>
           {!isContactInfoEditing && (
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               Read-only. Tap Edit to change contact details or premises type.
@@ -6683,6 +7017,8 @@ function PropertyDrawer({
               </div>
             ))}
           </div>
+          </>
+          )}
         </section>
         )}
 
@@ -6702,6 +7038,65 @@ function PropertyDrawer({
         )}
 
       </div>
+      <AnimatePresence>
+        {isMoreOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2100] bg-slate-950/20 md:bg-transparent"
+            onClick={() => setIsMoreOpen(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 32, stiffness: 360 }}
+              onClick={event => event.stopPropagation()}
+              className="fixed inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-5 shadow-2xl md:bottom-auto md:left-auto md:right-6 md:top-6 md:w-[340px] md:rounded-3xl"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">More Actions</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">All extra actions in one place.</p>
+                </div>
+                <button type="button" onClick={() => setIsMoreOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-1">
+                {moreActions.map(action => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    disabled={action.disabled}
+                    onClick={() => {
+                      if (action.disabled) return;
+                      action.onClick?.();
+                      setIsMoreOpen(false);
+                    }}
+                    className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition-colors enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="text-slate-500">{action.icon}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-slate-900">{action.label}</span>
+                      <span className="block text-xs font-semibold text-slate-500">{action.description}</span>
+                    </span>
+                    <ChevronRight className="ml-auto h-4 w-4 text-slate-300" />
+                  </button>
+                ))}
+                <button type="button" onClick={() => { setIsMoreOpen(false); onDeleteAddress(property); }} className="mt-4 flex w-full items-center gap-4 border-t border-slate-100 px-3 py-4 text-left text-red-600">
+                  <Trash2 className="h-4 w-4" />
+                  <span>
+                    <span className="block text-sm font-bold">Delete Contact</span>
+                    <span className="block text-xs font-semibold text-red-400">Soft-delete this address record</span>
+                  </span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

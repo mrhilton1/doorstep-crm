@@ -1,6 +1,24 @@
 # Scratchpad
 
 ## 2026-06-19 — Current Objective
+**Task:** Replace free-text Next Action due label with a date/time picker and derive overdue status from the saved due datetime.
+**Target specs:** `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read current scratchpad/spec and inspect Next Action implementation.
+- [x] Update spec with datetime/overdue behavior.
+- [x] Add datetime-local picker and save `customData.nextAction.dueAt`.
+- [x] Display due datetime and overdue state.
+- [x] Verify, commit, push, and deploy.
+
+## Assumptions
+- MVP can store Next Action due date in address `customData.nextAction.dueAt` as an ISO timestamp.
+- Existing records with only `dueLabel` should continue to display without breaking.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-19 — Current Objective
 **Task:** Revamp the Unified Address Record contact panel to match the provided action-first designs while keeping address as the primary CRM object.
 **Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-activity-logging.spec.md`
 

@@ -53,6 +53,8 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Contact information is displayed first in the UI, but address remains the primary persisted CRM object.
 - Header phone displays the primary contact phone. If missing, show an inline `+ Add phone` action that updates the primary contact phone/address-compatible phone field.
 - Next Action persists until completed. MVP persistence may use address `customData.nextAction`; future task/reminder tables can replace it without changing the record layout.
+- Next Action due time must be captured with a date/time picker and stored as an exact datetime (`dueAt`) so the UI can identify overdue actions.
+- Existing Next Action records with only a legacy text due label should continue to display, but new saves should write `dueAt`.
 - New job/property details can persist in address `customData.jobInfo` until dedicated tables/fields are justified.
 - All non-primary sections are collapsed by default. Contact/identity info remains expanded.
 - Desktop More actions can be partially stubbed, but present actions must not pretend to complete unavailable backend workflows.
@@ -93,6 +95,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a primary contact has no phone, then the record header shows `+ Add phone` and saves the entered phone inline to the primary contact fields.
 - Given a Next Action is added, then it remains visible after record close/reopen until the user marks it complete.
 - Given a user marks Next Action complete, then the highlighted Next Action card is cleared and the completed action is retained only in record history/metadata for later audit expansion.
+- Given a Next Action due datetime is in the past and the action is not complete, then the record shows the action as overdue.
 - Given the record opens, then Activity Timeline, Job/Property Info, People at Address, and Additional Details are collapsed by default while contact identity remains visible.
 - Given More is opened on mobile, then More actions appear as a bottom sheet rather than a desktop side card.
 
@@ -128,6 +131,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-12: Opened address records are URL-backed, and address delete waits for the `doorstep.soft_delete_address` RPC before UI removal.
 - 2026-06-13: Address delete uses a scoped definer RPC because the soft-delete transition changes row visibility under active-record RLS.
 - 2026-06-19: Contact record redesign approved: address remains primary, contact info displays first, primary contact phone appears in the header with inline add when missing, Next Action persists until completed, existing activities table remains the activity source for now, new fields may use `customData`, non-contact sections collapse by default, mobile More actions are required, and the visual style should match the provided reference while staying inside DoorStep's design system.
+- 2026-06-19: Next Action due value changed from free-text label to date/time picker with `customData.nextAction.dueAt` for overdue tracking. Legacy `dueLabel` remains display-only fallback.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

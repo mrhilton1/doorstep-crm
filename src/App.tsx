@@ -444,6 +444,30 @@ const getStageColor = (stage: PropertyStage, settings?: AppSettings) => {
   return settings?.stageConfig?.[stage]?.color || DEFAULT_STAGE_COLORS[stage] || DEFAULT_STAGE_COLORS.prospect;
 };
 
+const toDateTimeLocalValue = (value?: string | number | null) => {
+  const fallback = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const source = value ? new Date(value) : fallback;
+  const date = Number.isNaN(source.getTime()) ? fallback : source;
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
+const formatNextActionDue = (action: any) => {
+  if (action?.dueAt) {
+    const dueDate = new Date(action.dueAt);
+    if (!Number.isNaN(dueDate.getTime())) {
+      return dueDate.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+  }
+
+  return action?.dueLabel || 'No due date';
+};
+
 const getAddressMarkerColor = (property: PropertyContact, settings?: AppSettings) => {
   const subStatus = property.subStatus || null;
   if (subStatus && settings?.subStatusConfig?.[subStatus]) {
@@ -5662,7 +5686,7 @@ function PropertyDrawer({
   const [inlinePhone, setInlinePhone] = useState(property.phone || '');
   const [nextActionDraft, setNextActionDraft] = useState(property.customData?.nextAction?.title || '');
   const [nextActionNoteDraft, setNextActionNoteDraft] = useState(property.customData?.nextAction?.note || '');
-  const [nextActionDueDraft, setNextActionDueDraft] = useState(property.customData?.nextAction?.dueLabel || 'Tomorrow');
+  const [nextActionDueDraft, setNextActionDueDraft] = useState(toDateTimeLocalValue(property.customData?.nextAction?.dueAt));
   const [jobInfoDraft, setJobInfoDraft] = useState<Record<string, string>>({
     service: property.customData?.jobInfo?.service || '',
     estimatedSqFt: property.customData?.jobInfo?.estimatedSqFt || '',
@@ -5706,7 +5730,7 @@ function PropertyDrawer({
     setOpenSections({});
     setNextActionDraft(property.customData?.nextAction?.title || '');
     setNextActionNoteDraft(property.customData?.nextAction?.note || '');
-    setNextActionDueDraft(property.customData?.nextAction?.dueLabel || 'Tomorrow');
+    setNextActionDueDraft(toDateTimeLocalValue(property.customData?.nextAction?.dueAt));
     setJobInfoDraft({
       service: property.customData?.jobInfo?.service || '',
       estimatedSqFt: property.customData?.jobInfo?.estimatedSqFt || '',
@@ -5839,6 +5863,8 @@ function PropertyDrawer({
   const nextAction = property.customData?.nextAction && !property.customData.nextAction.completedAt
     ? property.customData.nextAction
     : null;
+  const nextActionDueMs = nextAction?.dueAt ? Date.parse(nextAction.dueAt) : null;
+  const isNextActionOverdue = Boolean(nextActionDueMs && nextActionDueMs < Date.now());
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -5887,6 +5913,10 @@ function PropertyDrawer({
 
   const saveNextAction = () => {
     if (!nextActionDraft.trim()) return;
+    const dueDate = nextActionDueDraft ? new Date(nextActionDueDraft) : null;
+    const dueAt = dueDate && !Number.isNaN(dueDate.getTime())
+      ? dueDate.toISOString()
+      : null;
     updateProperty(property.id, {
       customData: {
         ...(property.customData || {}),
@@ -5894,7 +5924,8 @@ function PropertyDrawer({
           id: property.customData?.nextAction?.id || uuidv4(),
           title: nextActionDraft.trim(),
           note: nextActionNoteDraft.trim(),
-          dueLabel: nextActionDueDraft.trim() || 'Tomorrow',
+          dueAt,
+          dueLabel: dueAt ? undefined : property.customData?.nextAction?.dueLabel,
           ownerName: 'Mike Hilton',
           createdAt: property.customData?.nextAction?.createdAt || Date.now(),
           completedAt: null
@@ -6107,18 +6138,33 @@ function PropertyDrawer({
               {nextAction && (
                 <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
                   <div>
-                    <p className="text-lg font-black text-slate-900">{nextAction.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-black text-slate-900">{nextAction.title}</p>
+                      {isNextActionOverdue && (
+                        <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-red-700">
+                          Overdue
+                        </span>
+                      )}
+                    </div>
                     {nextAction.note && <p className="mt-1 text-sm font-semibold text-slate-600">{nextAction.note}</p>}
-                    <p className="mt-2 text-xs font-bold text-amber-700">Due: {nextAction.dueLabel || 'Tomorrow'}</p>
+                    <p className={cn("mt-2 text-xs font-bold", isNextActionOverdue ? "text-red-700" : "text-amber-700")}>
+                      Due: {formatNextActionDue(nextAction)}
+                    </p>
                   </div>
                   <button type="button" onClick={completeNextAction} className="h-11 rounded-xl bg-amber-500 px-5 text-xs font-black uppercase tracking-widest text-white">
                     Complete
                   </button>
                 </div>
               )}
-              <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+              <div className="grid gap-3 md:grid-cols-[1fr_260px]">
                 <input value={nextActionDraft} onChange={event => setNextActionDraft(event.target.value)} placeholder="Follow up with wife" className="h-11 rounded-xl border border-amber-100 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500/20" />
-                <input value={nextActionDueDraft} onChange={event => setNextActionDueDraft(event.target.value)} placeholder="Tomorrow" className="h-11 rounded-xl border border-amber-100 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500/20" />
+                <input
+                  type="datetime-local"
+                  value={nextActionDueDraft}
+                  onChange={event => setNextActionDueDraft(event.target.value)}
+                  aria-label="Next action due date and time"
+                  className="h-11 rounded-xl border border-amber-100 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
               </div>
               <textarea value={nextActionNoteDraft} onChange={event => setNextActionNoteDraft(event.target.value)} placeholder="Context for the follow-up..." className="mt-3 min-h-20 w-full rounded-xl border border-amber-100 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500/20" />
               <button type="button" onClick={saveNextAction} className="mt-3 h-11 rounded-xl border border-amber-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-amber-700">

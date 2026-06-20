@@ -10,7 +10,7 @@
 - [x] Update specs for modal logger and Not Interested sub-status behavior.
 - [x] Patch event derivation so Not Interested sets `subStatus: not_interested`.
 - [x] Move event composer into modal and keep record activity timeline visible.
-- [ ] Run verification, commit, push, and deploy.
+- [x] Run verification, commit, push, and deploy.
 
 ## Assumptions
 - "Not Interested" should remain a sub-status tied to the address record instead of becoming a new top-level stage.

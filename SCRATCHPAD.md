@@ -1,6 +1,25 @@
 # Scratchpad
 
 ## 2026-06-19 — Current Objective
+**Task:** Fix Not Interested event outcome and move event logging into a modal while keeping activity history visible on the contact record.
+**Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-activity-logging.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, and impacted specs.
+- [x] Inspect current event status/stage derivation and record logger UI.
+- [x] Update specs for modal logger and Not Interested sub-status behavior.
+- [x] Patch event derivation so Not Interested sets `subStatus: not_interested`.
+- [x] Move event composer into modal and keep record activity timeline visible.
+- [ ] Run verification, commit, push, and deploy.
+
+## Assumptions
+- "Not Interested" should remain a sub-status tied to the address record instead of becoming a new top-level stage.
+- Activity history should remain visible without requiring users to open the event composer.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-19 — Current Objective
 **Task:** Replace free-text Next Action due label with a date/time picker and derive overdue status from the saved due datetime.
 **Target specs:** `/specs/unified-address-record.spec.md`
 

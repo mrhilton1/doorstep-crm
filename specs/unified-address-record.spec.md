@@ -26,7 +26,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 ## Business Rules
 - Address remains the primary MVP CRM object.
 - Replace duplicate drawers immediately because live usage has not started.
-- Live Event Logger replaces the old visit-status-first workflow.
+- Live Event Logger replaces the old visit-status-first workflow, but the composer should open as a modal interaction from action buttons instead of occupying a permanent section on the record.
 - Active Stage remains manually editable but can auto-move from events.
 - Notes are stored in `doorstep.notes`; related timeline entries are stored in `doorstep.activities`.
 - Quotes use dedicated tables, not generic activity payloads.
@@ -44,6 +44,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Native browser alerts/confirms/prompts are not acceptable app UX; use app modal/dialog components.
 - Opened address records must be represented in the browser URL so refreshes and browser history restore the user's working context.
 - Activity Feed edit controls render behind a permission flag that defaults visible/editable for MVP.
+- Activity history remains visible on the record even when the event composer is closed.
 - Activity Feed includes a session-only "Notes Only" filter that shows only human-entered note/message events, not system-generated stage or audit logs.
 - Residential/Commercial designation should move out of the top header badge and become inline address metadata below the address line; it is only tappable in edit mode.
 - Add Contact requires immediate disabled/loading feedback and backend idempotency so double taps cannot create duplicate contacts.
@@ -59,6 +60,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - All non-primary sections are collapsed by default. Contact/identity info remains expanded.
 - Desktop More actions can be partially stubbed, but present actions must not pretend to complete unavailable backend workflows.
 - Mobile must provide equivalent actions with a bottom-sheet style More menu.
+- Not Interested is represented as the locked `not_interested` sub-status on the address record, not as a new top-level stage.
 
 ## Edge Cases
 - Mobile: header/logger/feed should be attempted above the fold; if cramped, iterate.
@@ -78,6 +80,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given any address entry point is clicked, then the same unified editor opens.
 - Given the unified record opens on mobile, then address header and Live Event Logger are immediately visible.
 - Given a user logs an event, then Activity Feed updates without reload.
+- Given a user clicks Log Visit or a logging shortcut, then the event composer opens in a modal instead of expanding inside the record body.
 - Given a user edits address notes, then the current address note persists to Supabase after idle/blur save.
 - Given a user logs an event note, then the note body persists to `doorstep.notes` and the related event appears in `doorstep.activities`.
 - Given the role config is evaluated in MVP, then all sections return visible/editable true.
@@ -96,6 +99,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a Next Action is added, then it remains visible after record close/reopen until the user marks it complete.
 - Given a user marks Next Action complete, then the highlighted Next Action card is cleared and the completed action is retained only in record history/metadata for later audit expansion.
 - Given a Next Action due datetime is in the past and the action is not complete, then the record shows the action as overdue.
+- Given a user logs Knock -> Answer -> Not Interested, then the record shows Not Interested as the current sub-status while preserving activity history.
 - Given the record opens, then Activity Timeline, Job/Property Info, People at Address, and Additional Details are collapsed by default while contact identity remains visible.
 - Given More is opened on mobile, then More actions appear as a bottom sheet rather than a desktop side card.
 
@@ -132,6 +136,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-13: Address delete uses a scoped definer RPC because the soft-delete transition changes row visibility under active-record RLS.
 - 2026-06-19: Contact record redesign approved: address remains primary, contact info displays first, primary contact phone appears in the header with inline add when missing, Next Action persists until completed, existing activities table remains the activity source for now, new fields may use `customData`, non-contact sections collapse by default, mobile More actions are required, and the visual style should match the provided reference while staying inside DoorStep's design system.
 - 2026-06-19: Next Action due value changed from free-text label to date/time picker with `customData.nextAction.dueAt` for overdue tracking. Legacy `dueLabel` remains display-only fallback.
+- 2026-06-19: Event logging composer moves to a modal launched by action buttons. The record keeps Activity Timeline visible, and Not Interested maps to address sub-status `not_interested`.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

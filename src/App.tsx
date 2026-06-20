@@ -186,7 +186,7 @@ const DEFAULT_STAGE_COLORS: Record<PropertyStage, string> = {
 const DEFAULT_SUB_STATUS_CONFIG: NonNullable<AppSettings['subStatusConfig']> = {
   not_interested: {
     label: 'Not Interested',
-    parentStages: ['prospect'],
+    parentStages: ['prospect', 'lead'],
     color: '#ef4444',
     description: 'Address has been worked and is not interested right now.'
   },
@@ -679,6 +679,7 @@ const getStageForEvent = (payload: LiveEventPayload, currentStage: PropertyStage
 
   if (payload.eventType === 'completed_cleaning') return promoteTo('customer');
   if (payload.answerOutcome === 'quote_requested') return promoteTo('opportunity');
+  if (payload.answerOutcome === 'not_interested') return currentStage;
   if (payload.eventType === 'knock' && payload.knockResult === 'answer') return promoteTo('lead');
   return currentStage;
 };
@@ -688,10 +689,19 @@ const getStatusForEvent = (payload: LiveEventPayload, currentStatus: PropertySta
   if (payload.eventType === 'knock' && payload.knockResult === 'answer') {
     if (payload.answerOutcome === 'follow_up_needed') return 'Follow-Up Needed';
     if (payload.answerOutcome === 'quote_requested' || payload.answerOutcome === 'referral_given') return 'Interested';
+    if (payload.answerOutcome === 'not_interested') return 'No Answer';
     return 'Knocked';
   }
   if (payload.eventType === 'completed_cleaning') return 'Interested';
   return currentStatus;
+};
+
+const getSubStatusForEvent = (
+  payload: LiveEventPayload,
+  _currentSubStatus?: PropertySubStatus | null
+): PropertySubStatus | null | undefined => {
+  if (payload.answerOutcome === 'not_interested') return 'not_interested';
+  return undefined;
 };
 
 type AppHeaderNavProps = {
@@ -4077,11 +4087,17 @@ function CrmApp({
     const interaction = activityRowToInteraction(data);
     const nextStage = getStageForEvent(payload, addressProperty.stage);
     const nextStatus = getStatusForEvent(payload, addressProperty.status);
+    const nextSubStatus = getSubStatusForEvent(payload, addressProperty.subStatus);
+    const nextSubStatusSetAt = nextSubStatus !== addressProperty.subStatus ? Date.now() : addressProperty.subStatusSetAt;
+    const nextSubStatusSetBy = nextSubStatus !== addressProperty.subStatus ? userId : addressProperty.subStatusSetBy;
 
     const finalProperty: PropertyContact = {
       ...addressProperty,
       stage: nextStage,
       status: nextStatus,
+      subStatus: nextSubStatus === undefined ? addressProperty.subStatus : nextSubStatus,
+      subStatusSetAt: nextSubStatusSetAt || null,
+      subStatusSetBy: nextSubStatusSetBy || null,
       interactions: [interaction, ...(addressProperty.interactions || [])],
       updatedAt: Date.now()
     };
@@ -4093,6 +4109,9 @@ function CrmApp({
       updateProperty(propertyId, {
         stage: nextStage,
         status: nextStatus,
+        subStatus: nextSubStatus === undefined ? property.subStatus : nextSubStatus,
+        subStatusSetAt: nextSubStatusSetAt || null,
+        subStatusSetBy: nextSubStatusSetBy || null,
         interactions: [interaction, ...(property.interactions || [])],
       });
     }
@@ -5682,6 +5701,7 @@ function PropertyDrawer({
   const [showNotesOnly, setShowNotesOnly] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isAddingPhoneInline, setIsAddingPhoneInline] = useState(false);
   const [inlinePhone, setInlinePhone] = useState(property.phone || '');
   const [nextActionDraft, setNextActionDraft] = useState(property.customData?.nextAction?.title || '');
@@ -5726,6 +5746,7 @@ function PropertyDrawer({
     setIsContactInfoEditing(false);
     setIsJobInfoEditing(false);
     setIsMoreOpen(false);
+    setIsEventModalOpen(false);
     setIsAddingPhoneInline(false);
     setOpenSections({});
     setNextActionDraft(property.customData?.nextAction?.title || '');
@@ -5766,6 +5787,25 @@ function PropertyDrawer({
     setReferralType('');
     setReferralRepName('');
     setEventError('');
+  };
+
+  const openEventModal = (eventType?: LiveEventType, preset?: {
+    knockResult?: KnockResult;
+    answerOutcome?: AnswerOutcome;
+    callDirection?: CallDirection;
+    noteOpen?: boolean;
+  }) => {
+    setSelectedEventType(eventType || null);
+    setKnockResult(preset?.knockResult || null);
+    setAnswerOutcome(preset?.answerOutcome || null);
+    setCallDirection(preset?.callDirection || null);
+    setEventNote('');
+    setIsNoteOpen(Boolean(preset?.noteOpen || eventType === 'completed_cleaning' || eventType === 'record_event'));
+    setReferralType('');
+    setReferralRepName('');
+    setEventError('');
+    setEventLoggedLabel('');
+    setIsEventModalOpen(true);
   };
 
   const validateEvent = () => {
@@ -5810,6 +5850,7 @@ function PropertyDrawer({
       const loggedLabel = buildEventTitle(payload);
       setEventLoggedLabel(loggedLabel);
       resetEventForm();
+      setIsEventModalOpen(false);
 
       if (payload.answerOutcome === 'quote_requested') {
         onQuote();
@@ -6009,6 +6050,14 @@ function PropertyDrawer({
             <span className="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white" style={{ backgroundColor: getStageColor(property.stage, settings) }}>
               {stageLabel}
             </span>
+            {property.subStatus && (
+              <span
+                className="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white"
+                style={{ backgroundColor: (settings.subStatusConfig || DEFAULT_SUB_STATUS_CONFIG)[property.subStatus]?.color || '#ef4444' }}
+              >
+                {subStatusLabel}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm font-semibold text-slate-600 truncate">
             {streetLine}
@@ -6091,15 +6140,15 @@ function PropertyDrawer({
         </div>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        <button type="button" onClick={() => { setSelectedEventType('call'); setCallDirection('outbound'); setOpenSections(prev => ({ ...prev, activity: true })); }} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-600 bg-blue-600 px-4 text-xs font-bold text-white shadow-lg shadow-blue-100">
+        <button type="button" onClick={() => openEventModal('call', { callDirection: 'outbound' })} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-600 bg-blue-600 px-4 text-xs font-bold text-white shadow-lg shadow-blue-100">
           <Phone className="h-4 w-4" />
           Call
         </button>
-        <button type="button" onClick={() => { setSelectedEventType('record_event'); setIsNoteOpen(true); setOpenSections(prev => ({ ...prev, activity: true })); }} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-blue-600">
+        <button type="button" onClick={() => openEventModal('record_event', { noteOpen: true })} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-blue-600">
           <MessageCircle className="h-4 w-4" />
           Text
         </button>
-        <button type="button" onClick={() => setOpenSections(prev => ({ ...prev, activity: true }))} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-xs font-bold text-indigo-600">
+        <button type="button" onClick={() => openEventModal()} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-xs font-bold text-indigo-600">
           <MapPin className="h-4 w-4" />
           Log Visit
         </button>
@@ -6302,15 +6351,15 @@ function PropertyDrawer({
         </section>
         )}
 
-        {/* Live Event Logger */}
+        {/* Activity Timeline */}
         {(sectionPermissions.liveEventLogger.visible || sectionPermissions.activityFeed.visible) && (
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={() => toggleSection('activity')}>
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
                 <History className="w-3.5 h-3.5" />
               </div>
-              <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest leading-none">Live Event Logger</label>
+              <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest leading-none">Activity Timeline</label>
             </div>
             <div className="text-right">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
@@ -6320,12 +6369,9 @@ function PropertyDrawer({
                 Latest: {latestActivity ? latestActivity.type : 'None'}
               </span>
             </div>
-            <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", openSections.activity && "rotate-180")} />
           </div>
 
-          {openSections.activity && (
-          <>
-          {sectionPermissions.liveEventLogger.visible && (
+          {false && sectionPermissions.liveEventLogger.visible && (
           <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4 space-y-3">
             <div className="flex flex-wrap gap-2">
               {([
@@ -6557,8 +6603,6 @@ function PropertyDrawer({
               </div>
             )}
           </div>
-          )}
-          </>
           )}
         </section>
         )}
@@ -7085,6 +7129,200 @@ function PropertyDrawer({
 
       </div>
       <AnimatePresence>
+        {isEventModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2200] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+            onClick={() => setIsEventModalOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 18, scale: 0.97, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: 18, scale: 0.97, opacity: 0 }}
+              onClick={event => event.stopPropagation()}
+              className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+            >
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Log Activity</p>
+                  <h3 className="mt-1 text-2xl font-black text-slate-900">{primaryDisplayName}</h3>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">{streetLine}</p>
+                </div>
+                <button type="button" onClick={() => setIsEventModalOpen(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { id: 'knock', label: 'Knock', icon: <MousePointer2 className="w-4 h-4" /> },
+                    { id: 'call', label: 'Call', icon: <Phone className="w-4 h-4" /> },
+                    { id: 'completed_cleaning', label: 'Completed Cleaning', icon: <CheckCircle2 className="w-4 h-4" /> },
+                    { id: 'record_event', label: 'Record Event', icon: <FileText className="w-4 h-4" /> },
+                  ] as { id: LiveEventType; label: string; icon: React.ReactNode }[]).map(event => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedEventType(event.id);
+                        setKnockResult(null);
+                        setAnswerOutcome(null);
+                        setCallDirection(null);
+                        setEventError('');
+                        setEventLoggedLabel('');
+                        setIsNoteOpen(event.id === 'completed_cleaning' || event.id === 'record_event');
+                      }}
+                      className={cn(
+                        "flex items-center gap-2 rounded-xl border-2 px-4 py-2 text-xs font-black uppercase tracking-widest transition-all",
+                        selectedEventType === event.id
+                          ? "border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-100"
+                          : "border-slate-200 bg-white text-slate-500 hover:border-indigo-200"
+                      )}
+                    >
+                      {event.icon}
+                      {event.label}
+                    </button>
+                  ))}
+                </div>
+
+                {selectedEventType === 'knock' && (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap gap-2">
+                      {([
+                        { id: 'answer', label: 'Answer' },
+                        { id: 'no_answer', label: 'No Answer' },
+                      ] as { id: KnockResult; label: string }[]).map(option => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => {
+                            setKnockResult(option.id);
+                            setAnswerOutcome(null);
+                            setEventError('');
+                            setIsNoteOpen(false);
+                          }}
+                          className={cn(
+                            "rounded-xl border-2 px-4 py-2 text-xs font-black uppercase tracking-widest",
+                            knockResult === option.id ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-500"
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {knockResult === 'answer' && (
+                      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                        {([
+                          { id: 'quote_requested', label: 'Estimate / Quote' },
+                          { id: 'follow_up_needed', label: 'Follow-Up Needed' },
+                          { id: 'referral_given', label: 'Referral Given' },
+                          { id: 'not_interested', label: 'Not Interested' },
+                        ] as { id: AnswerOutcome; label: string }[]).map(option => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => {
+                              setAnswerOutcome(option.id);
+                              setEventError('');
+                              setIsNoteOpen(option.id === 'follow_up_needed');
+                            }}
+                            className={cn(
+                              "rounded-xl border-2 px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest",
+                              answerOutcome === option.id ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-600"
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedEventType === 'call' && (
+                  <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    {([
+                      { id: 'outbound', label: 'Outbound Call' },
+                      { id: 'inbound', label: 'Inbound Call' },
+                    ] as { id: CallDirection; label: string }[]).map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setCallDirection(option.id);
+                          setEventError('');
+                        }}
+                        className={cn(
+                          "rounded-xl border-2 px-4 py-2 text-xs font-black uppercase tracking-widest",
+                          callDirection === option.id ? "border-pink-600 bg-pink-600 text-white" : "border-slate-200 bg-white text-slate-500"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedEventType === 'knock' && answerOutcome === 'referral_given' && (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referral type" value={referralType} onChange={e => setReferralType(e.target.value)} />
+                    <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referring rep name" value={referralRepName} onChange={e => setReferralRepName(e.target.value)} />
+                  </div>
+                )}
+
+                {selectedEventType && !isNoteOpen && (
+                  <button type="button" onClick={() => setIsNoteOpen(true)} className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-600">
+                    <PlusCircle className="h-4 w-4" />
+                    Add Note
+                  </button>
+                )}
+
+                {selectedEventType && isNoteOpen && (
+                  <textarea
+                    className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    placeholder={
+                      selectedEventType === 'completed_cleaning'
+                        ? 'Cleaning completion note required...'
+                        : selectedEventType === 'record_event'
+                          ? 'Describe the event...'
+                          : answerOutcome === 'follow_up_needed'
+                            ? 'Follow-up note required...'
+                            : 'Optional note...'
+                    }
+                    value={eventNote}
+                    onChange={e => setEventNote(e.target.value)}
+                  />
+                )}
+
+                {eventError && (
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                    {eventError}
+                  </div>
+                )}
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={() => setIsEventModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogEvent}
+                    disabled={!selectedEventType || isLoggingEvent || !sectionPermissions.liveEventLogger.editable}
+                    className="flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-100 disabled:opacity-50"
+                  >
+                    {isLoggingEvent ? <RefreshCw className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
+                    {isLoggingEvent ? 'Saving Event...' : 'Log Event'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {isMoreOpen && (
           <motion.div
             initial={{ opacity: 0 }}

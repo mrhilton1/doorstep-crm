@@ -42,6 +42,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - If an address is currently marked `not_interested`, later interested activity such as Estimate / Quote Requested, Follow-Up Needed, Referral Given, Completed Cleaning, or an answered knock must clear that stale sub-status.
 - Email, SMS, quote, invoice, appointment, and future actions should all use the same activity feed pattern.
 - Notes use `doorstep.notes` as source of truth and `doorstep.activities` as the timeline entry.
+- Activity note linkage should avoid browser-blocked `PATCH` follow-up writes; create the activity first, then insert the note with `source_activity_id` already populated and mark the activity metadata as a human note.
 - MVP detailed event taxonomy can be stored in `doorstep.activities.metadata`; the high-level `type` enum remains stable.
 - "Notes Only" filters in address/contact activity feeds should include only human-entered notes/messages and exclude system-generated logs such as automatic stage changes or audit events.
 - A route-created address should not gain contact records until an attempted contact is logged through Knock, Call, Conversation, or another human outreach event.
@@ -75,6 +76,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Given the user chooses Follow-Up Needed, when they select a due date/time, then the selector stays inside the modal and has an explicit Set action.
 - Given the user chooses Referral Given, then the modal captures referral contact details, optional referral address, referring-contact link, and creates a follow-up next action.
 - Given Supabase cannot be reached while logging an activity, then the modal remains open, the entered details are preserved, and the user sees a retryable network-oriented error.
+- Given an activity has a note, then saving the activity does not require a `PATCH` request to `doorstep.notes`; the note is inserted with the activity linkage in one write.
 - Given the user is midway through a modal event path, when they tap Back, then the modal returns to the previous decision layer and preserves broader context.
 - Given the user logs Knock -> Answer -> Referral Given, then referral type and referring rep name are required and saved in activity metadata.
 - Given the user logs an Outbound or Inbound Call, then a call event is saved with optional note.
@@ -112,6 +114,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - 2026-06-22: Quote activity is logged in two moments: quote requested when `Build Quote` is clicked, and quote built when the draft quote is saved.
 - 2026-06-22: Renewed-interest activity clears the current `not_interested` sub-status instead of letting it remain beside a later positive stage/outcome.
 - 2026-06-22: Follow-Up due date/time selection uses an in-modal picker with explicit Set/Clear actions, and activity network failures surface retryable Supabase reachability guidance.
+- 2026-06-22: Activity note persistence avoids a Supabase Data API `PATCH` to `doorstep.notes` because production CORS rejected that method; notes now link to activities at insert time.
 
 ## Iteration History
 - 2026-06-09: Spec created.

@@ -30,6 +30,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Branch outcomes inside the activity modal should complete their MVP work in the modal: Estimate / Quote builds the draft quote, Follow-Up creates the next action, and Referral captures/link referral contact information.
 - Active Stage remains manually editable but can auto-move from events.
 - Notes are stored in `doorstep.notes`; related timeline entries are stored in `doorstep.activities`.
+- Activity note linkage must not depend on a second browser `PATCH` to `doorstep.notes`; insert notes with `source_activity_id` after the activity row exists.
 - Quotes use dedicated tables, not generic activity payloads.
 - Invoices use dedicated tables with JSON adjustment/line data for MVP.
 - Record Transaction remains the action label when text is shown.
@@ -88,6 +89,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a user clicks Log Visit or a logging shortcut, then the event composer opens in a modal instead of expanding inside the record body.
 - Given a user edits address notes, then the current address note persists to Supabase after idle/blur save.
 - Given a user logs an event note, then the note body persists to `doorstep.notes` and the related event appears in `doorstep.activities`.
+- Given a user logs an event note, then the save path avoids a `PATCH` to `doorstep.notes` so production CORS method restrictions do not break logging.
 - Given the role config is evaluated in MVP, then all sections return visible/editable true.
 - Given quote/invoice/transaction schema is needed, then dedicated Supabase tables exist before deeper UI wiring.
 - Given an address record opens, then Contact Info and Job Info fields are read-only until their section Edit button is tapped.
@@ -150,6 +152,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-22: Activity modal outcomes should finish in place for Quote, Follow-Up, and Referral instead of redirecting to separate surfaces.
 - 2026-06-22: Interested activity clears stale `not_interested` current sub-status.
 - 2026-06-22: Follow-Up due selection uses an in-modal picker with explicit Set/Clear actions, and activity save network failures preserve input with clearer retry guidance.
+- 2026-06-22: Event note linkage uses insert-time `source_activity_id` instead of a follow-up `PATCH` to `doorstep.notes`.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

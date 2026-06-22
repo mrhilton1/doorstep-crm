@@ -1,6 +1,24 @@
 # Scratchpad
 
 ## 2026-06-22 — Current Objective
+**Task:** Fix Supabase CORS failure when activity notes try to PATCH `doorstep.notes`.
+**Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, and impacted specs.
+- [x] Inspect reported console errors and the activity note persistence path.
+- [x] Remove the blocked note PATCH from the activity save path.
+- [x] Preserve notes/activity linkage without relying on PATCH.
+- [x] Verify, commit, push, and deploy.
+
+## Assumptions
+- The extension console errors are unrelated browser extension noise; the app error is the Supabase CORS preflight rejecting PATCH to `doorstep.notes`.
+- Activity logging should use POST/insert-only writes where practical until the Supabase Data API PATCH allowance is corrected.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-22 — Current Objective
 **Task:** Fix follow-up activity save feedback and replace the awkward native due datetime picker with an in-modal selector.
 **Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
 

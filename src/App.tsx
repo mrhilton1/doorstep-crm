@@ -4065,32 +4065,6 @@ function CrmApp({
     const title = buildEventTitle(payload);
     const note = payload.note?.trim() || '';
     const body = note || `${title} logged`;
-    let sourceNoteId: string | null = null;
-
-    if (note) {
-      const { data: noteRow, error: noteError } = await doorstepDb
-        .from('notes')
-        .insert({
-          workspace_id: workspaceId,
-          address_id: propertyId,
-          body: note,
-          note_type: payload.eventType === 'record_event' ? 'record_event' : 'event_note',
-          metadata: {
-            event_type: payload.eventType,
-            outcome: payload.answerOutcome || payload.knockResult || payload.callDirection || null,
-          },
-          created_by: userId,
-          updated_by: userId,
-        })
-        .select('id')
-        .single();
-
-      if (noteError) {
-        throw new Error(noteError.message);
-      }
-
-      sourceNoteId = noteRow?.id || null;
-    }
 
     const metadata = {
       event_type: payload.eventType,
@@ -4099,7 +4073,8 @@ function CrmApp({
       call_direction: payload.callDirection || null,
       referral_type: payload.referralType || null,
       referral_rep_name: payload.referralRepName || null,
-      note_id: sourceNoteId,
+      note_id: null,
+      human_note: Boolean(note),
       actor_email: userEmail || null,
     };
 
@@ -4121,17 +4096,26 @@ function CrmApp({
       throw new Error(error.message);
     }
 
-    if (sourceNoteId) {
-      const { error: noteLinkError } = await doorstepDb
+    if (note) {
+      const { error: noteError } = await doorstepDb
         .from('notes')
-        .update({
+        .insert({
+          workspace_id: workspaceId,
+          address_id: propertyId,
+          body: note,
+          note_type: payload.eventType === 'record_event' ? 'record_event' : 'event_note',
           source_activity_id: data.id,
+          metadata: {
+            event_type: payload.eventType,
+            outcome: payload.answerOutcome || payload.knockResult || payload.callDirection || null,
+            activity_id: data.id,
+          },
+          created_by: userId,
           updated_by: userId,
-        })
-        .eq('id', sourceNoteId);
+        });
 
-      if (noteLinkError) {
-        throw new Error(noteLinkError.message);
+      if (noteError) {
+        throw new Error(noteError.message);
       }
     }
 

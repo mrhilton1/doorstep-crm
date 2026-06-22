@@ -1,6 +1,25 @@
 # Scratchpad
 
 ## 2026-06-22 — Current Objective
+**Task:** Finish activity modal outcome workflows: inline quote builder, next-action follow-up, referral contact capture/linking.
+**Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Inspect current quote/contact/next-action data shapes.
+- [x] Add inline quote item/quantity builder to Estimate / Quote outcome.
+- [x] Add next-action fields to Follow-Up Needed outcome.
+- [x] Add referral contact capture, optional address, referring-contact link, and follow-up task creation.
+- [x] Run lint/build/deploy-artifact checks, then push/deploy if clean.
+
+## Assumptions
+- MVP can save modal-created quotes to the existing address `quotes` array and let the current sync layer persist it.
+- Referral contacts can be added as address contacts with `customData.source = activity_referral` until a dedicated referral table is introduced.
+- Referral follow-up can use existing `customData.nextAction`.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-22 — Current Objective
 **Task:** Stop stale address records from reopening after leaving/returning to Clearview, and redesign activity logging modal as a forward/back PWA-style flow.
 **Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-activity-logging.spec.md`
 

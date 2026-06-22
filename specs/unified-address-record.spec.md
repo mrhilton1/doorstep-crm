@@ -27,6 +27,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Address remains the primary MVP CRM object.
 - Replace duplicate drawers immediately because live usage has not started.
 - Live Event Logger replaces the old visit-status-first workflow, but the composer should open as a modal interaction from action buttons instead of occupying a permanent section on the record.
+- Branch outcomes inside the activity modal should complete their MVP work in the modal: Estimate / Quote builds the draft quote, Follow-Up creates the next action, and Referral captures/link referral contact information.
 - Active Stage remains manually editable but can auto-move from events.
 - Notes are stored in `doorstep.notes`; related timeline entries are stored in `doorstep.activities`.
 - Quotes use dedicated tables, not generic activity payloads.
@@ -102,6 +103,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a user marks Next Action complete, then the highlighted Next Action card is cleared and the completed action is retained only in record history/metadata for later audit expansion.
 - Given a Next Action due datetime is in the past and the action is not complete, then the record shows the action as overdue.
 - Given a user logs Knock -> Answer -> Not Interested, then the record shows Not Interested as the current sub-status while preserving activity history.
+- Given a user logs Quote, Follow-Up, or Referral activity, then the relevant quote, next action, or referral contact data is captured before the modal closes.
 - Given the record opens, then Activity Timeline, Job/Property Info, People at Address, and Additional Details are collapsed by default while contact identity remains visible.
 - Given More is opened on mobile, then More actions appear as a bottom sheet rather than a desktop side card.
 
@@ -140,6 +142,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-19: Next Action due value changed from free-text label to date/time picker with `customData.nextAction.dueAt` for overdue tracking. Legacy `dueLabel` remains display-only fallback.
 - 2026-06-19: Event logging composer moves to a modal launched by action buttons. The record keeps Activity Timeline visible, and Not Interested maps to address sub-status `not_interested`.
 - 2026-06-22: Browser tab resume should not resurrect stale contact/address drawer state; normalize transient address URLs when the app is hidden.
+- 2026-06-22: Activity modal outcomes should finish in place for Quote, Follow-Up, and Referral instead of redirecting to separate surfaces.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

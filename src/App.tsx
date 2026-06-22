@@ -5441,6 +5441,7 @@ function CrmApp({
             property={selectedProperty}
             updateProperty={updateProperty}
             settings={settings}
+            catalog={catalog}
             onLogEvent={logAddressEvent}
             onAddContact={createAddressContact}
             onSaveContact={upsertNormalizedContactForAddress}
@@ -5665,6 +5666,7 @@ function PropertyDrawer({
   property,
   updateProperty,
   settings,
+  catalog,
   onLogEvent,
   onAddContact,
   onSaveContact,
@@ -5679,6 +5681,7 @@ function PropertyDrawer({
   property: PropertyContact,
   updateProperty: (id: string, updates: Partial<PropertyContact>) => void,
   settings: AppSettings,
+  catalog: { products: Product[], bundles: Bundle[] },
   onLogEvent: (propertyId: string, payload: LiveEventPayload) => Promise<Interaction>,
   onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
   onSaveContact: (property: PropertyContact, contact: Contact, isPrimary: boolean) => Promise<void>,
@@ -5706,6 +5709,17 @@ function PropertyDrawer({
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [referralType, setReferralType] = useState('');
   const [referralRepName, setReferralRepName] = useState('');
+  const [referralFirstName, setReferralFirstName] = useState('');
+  const [referralLastName, setReferralLastName] = useState('');
+  const [referralPhone, setReferralPhone] = useState('');
+  const [referralEmail, setReferralEmail] = useState('');
+  const [referralAddress, setReferralAddress] = useState('');
+  const [referringContactId, setReferringContactId] = useState('');
+  const [eventQuoteItems, setEventQuoteItems] = useState<QuoteLineItem[]>([]);
+  const [eventQuoteNotes, setEventQuoteNotes] = useState('');
+  const [eventNextActionTitle, setEventNextActionTitle] = useState('');
+  const [eventNextActionNote, setEventNextActionNote] = useState('');
+  const [eventNextActionDue, setEventNextActionDue] = useState('');
   const [eventError, setEventError] = useState('');
   const [isLoggingEvent, setIsLoggingEvent] = useState(false);
   const [eventLoggedLabel, setEventLoggedLabel] = useState('');
@@ -5764,6 +5778,17 @@ function PropertyDrawer({
     setIsEventModalOpen(false);
     setIsAddingPhoneInline(false);
     setOpenSections({});
+    setEventQuoteItems([]);
+    setEventQuoteNotes('');
+    setEventNextActionTitle('');
+    setEventNextActionNote('');
+    setEventNextActionDue('');
+    setReferralFirstName('');
+    setReferralLastName('');
+    setReferralPhone('');
+    setReferralEmail('');
+    setReferralAddress('');
+    setReferringContactId('');
     setNextActionDraft(property.customData?.nextAction?.title || '');
     setNextActionNoteDraft(property.customData?.nextAction?.note || '');
     setNextActionDueDraft(toDateTimeLocalValue(property.customData?.nextAction?.dueAt));
@@ -5801,6 +5826,17 @@ function PropertyDrawer({
     setIsNoteOpen(false);
     setReferralType('');
     setReferralRepName('');
+    setReferralFirstName('');
+    setReferralLastName('');
+    setReferralPhone('');
+    setReferralEmail('');
+    setReferralAddress('');
+    setReferringContactId('');
+    setEventQuoteItems([]);
+    setEventQuoteNotes('');
+    setEventNextActionTitle('');
+    setEventNextActionNote('');
+    setEventNextActionDue('');
     setEventError('');
   };
 
@@ -5818,6 +5854,17 @@ function PropertyDrawer({
     setIsNoteOpen(Boolean(preset?.noteOpen || eventType === 'completed_cleaning' || eventType === 'record_event'));
     setReferralType('');
     setReferralRepName('');
+    setReferralFirstName('');
+    setReferralLastName('');
+    setReferralPhone('');
+    setReferralEmail('');
+    setReferralAddress('');
+    setReferringContactId('');
+    setEventQuoteItems([]);
+    setEventQuoteNotes('');
+    setEventNextActionTitle(preset?.answerOutcome === 'follow_up_needed' ? 'Follow up' : '');
+    setEventNextActionNote('');
+    setEventNextActionDue('');
     setEventError('');
     setEventLoggedLabel('');
     setIsEventModalOpen(true);
@@ -5828,10 +5875,12 @@ function PropertyDrawer({
     if (selectedEventType === 'knock') {
       if (!knockResult) return 'Choose Answer or No Answer.';
       if (knockResult === 'answer' && !answerOutcome) return 'Choose what happened after the answer.';
-      if (answerOutcome === 'follow_up_needed' && !eventNote.trim()) return 'A note is required for Follow-Up Needed.';
+      if (answerOutcome === 'quote_requested' && eventQuoteItems.length === 0) return 'Add at least one quote item.';
+      if (answerOutcome === 'follow_up_needed' && !eventNextActionTitle.trim()) return 'Add a next action title.';
       if (answerOutcome === 'referral_given') {
-        if (!referralType.trim()) return 'Referral type is required.';
-        if (!referralRepName.trim()) return 'Referring rep name is required.';
+        const hasReferralName = Boolean(`${referralFirstName} ${referralLastName}`.trim());
+        if (!hasReferralName) return 'Add the referral contact name.';
+        if (!referralPhone.trim() && !referralEmail.trim()) return 'Add a referral phone or email.';
       }
     }
     if (selectedEventType === 'call' && !callDirection) return 'Choose inbound or outbound call.';
@@ -5847,14 +5896,33 @@ function PropertyDrawer({
       return;
     }
 
+    const referralName = `${referralFirstName} ${referralLastName}`.trim();
+    const followUpTitle = answerOutcome === 'referral_given'
+      ? `Follow up with ${referralName || 'referral'}`
+      : eventNextActionTitle.trim();
+    const followUpNote = answerOutcome === 'follow_up_needed'
+      ? eventNextActionNote.trim()
+      : answerOutcome === 'referral_given'
+        ? [
+          referralType.trim() ? `Referral type: ${referralType.trim()}` : '',
+          referralAddress.trim() ? `Address: ${referralAddress.trim()}` : '',
+          eventNote.trim()
+        ].filter(Boolean).join('\n')
+        : eventNote.trim();
+    const eventBody = answerOutcome === 'follow_up_needed'
+      ? [followUpTitle, followUpNote].filter(Boolean).join('\n')
+      : answerOutcome === 'quote_requested'
+        ? [eventQuoteNotes.trim(), eventNote.trim()].filter(Boolean).join('\n')
+        : followUpNote || eventNote;
+
     const payload: LiveEventPayload = {
       eventType: selectedEventType!,
       knockResult: knockResult || undefined,
       answerOutcome: answerOutcome || undefined,
       callDirection: callDirection || undefined,
-      note: eventNote,
+      note: eventBody,
       referralType,
-      referralRepName,
+      referralRepName: selectedReferringContact?.label || referralRepName,
     };
 
     setIsLoggingEvent(true);
@@ -5862,6 +5930,85 @@ function PropertyDrawer({
 
     try {
       await onLogEvent(property.id, payload);
+      const propertyUpdates: Partial<PropertyContact> = {};
+      const nextCustomData = { ...(property.customData || {}) };
+
+      if (payload.answerOutcome === 'quote_requested') {
+        const quote: Quote = {
+          id: uuidv4(),
+          lineItems: eventQuoteItems,
+          discounts: [],
+          subtotal: eventQuoteSubtotal,
+          total: eventQuoteSubtotal,
+          status: 'Draft',
+          createdAt: Date.now(),
+          notes: eventQuoteNotes.trim()
+        };
+        propertyUpdates.quotes = [...(property.quotes || []), quote];
+        propertyUpdates.stage = STAGE_ORDER.indexOf(property.stage) < STAGE_ORDER.indexOf('opportunity')
+          ? 'opportunity'
+          : property.stage;
+      }
+
+      if (payload.answerOutcome === 'follow_up_needed' || payload.answerOutcome === 'referral_given') {
+        nextCustomData.nextAction = {
+          id: nextCustomData.nextAction?.id || uuidv4(),
+          title: followUpTitle,
+          note: followUpNote,
+          dueAt: eventNextActionDue ? new Date(eventNextActionDue).toISOString() : null,
+          ownerName: 'Mike Hilton',
+          createdAt: Date.now(),
+          completedAt: null,
+          source: payload.answerOutcome
+        };
+      }
+
+      if (payload.answerOutcome === 'referral_given') {
+        const referralContact: Contact = {
+          id: uuidv4(),
+          firstName: referralFirstName.trim(),
+          lastName: referralLastName.trim(),
+          phone: referralPhone.trim(),
+          email: referralEmail.trim(),
+          role: 'Referral',
+          isDecisionMaker: false,
+          customData: {
+            referralAddress: referralAddress.trim(),
+            referralType: referralType.trim(),
+            referredByContactId: referringContactId || null,
+            referredByContactName: selectedReferringContact?.label || '',
+            referredFromAddressId: property.id,
+            source: 'activity_referral'
+          }
+        };
+
+        await onSaveContact(property, referralContact, false);
+        propertyUpdates.contacts = [...(property.contacts || []), referralContact];
+        nextCustomData.referrals = [
+          ...(nextCustomData.referrals || []),
+          {
+            id: uuidv4(),
+            contactId: referralContact.id,
+            name: referralName,
+            phone: referralContact.phone,
+            email: referralContact.email,
+            address: referralAddress.trim(),
+            type: referralType.trim(),
+            referredByContactId: referringContactId || null,
+            referredByContactName: selectedReferringContact?.label || '',
+            createdAt: Date.now()
+          }
+        ];
+      }
+
+      if (Object.keys(nextCustomData).length > 0) {
+        propertyUpdates.customData = nextCustomData;
+      }
+
+      if (Object.keys(propertyUpdates).length > 0) {
+        updateProperty(property.id, propertyUpdates);
+      }
+
       const loggedLabel = buildEventTitle(payload);
       setEventLoggedLabel(loggedLabel);
       resetEventForm();
@@ -6037,6 +6184,58 @@ function PropertyDrawer({
     { label: 'Duplicate Contact', description: 'Coming soon', icon: <Copy className="w-4 h-4" />, disabled: true },
     { label: 'Share Contact', description: 'Coming soon', icon: <Share2 className="w-4 h-4" />, disabled: true },
   ];
+
+  const primaryContactId = property.customData?.primaryContactId || 'primary';
+  const referringContactOptions = [
+    {
+      id: primaryContactId,
+      label: primaryDisplayName,
+      detail: [property.phone, property.email].filter(Boolean).join(' / ') || 'Primary contact'
+    },
+    ...(property.contacts || []).map(contact => ({
+      id: contact.id,
+      label: `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || contact.email || contact.phone || 'Unnamed contact',
+      detail: [contact.phone, contact.email].filter(Boolean).join(' / ') || contact.role || 'Additional contact'
+    }))
+  ];
+  const selectedReferringContact = referringContactOptions.find(option => option.id === referringContactId);
+  const eventQuoteSubtotal = eventQuoteItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+  const addEventQuoteProduct = (product: Product) => {
+    setEventQuoteItems(prev => {
+      const existing = prev.find(item => item.productId === product.id);
+      if (existing) {
+        return prev.map(item => item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      return [...prev, {
+        id: uuidv4(),
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: 1,
+        description: product.description,
+        category: product.category,
+        isSelected: true
+      }];
+    });
+  };
+
+  const addEventQuoteBundle = (bundle: Bundle) => {
+    bundle.productIds.forEach(productId => {
+      const product = catalog.products.find(item => item.id === productId);
+      if (product) addEventQuoteProduct(product);
+    });
+  };
+
+  const setEventQuoteQuantity = (id: string, value: number) => {
+    setEventQuoteItems(prev => prev.map(item =>
+      item.id === id ? { ...item, quantity: Math.max(1, Math.floor(value || 1)) } : item
+    ));
+  };
+
+  const removeEventQuoteItem = (id: string) => {
+    setEventQuoteItems(prev => prev.filter(item => item.id !== id));
+  };
 
   const eventTypeOptions: { id: LiveEventType; label: string; description: string; icon: React.ReactNode }[] = [
     { id: 'knock', label: 'Knock', description: 'Door attempt and outcome', icon: <MousePointer2 className="w-4 h-4" /> },
@@ -7311,6 +7510,12 @@ function PropertyDrawer({
                             setAnswerOutcome(option.id);
                             setEventError('');
                             setIsNoteOpen(option.id === 'follow_up_needed');
+                            if (option.id === 'follow_up_needed' && !eventNextActionTitle.trim()) {
+                              setEventNextActionTitle('Follow up');
+                            }
+                            if (option.id === 'referral_given' && !referringContactId) {
+                              setReferringContactId(primaryContactId);
+                            }
                           }}
                           className="rounded-2xl border-2 border-slate-200 bg-white p-4 text-left transition-all hover:border-emerald-200 hover:bg-emerald-50"
                         >
@@ -7351,14 +7556,137 @@ function PropertyDrawer({
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">{eventDetailsTitle}</p>
                       {answerOutcome === 'quote_requested' && (
-                        <p className="mt-1 text-xs font-bold text-slate-500">This will log the request and open the Quote Builder next.</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">Build the draft quote here. It will save to this address when you log the event.</p>
                       )}
                     </div>
 
+                    {answerOutcome === 'quote_requested' && (
+                      <div className="space-y-4">
+                        {catalog.bundles.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Bundles</p>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              {catalog.bundles.map(bundle => (
+                                <button
+                                  key={bundle.id}
+                                  type="button"
+                                  onClick={() => addEventQuoteBundle(bundle)}
+                                  className="rounded-xl border border-indigo-100 bg-white p-3 text-left hover:border-indigo-300"
+                                >
+                                  <span className="block text-xs font-black text-slate-800">{bundle.name}</span>
+                                  <span className="mt-1 block text-[10px] font-bold text-slate-400">{bundle.productIds.length} items</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Catalog Items</p>
+                          <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                            {catalog.products.map(product => (
+                              <button
+                                key={product.id}
+                                type="button"
+                                onClick={() => addEventQuoteProduct(product)}
+                                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-indigo-300"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate text-xs font-black text-slate-800">{product.name}</span>
+                                  <span className="block text-[10px] font-black text-indigo-600">${product.price.toLocaleString()}</span>
+                                </span>
+                                <PlusCircle className="h-4 w-4 shrink-0 text-indigo-600" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {eventQuoteItems.length > 0 && (
+                          <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Quote Items</p>
+                              <p className="text-sm font-black text-slate-900">${eventQuoteSubtotal.toLocaleString()}</p>
+                            </div>
+                            {eventQuoteItems.map(item => (
+                              <div key={item.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl bg-slate-50 p-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-black text-slate-800">{item.name}</p>
+                                  <p className="text-[10px] font-bold text-slate-400">${item.price.toLocaleString()} each</p>
+                                </div>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={event => setEventQuoteQuantity(item.id, Number(event.target.value))}
+                                  className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-2 text-center text-xs font-black outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                  aria-label={`Quantity for ${item.name}`}
+                                />
+                                <button type="button" onClick={() => removeEventQuoteItem(item.id)} className="h-9 w-9 rounded-lg text-red-500 hover:bg-red-50" aria-label={`Remove ${item.name}`}>
+                                  <Trash2 className="mx-auto h-4 w-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <textarea
+                          className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          placeholder="Optional quote notes..."
+                          value={eventQuoteNotes}
+                          onChange={event => setEventQuoteNotes(event.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    {answerOutcome === 'follow_up_needed' && (
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px]">
+                        <input
+                          className="h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          placeholder="Next action title..."
+                          value={eventNextActionTitle}
+                          onChange={event => setEventNextActionTitle(event.target.value)}
+                        />
+                        <input
+                          type="datetime-local"
+                          className="h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={eventNextActionDue}
+                          onChange={event => setEventNextActionDue(event.target.value)}
+                        />
+                        <textarea
+                          className="min-h-28 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 md:col-span-2"
+                          placeholder="Context for the follow-up..."
+                          value={eventNextActionNote}
+                          onChange={event => setEventNextActionNote(event.target.value)}
+                        />
+                      </div>
+                    )}
+
                     {selectedEventType === 'knock' && answerOutcome === 'referral_given' && (
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referral type" value={referralType} onChange={e => setReferralType(e.target.value)} />
-                        <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referring rep name" value={referralRepName} onChange={e => setReferralRepName(e.target.value)} />
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referral first name" value={referralFirstName} onChange={event => setReferralFirstName(event.target.value)} />
+                          <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referral last name" value={referralLastName} onChange={event => setReferralLastName(event.target.value)} />
+                          <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Phone" value={referralPhone} onChange={event => setReferralPhone(event.target.value)} />
+                          <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Email" value={referralEmail} onChange={event => setReferralEmail(event.target.value)} />
+                          <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 md:col-span-2" placeholder="Address (optional)" value={referralAddress} onChange={event => setReferralAddress(event.target.value)} />
+                          <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referral type (optional)" value={referralType} onChange={event => setReferralType(event.target.value)} />
+                          <select
+                            className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            value={referringContactId}
+                            onChange={event => setReferringContactId(event.target.value)}
+                          >
+                            <option value="">Link referring contact...</option>
+                            {referringContactOptions.map(option => (
+                              <option key={option.id} value={option.id}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <textarea
+                          className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          placeholder="Optional referral note..."
+                          value={eventNote}
+                          onChange={event => setEventNote(event.target.value)}
+                        />
                       </div>
                     )}
 
@@ -7369,7 +7697,7 @@ function PropertyDrawer({
                       </button>
                     )}
 
-                    {selectedEventType && isNoteOpen && (
+                    {selectedEventType && isNoteOpen && answerOutcome !== 'follow_up_needed' && answerOutcome !== 'referral_given' && (
                       <textarea
                         className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
                         placeholder={

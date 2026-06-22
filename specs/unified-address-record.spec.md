@@ -57,6 +57,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Header phone displays the primary contact phone. If missing, show an inline `+ Add phone` action that updates the primary contact phone/address-compatible phone field.
 - Next Action persists until completed. MVP persistence may use address `customData.nextAction`; future task/reminder tables can replace it without changing the record layout.
 - Next Action due time must be captured with a date/time picker and stored as an exact datetime (`dueAt`) so the UI can identify overdue actions.
+- Activity-modal Next Action due selection must stay inside the app modal and provide an explicit Set/Clear action rather than relying on an awkward browser picker dismissal.
 - Existing Next Action records with only a legacy text due label should continue to display, but new saves should write `dueAt`.
 - New job/property details can persist in address `customData.jobInfo` until dedicated tables/fields are justified.
 - All non-primary sections are collapsed by default. Contact/identity info remains expanded.
@@ -69,6 +70,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Mobile: header/logger/feed should be attempted above the fold; if cramped, iterate.
 - Empty history: show a clear "No activity yet" state.
 - Failed autosave/event write: show visible error and do not fake success.
+- Failed activity writes caused by network/Supabase reachability should preserve modal input and show retryable guidance.
 - Inline contact edits should not lose partially typed data.
 - Existing legacy nested quote/invoice/contact data may need bridge display until normalized UI migration is complete.
 - Duplicate add-contact submissions must create at most one contact even when two requests reach the backend.
@@ -103,6 +105,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a Next Action is added, then it remains visible after record close/reopen until the user marks it complete.
 - Given a user marks Next Action complete, then the highlighted Next Action card is cleared and the completed action is retained only in record history/metadata for later audit expansion.
 - Given a Next Action due datetime is in the past and the action is not complete, then the record shows the action as overdue.
+- Given a Follow-Up activity is being logged, when the user selects due date/time, then the selector stays within the modal and the user can explicitly Set or Clear the value.
 - Given a user logs Knock -> Answer -> Not Interested, then the record shows Not Interested as the current sub-status while preserving activity history.
 - Given a record is marked Not Interested, when a user logs Estimate / Quote, Follow-Up, Referral, Completed Cleaning, or another answered/interested activity, then the current Not Interested badge is cleared while the old event remains in Activity Timeline.
 - Given a user logs Quote, Follow-Up, or Referral activity, then the relevant quote, next action, or referral contact data is captured before the modal closes.
@@ -146,6 +149,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-22: Browser tab resume should not resurrect stale contact/address drawer state; normalize transient address URLs when the app is hidden.
 - 2026-06-22: Activity modal outcomes should finish in place for Quote, Follow-Up, and Referral instead of redirecting to separate surfaces.
 - 2026-06-22: Interested activity clears stale `not_interested` current sub-status.
+- 2026-06-22: Follow-Up due selection uses an in-modal picker with explicit Set/Clear actions, and activity save network failures preserve input with clearer retry guidance.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

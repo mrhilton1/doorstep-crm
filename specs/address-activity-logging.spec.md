@@ -34,6 +34,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Referral Given requires referral type and referring rep name.
 - Referral Given should capture referred contact name, phone or email, optional address, optional referral type, and the referring contact link. It should also create a follow-up next action for the referred contact.
 - Follow-Up Needed should create/edit the next action in the modal, including title, optional due date/time, and context note.
+- Follow-Up due date/time selection should stay inside the activity modal and provide an explicit Set/Done-style action so users do not have to click outside the modal to finish selecting time.
 - Estimate / Quote Requested is a two-step modal path: first log the quote request with a `Build Quote` action, then build/save the draft quote in the same modal and log the quote completion.
 - Record Event requires a description.
 - Active Stage remains manually editable, but events can auto-move stage: Conversation/answered knock to Lead, Estimate/Quote Requested to Opportunity, Completed Cleaning or payment/job completion to Customer.
@@ -53,6 +54,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Long notes wrap without breaking the drawer layout.
 - Repeated knocks should append new history entries rather than overwrite prior knocks.
 - Event write failures show inline retry/error UI and do not fake success.
+- Network failures during activity save should keep the modal open, preserve typed details, and explain that the app could not reach Supabase instead of only showing a raw `Failed to fetch`.
 - Users can still manually change Active Stage after auto movement.
 - Route-created addresses may have no contacts; activity logging should handle address-only records gracefully.
 
@@ -70,7 +72,9 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Given the user logs Knock -> Answer -> Not Interested, then the event is saved, the address shows Not Interested as the current sub-status, and the activity feed remains visible.
 - Given an address currently shows Not Interested, when the user logs a later interested activity, then Not Interested is removed from the current record while the historical Not Interested activity remains in the timeline.
 - Given the user chooses Follow-Up Needed, then the modal captures a next action title, optional due datetime, and context note before save.
+- Given the user chooses Follow-Up Needed, when they select a due date/time, then the selector stays inside the modal and has an explicit Set action.
 - Given the user chooses Referral Given, then the modal captures referral contact details, optional referral address, referring-contact link, and creates a follow-up next action.
+- Given Supabase cannot be reached while logging an activity, then the modal remains open, the entered details are preserved, and the user sees a retryable network-oriented error.
 - Given the user is midway through a modal event path, when they tap Back, then the modal returns to the previous decision layer and preserves broader context.
 - Given the user logs Knock -> Answer -> Referral Given, then referral type and referring rep name are required and saved in activity metadata.
 - Given the user logs an Outbound or Inbound Call, then a call event is saved with optional note.
@@ -107,6 +111,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - 2026-06-22: Quote, Follow-Up, and Referral outcomes complete inside the modal. Quote builds a draft quote, Follow-Up creates the next action, and Referral captures contact details plus a linked follow-up task.
 - 2026-06-22: Quote activity is logged in two moments: quote requested when `Build Quote` is clicked, and quote built when the draft quote is saved.
 - 2026-06-22: Renewed-interest activity clears the current `not_interested` sub-status instead of letting it remain beside a later positive stage/outcome.
+- 2026-06-22: Follow-Up due date/time selection uses an in-modal picker with explicit Set/Clear actions, and activity network failures surface retryable Supabase reachability guidance.
 
 ## Iteration History
 - 2026-06-09: Spec created.

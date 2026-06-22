@@ -451,6 +451,45 @@ const toDateTimeLocalValue = (value?: string | number | null) => {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 
+const formatDateTimeFieldValue = (value?: string | null) => {
+  if (!value) return 'Set date and time';
+  const dueDate = new Date(value);
+  if (Number.isNaN(dueDate.getTime())) return 'Set date and time';
+  return dueDate.toLocaleString([], {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const getDateTimeParts = (value?: string | null) => {
+  const fallbackValue = toDateTimeLocalValue(value);
+  const date = new Date(fallbackValue);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date(toDateTimeLocalValue()) : date;
+  const hour24 = safeDate.getHours();
+  const hour12 = hour24 % 12 || 12;
+
+  return {
+    date: fallbackValue.slice(0, 10),
+    hour: String(hour12).padStart(2, '0'),
+    minute: String(safeDate.getMinutes()).padStart(2, '0'),
+    period: hour24 >= 12 ? 'PM' : 'AM'
+  };
+};
+
+const getActivitySaveErrorMessage = (error: any, fallback = 'Event could not be saved. Please try again.') => {
+  const message = error?.message || String(error || '');
+  if (!navigator.onLine) {
+    return 'You appear to be offline. Keep this modal open, reconnect, and try saving again.';
+  }
+  if (message.toLowerCase().includes('failed to fetch') || error?.name === 'TypeError') {
+    return 'Could not reach Supabase to save this activity. Check your connection, then try again. Your typed details are still here.';
+  }
+  return message || fallback;
+};
+
 const formatNextActionDue = (action: any) => {
   if (action?.dueAt) {
     const dueDate = new Date(action.dueAt);
@@ -5739,6 +5778,11 @@ function PropertyDrawer({
   const [eventNextActionTitle, setEventNextActionTitle] = useState('');
   const [eventNextActionNote, setEventNextActionNote] = useState('');
   const [eventNextActionDue, setEventNextActionDue] = useState('');
+  const [isEventDuePickerOpen, setIsEventDuePickerOpen] = useState(false);
+  const [eventDueDateDraft, setEventDueDateDraft] = useState(getDateTimeParts().date);
+  const [eventDueHourDraft, setEventDueHourDraft] = useState(getDateTimeParts().hour);
+  const [eventDueMinuteDraft, setEventDueMinuteDraft] = useState(getDateTimeParts().minute);
+  const [eventDuePeriodDraft, setEventDuePeriodDraft] = useState<'AM' | 'PM'>(getDateTimeParts().period as 'AM' | 'PM');
   const [eventError, setEventError] = useState('');
   const [isLoggingEvent, setIsLoggingEvent] = useState(false);
   const [eventLoggedLabel, setEventLoggedLabel] = useState('');
@@ -5803,6 +5847,7 @@ function PropertyDrawer({
     setEventNextActionTitle('');
     setEventNextActionNote('');
     setEventNextActionDue('');
+    setIsEventDuePickerOpen(false);
     setReferralFirstName('');
     setReferralLastName('');
     setReferralPhone('');
@@ -5858,6 +5903,7 @@ function PropertyDrawer({
     setEventNextActionTitle('');
     setEventNextActionNote('');
     setEventNextActionDue('');
+    setIsEventDuePickerOpen(false);
     setEventError('');
   };
 
@@ -5887,9 +5933,40 @@ function PropertyDrawer({
     setEventNextActionTitle(preset?.answerOutcome === 'follow_up_needed' ? 'Follow up' : '');
     setEventNextActionNote('');
     setEventNextActionDue('');
+    setIsEventDuePickerOpen(false);
     setEventError('');
     setEventLoggedLabel('');
     setIsEventModalOpen(true);
+  };
+
+  const openEventDuePicker = () => {
+    const parts = getDateTimeParts(eventNextActionDue);
+    setEventDueDateDraft(parts.date);
+    setEventDueHourDraft(parts.hour);
+    setEventDueMinuteDraft(parts.minute);
+    setEventDuePeriodDraft(parts.period as 'AM' | 'PM');
+    setIsEventDuePickerOpen(true);
+  };
+
+  const applyEventDuePicker = () => {
+    if (!eventDueDateDraft) {
+      setEventNextActionDue('');
+      setIsEventDuePickerOpen(false);
+      return;
+    }
+
+    const hour12 = Math.max(1, Math.min(12, Number(eventDueHourDraft) || 12));
+    const minute = Math.max(0, Math.min(59, Number(eventDueMinuteDraft) || 0));
+    const hour24 = eventDuePeriodDraft === 'PM'
+      ? (hour12 === 12 ? 12 : hour12 + 12)
+      : (hour12 === 12 ? 0 : hour12);
+    setEventNextActionDue(`${eventDueDateDraft}T${String(hour24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`);
+    setIsEventDuePickerOpen(false);
+  };
+
+  const clearEventDuePicker = () => {
+    setEventNextActionDue('');
+    setIsEventDuePickerOpen(false);
   };
 
   const validateEvent = () => {
@@ -6042,7 +6119,7 @@ function PropertyDrawer({
 
       window.setTimeout(() => setEventLoggedLabel(''), 2000);
     } catch (error: any) {
-      setEventError(error.message || 'Event could not be saved. Please try again.');
+      setEventError(getActivitySaveErrorMessage(error));
     } finally {
       setIsLoggingEvent(false);
     }
@@ -6072,7 +6149,7 @@ function PropertyDrawer({
       setEventNote('');
       setIsNoteOpen(false);
     } catch (error: any) {
-      setEventError(error.message || 'Quote request could not be logged. Please try again.');
+      setEventError(getActivitySaveErrorMessage(error, 'Quote request could not be logged. Please try again.'));
     } finally {
       setIsLoggingEvent(false);
     }
@@ -7728,12 +7805,82 @@ function PropertyDrawer({
                           value={eventNextActionTitle}
                           onChange={event => setEventNextActionTitle(event.target.value)}
                         />
-                        <input
-                          type="datetime-local"
-                          className="h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
-                          value={eventNextActionDue}
-                          onChange={event => setEventNextActionDue(event.target.value)}
-                        />
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={openEventDuePicker}
+                            className="flex h-12 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 text-left text-sm font-black text-slate-800 outline-none transition hover:border-indigo-200 focus:ring-2 focus:ring-indigo-500/20"
+                            aria-expanded={isEventDuePickerOpen}
+                          >
+                            <span className="truncate">{formatDateTimeFieldValue(eventNextActionDue)}</span>
+                            <Calendar className="h-4 w-4 shrink-0 text-slate-500" />
+                          </button>
+
+                          {isEventDuePickerOpen && (
+                            <div className="absolute right-0 top-14 z-[2300] w-full min-w-[280px] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+                              <div className="space-y-3">
+                                <label className="block">
+                                  <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Date</span>
+                                  <input
+                                    type="date"
+                                    value={eventDueDateDraft}
+                                    onChange={event => setEventDueDateDraft(event.target.value)}
+                                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                  />
+                                </label>
+
+                                <div>
+                                  <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Time</span>
+                                  <div className="grid grid-cols-[1fr_1fr_1fr] gap-2">
+                                    <select
+                                      value={eventDueHourDraft}
+                                      onChange={event => setEventDueHourDraft(event.target.value)}
+                                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                      aria-label="Due hour"
+                                    >
+                                      {Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0')).map(hour => (
+                                        <option key={hour} value={hour}>{hour}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={eventDueMinuteDraft}
+                                      onChange={event => setEventDueMinuteDraft(event.target.value)}
+                                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                      aria-label="Due minute"
+                                    >
+                                      {Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')).map(minute => (
+                                        <option key={minute} value={minute}>{minute}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={eventDuePeriodDraft}
+                                      onChange={event => setEventDuePeriodDraft(event.target.value as 'AM' | 'PM')}
+                                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                      aria-label="Due period"
+                                    >
+                                      <option value="AM">AM</option>
+                                      <option value="PM">PM</option>
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-2 pt-1">
+                                  <div className="flex gap-2">
+                                    <button type="button" onClick={clearEventDuePicker} className="h-9 rounded-xl bg-slate-100 px-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                      Clear
+                                    </button>
+                                    <button type="button" onClick={() => setEventDueDateDraft(toDateTimeLocalValue().slice(0, 10))} className="h-9 rounded-xl bg-slate-100 px-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                      Today
+                                    </button>
+                                  </div>
+                                  <button type="button" onClick={applyEventDuePicker} className="h-9 rounded-xl bg-indigo-600 px-4 text-[10px] font-black uppercase tracking-widest text-white">
+                                    Set
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <textarea
                           className="min-h-28 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 md:col-span-2"
                           placeholder="Context for the follow-up..."

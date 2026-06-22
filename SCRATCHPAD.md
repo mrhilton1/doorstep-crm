@@ -1,6 +1,24 @@
 # Scratchpad
 
 ## 2026-06-22 — Current Objective
+**Task:** Fix follow-up activity save feedback and replace the awkward native due datetime picker with an in-modal selector.
+**Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, and impacted specs.
+- [x] Inspect event modal due-date and Supabase activity save paths.
+- [x] Add in-modal due date/time picker with explicit Set/Clear actions.
+- [x] Improve activity save network/Supabase error messaging without faking success.
+- [x] Update specs, verify, commit, push, and deploy if possible.
+
+## Assumptions
+- The existing `doorstep.activities` write remains the source of truth; the fix should improve UX and diagnostics without adding a new endpoint.
+- Follow-up due values should still persist as exact `dueAt` ISO datetimes.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-22 — Current Objective
 **Task:** Clear stale Not Interested sub-status when a later interested activity is logged.
 **Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
 

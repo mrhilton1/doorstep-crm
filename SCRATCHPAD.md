@@ -10,7 +10,7 @@
 - [x] Update specs for tab-resume URL behavior and stepwise modal logging.
 - [x] Patch transient address URL cleanup on page hide.
 - [x] Convert activity modal from flat form to step-by-step flow with back navigation.
-- [ ] Run verification, commit, push, and deploy.
+- [x] Run verification, commit, push, and deploy.
 
 ## Assumptions
 - Address deep links should still work on direct load, but ordinary tab/background resume should not reopen a stale record drawer.

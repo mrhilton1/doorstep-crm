@@ -13,7 +13,7 @@ Replace status-first door logging with a Supabase-backed Live Event Logger that 
 The address editor currently includes Visit Status pills and a simple Knock/Conversation logging panel. Activity entries still use the legacy `interactions` shape in the UI. The Supabase foundation already includes `doorstep.activities`, but the editor is not yet writing door events there.
 
 ## Desired Behavior
-The address editor replaces the Visit Status area with a modal Live Event Logger launched from record action buttons and shortcuts. Users choose an event path, see only the fields required for that path, and log the event to `doorstep.activities`. The activity feed stays visible on the record and updates immediately after save, showing who/what/when. Active Stage remains a separate field while allowing event-based auto movement with manual override. For untracked houses tapped from the map, the logger opens on a draft address and persists the address only after an activity is logged.
+The address editor replaces the Visit Status area with a modal Live Event Logger launched from record action buttons and shortcuts. The modal behaves like a lightweight PWA flow: users move forward through one decision at a time, can go back to the previous branch without losing the whole interaction, see only the fields required for the current path, and log the event to `doorstep.activities`. The activity feed stays visible on the record and updates immediately after save, showing who/what/when. Active Stage remains a separate field while allowing event-based auto movement with manual override. For untracked houses tapped from the map, the logger opens on a draft address and persists the address only after an activity is logged.
 
 ## User Flow
 1. User opens an address/contact editor.
@@ -27,6 +27,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 
 ## Business Rules
 - Event logging is the primary door workflow; Visit Status is demoted to a derived/latest outcome.
+- The activity modal should be path-driven with forward/back navigation, not a flat form that exposes every possible child option at once.
 - A single address can have many events per day.
 - Activity entries must include event type, timestamp, actor, address ID, and note/body when supplied.
 - Required notes: Follow-Up Needed and Completed Cleaning.
@@ -62,6 +63,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Given the user logs Knock -> Answer -> Follow-Up Needed without a note, then inline validation requires a note.
 - Given the user logs Knock -> Answer -> Estimate / Quote Requested, then the event is saved, the address is promoted to Opportunity, and the existing Quote Builder opens.
 - Given the user logs Knock -> Answer -> Not Interested, then the event is saved, the address shows Not Interested as the current sub-status, and the activity feed remains visible.
+- Given the user is midway through a modal event path, when they tap Back, then the modal returns to the previous decision layer and preserves broader context.
 - Given the user logs Knock -> Answer -> Referral Given, then referral type and referring rep name are required and saved in activity metadata.
 - Given the user logs an Outbound or Inbound Call, then a call event is saved with optional note.
 - Given the user logs Completed Cleaning, then a note is required and the address is promoted to Customer.
@@ -93,6 +95,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - 2026-06-10: Route Creation addresses do not create contact records until an attempted contact is logged and contact data is captured.
 - 2026-06-10: Normal untracked house taps open a draft activity session and persist the address only after the first logged activity.
 - 2026-06-19: Event composer opens as a modal from record actions; the record keeps Activity Timeline visible. Not Interested is stored as a sub-status and does not trigger answer-based stage promotion.
+- 2026-06-22: Activity logging modal should behave like a stepwise PWA flow with forward/back branch navigation.
 
 ## Iteration History
 - 2026-06-09: Spec created.

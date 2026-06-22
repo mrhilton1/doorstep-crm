@@ -1,5 +1,24 @@
 # Scratchpad
 
+## 2026-06-22 — Current Objective
+**Task:** Stop stale address records from reopening after leaving/returning to Clearview, and redesign activity logging modal as a forward/back PWA-style flow.
+**Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-activity-logging.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, and impacted specs.
+- [x] Inspect URL state synchronization and current activity modal.
+- [x] Update specs for tab-resume URL behavior and stepwise modal logging.
+- [x] Patch transient address URL cleanup on page hide.
+- [x] Convert activity modal from flat form to step-by-step flow with back navigation.
+- [ ] Run verification, commit, push, and deploy.
+
+## Assumptions
+- Address deep links should still work on direct load, but ordinary tab/background resume should not reopen a stale record drawer.
+- The MVP step modal should cover the current event paths and leave quote-builder/referral expansion hooks in place without inventing new tables today.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-19 — Current Objective
 **Task:** Fix Not Interested event outcome and move event logging into a modal while keeping activity history visible on the contact record.
 **Target specs:** `/specs/unified-address-record.spec.md`, `/specs/address-activity-logging.spec.md`

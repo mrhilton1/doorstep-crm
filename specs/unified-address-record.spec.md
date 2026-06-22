@@ -43,6 +43,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Address delete must not remove the record from the UI until the `doorstep.soft_delete_address` `SECURITY DEFINER` RPC confirms the intended address row was soft-deleted.
 - Native browser alerts/confirms/prompts are not acceptable app UX; use app modal/dialog components.
 - Opened address records must be represented in the browser URL so refreshes and browser history restore the user's working context.
+- Address-record URLs are durable deep links, but transient drawer state should not be resurrected after the browser backgrounds/unloads the tab during ordinary app switching. On tab hide/resume, the app should normalize to the current workspace view rather than reopening a stale address record.
 - Activity Feed edit controls render behind a permission flag that defaults visible/editable for MVP.
 - Activity history remains visible on the record even when the event composer is closed.
 - Activity Feed includes a session-only "Notes Only" filter that shows only human-entered note/message events, not system-generated stage or audit logs.
@@ -95,6 +96,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a user confirms Delete Address from the record header or card view, then the record closes when open and disappears from normal views.
 - Given Delete Address fails or times out, then the confirmation modal shows the error and the address remains visible.
 - Given a user refreshes while an address record is open, then the same address record reopens from the URL when the address still exists.
+- Given a user leaves Clearview and later returns to the tab after the browser reloads the app, then a stale address drawer should not reopen unless the user explicitly loaded an address deep link.
 - Given a primary contact has no phone, then the record header shows `+ Add phone` and saves the entered phone inline to the primary contact fields.
 - Given a Next Action is added, then it remains visible after record close/reopen until the user marks it complete.
 - Given a user marks Next Action complete, then the highlighted Next Action card is cleared and the completed action is retained only in record history/metadata for later audit expansion.
@@ -137,6 +139,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-19: Contact record redesign approved: address remains primary, contact info displays first, primary contact phone appears in the header with inline add when missing, Next Action persists until completed, existing activities table remains the activity source for now, new fields may use `customData`, non-contact sections collapse by default, mobile More actions are required, and the visual style should match the provided reference while staying inside DoorStep's design system.
 - 2026-06-19: Next Action due value changed from free-text label to date/time picker with `customData.nextAction.dueAt` for overdue tracking. Legacy `dueLabel` remains display-only fallback.
 - 2026-06-19: Event logging composer moves to a modal launched by action buttons. The record keeps Activity Timeline visible, and Not Interested maps to address sub-status `not_interested`.
+- 2026-06-22: Browser tab resume should not resurrect stale contact/address drawer state; normalize transient address URLs when the app is hidden.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

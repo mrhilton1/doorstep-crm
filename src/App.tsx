@@ -4350,6 +4350,21 @@ function CrmApp({
     }
   }, [currentView, isDrawerOpen, selectedPropertyId]);
 
+  useEffect(() => {
+    const stripTransientAddressRoute = () => {
+      if (document.visibilityState !== 'hidden') return;
+      if (!isDrawerOpen || !selectedPropertyId) return;
+
+      const basePath = buildAppPath(currentView);
+      if (window.location.pathname !== basePath) {
+        window.history.replaceState({}, '', basePath);
+      }
+    };
+
+    document.addEventListener('visibilitychange', stripTransientAddressRoute);
+    return () => document.removeEventListener('visibilitychange', stripTransientAddressRoute);
+  }, [currentView, isDrawerOpen, selectedPropertyId]);
+
   return (
     <div id="top-brand-main" className="flex flex-col h-screen bg-[#F1F5F9] relative overflow-hidden text-[#1E293B]">
       <AppHeaderNav
@@ -6027,6 +6042,61 @@ function PropertyDrawer({
     { label: 'Share Contact', description: 'Coming soon', icon: <Share2 className="w-4 h-4" />, disabled: true },
   ];
 
+  const eventTypeOptions: { id: LiveEventType; label: string; description: string; icon: React.ReactNode }[] = [
+    { id: 'knock', label: 'Knock', description: 'Door attempt and outcome', icon: <MousePointer2 className="w-4 h-4" /> },
+    { id: 'call', label: 'Call', description: 'Inbound or outbound call', icon: <Phone className="w-4 h-4" /> },
+    { id: 'completed_cleaning', label: 'Completed Cleaning', description: 'Log finished service', icon: <CheckCircle2 className="w-4 h-4" /> },
+    { id: 'record_event', label: 'Record Event', description: 'General note or update', icon: <FileText className="w-4 h-4" /> },
+  ];
+  const eventTypeLabel = eventTypeOptions.find(option => option.id === selectedEventType)?.label || '';
+  const knockResultLabel = knockResult === 'answer' ? 'Answer' : knockResult === 'no_answer' ? 'No Answer' : '';
+  const answerOutcomeLabel = answerOutcome ? EVENT_TYPE_LABELS[answerOutcome] : '';
+  const callDirectionLabel = callDirection === 'outbound' ? 'Outbound Call' : callDirection === 'inbound' ? 'Inbound Call' : '';
+  const eventPathLabels = [eventTypeLabel, knockResultLabel, answerOutcomeLabel, callDirectionLabel].filter(Boolean);
+  const eventFlowStep =
+    !selectedEventType
+      ? 'event_type'
+      : selectedEventType === 'knock' && !knockResult
+        ? 'knock_result'
+        : selectedEventType === 'knock' && knockResult === 'answer' && !answerOutcome
+          ? 'answer_outcome'
+          : selectedEventType === 'call' && !callDirection
+            ? 'call_direction'
+            : 'details';
+  const isEventPathReady = eventFlowStep === 'details';
+  const eventDetailsTitle =
+    selectedEventType === 'completed_cleaning'
+      ? 'Add completion note'
+      : selectedEventType === 'record_event'
+        ? 'Describe the event'
+        : answerOutcome === 'follow_up_needed'
+          ? 'Add follow-up note'
+          : answerOutcome === 'referral_given'
+            ? 'Capture referral details'
+            : answerOutcome === 'not_interested'
+              ? 'Optional not interested note'
+              : 'Review and log';
+  const goBackInEventFlow = () => {
+    setEventError('');
+    if (selectedEventType === 'knock' && answerOutcome) {
+      setAnswerOutcome(null);
+      setIsNoteOpen(false);
+      return;
+    }
+    if (selectedEventType === 'knock' && knockResult) {
+      setKnockResult(null);
+      setAnswerOutcome(null);
+      setIsNoteOpen(false);
+      return;
+    }
+    if (selectedEventType === 'call' && callDirection) {
+      setCallDirection(null);
+      setIsNoteOpen(false);
+      return;
+    }
+    resetEventForm();
+  };
+
   return (
     <motion.div
       initial={{ x: '100%' }}
@@ -7155,46 +7225,60 @@ function PropertyDrawer({
                 </button>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    { id: 'knock', label: 'Knock', icon: <MousePointer2 className="w-4 h-4" /> },
-                    { id: 'call', label: 'Call', icon: <Phone className="w-4 h-4" /> },
-                    { id: 'completed_cleaning', label: 'Completed Cleaning', icon: <CheckCircle2 className="w-4 h-4" /> },
-                    { id: 'record_event', label: 'Record Event', icon: <FileText className="w-4 h-4" /> },
-                  ] as { id: LiveEventType; label: string; icon: React.ReactNode }[]).map(event => (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedEventType(event.id);
-                        setKnockResult(null);
-                        setAnswerOutcome(null);
-                        setCallDirection(null);
-                        setEventError('');
-                        setEventLoggedLabel('');
-                        setIsNoteOpen(event.id === 'completed_cleaning' || event.id === 'record_event');
-                      }}
-                      className={cn(
-                        "flex items-center gap-2 rounded-xl border-2 px-4 py-2 text-xs font-black uppercase tracking-widest transition-all",
-                        selectedEventType === event.id
-                          ? "border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-100"
-                          : "border-slate-200 bg-white text-slate-500 hover:border-indigo-200"
-                      )}
-                    >
-                      {event.icon}
-                      {event.label}
-                    </button>
-                  ))}
-                </div>
+              <div className="space-y-5">
+                {eventPathLabels.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {eventPathLabels.map((label, index) => (
+                      <React.Fragment key={`${label}-${index}`}>
+                        <span className={cn(
+                          "rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest",
+                          index === eventPathLabels.length - 1 ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600"
+                        )}>
+                          {label}
+                        </span>
+                        {index < eventPathLabels.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-slate-300" />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
 
-                {selectedEventType === 'knock' && (
-                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-wrap gap-2">
+                {eventFlowStep === 'event_type' && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {eventTypeOptions.map(event => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedEventType(event.id);
+                          setKnockResult(null);
+                          setAnswerOutcome(null);
+                          setCallDirection(null);
+                          setEventError('');
+                          setEventLoggedLabel('');
+                          setIsNoteOpen(event.id === 'completed_cleaning' || event.id === 'record_event');
+                        }}
+                        className="flex min-h-24 items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-4 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                      >
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                          {event.icon}
+                        </span>
+                        <span>
+                          <span className="block text-sm font-black uppercase tracking-widest text-slate-700">{event.label}</span>
+                          <span className="mt-1 block text-xs font-bold text-slate-400">{event.description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {eventFlowStep === 'knock_result' && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">What happened at the door?</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {([
-                        { id: 'answer', label: 'Answer' },
-                        { id: 'no_answer', label: 'No Answer' },
-                      ] as { id: KnockResult; label: string }[]).map(option => (
+                        { id: 'answer', label: 'Answer', description: 'Someone came to the door' },
+                        { id: 'no_answer', label: 'No Answer', description: 'Attempted contact, no conversation' },
+                      ] as { id: KnockResult; label: string; description: string }[]).map(option => (
                         <button
                           key={option.id}
                           type="button"
@@ -7204,98 +7288,110 @@ function PropertyDrawer({
                             setEventError('');
                             setIsNoteOpen(false);
                           }}
-                          className={cn(
-                            "rounded-xl border-2 px-4 py-2 text-xs font-black uppercase tracking-widest",
-                            knockResult === option.id ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-500"
-                          )}
+                          className="rounded-2xl border-2 border-slate-200 bg-white p-4 text-left transition-all hover:border-blue-200 hover:bg-blue-50"
+                        >
+                          <span className="block text-sm font-black uppercase tracking-widest text-slate-700">{option.label}</span>
+                          <span className="mt-1 block text-xs font-bold text-slate-400">{option.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {eventFlowStep === 'answer_outcome' && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">What was the result?</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {([
+                        { id: 'quote_requested', label: 'Estimate / Quote', description: 'Create the opportunity and continue to quote' },
+                        { id: 'follow_up_needed', label: 'Follow-Up Needed', description: 'Create context for the next action' },
+                        { id: 'referral_given', label: 'Referral Given', description: 'Capture referral source and rep' },
+                        { id: 'not_interested', label: 'Not Interested', description: 'Mark the address with optional note' },
+                      ] as { id: AnswerOutcome; label: string; description: string }[]).map(option => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => {
+                            setAnswerOutcome(option.id);
+                            setEventError('');
+                            setIsNoteOpen(option.id === 'follow_up_needed');
+                          }}
+                          className="rounded-2xl border-2 border-slate-200 bg-white p-4 text-left transition-all hover:border-emerald-200 hover:bg-emerald-50"
+                        >
+                          <span className="block text-sm font-black uppercase tracking-widest text-slate-700">{option.label}</span>
+                          <span className="mt-1 block text-xs font-bold text-slate-400">{option.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {eventFlowStep === 'call_direction' && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Which direction?</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {([
+                        { id: 'outbound', label: 'Outbound Call' },
+                        { id: 'inbound', label: 'Inbound Call' },
+                      ] as { id: CallDirection; label: string }[]).map(option => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => {
+                            setCallDirection(option.id);
+                            setEventError('');
+                          }}
+                          className="rounded-2xl border-2 border-slate-200 bg-white p-4 text-left text-sm font-black uppercase tracking-widest text-slate-700 transition-all hover:border-pink-200 hover:bg-pink-50"
                         >
                           {option.label}
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
 
-                    {knockResult === 'answer' && (
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                        {([
-                          { id: 'quote_requested', label: 'Estimate / Quote' },
-                          { id: 'follow_up_needed', label: 'Follow-Up Needed' },
-                          { id: 'referral_given', label: 'Referral Given' },
-                          { id: 'not_interested', label: 'Not Interested' },
-                        ] as { id: AnswerOutcome; label: string }[]).map(option => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() => {
-                              setAnswerOutcome(option.id);
-                              setEventError('');
-                              setIsNoteOpen(option.id === 'follow_up_needed');
-                            }}
-                            className={cn(
-                              "rounded-xl border-2 px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest",
-                              answerOutcome === option.id ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-600"
-                            )}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
+                {eventFlowStep === 'details' && (
+                  <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">{eventDetailsTitle}</p>
+                      {answerOutcome === 'quote_requested' && (
+                        <p className="mt-1 text-xs font-bold text-slate-500">This will log the request and open the Quote Builder next.</p>
+                      )}
+                    </div>
+
+                    {selectedEventType === 'knock' && answerOutcome === 'referral_given' && (
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referral type" value={referralType} onChange={e => setReferralType(e.target.value)} />
+                        <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referring rep name" value={referralRepName} onChange={e => setReferralRepName(e.target.value)} />
                       </div>
                     )}
-                  </div>
-                )}
 
-                {selectedEventType === 'call' && (
-                  <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    {([
-                      { id: 'outbound', label: 'Outbound Call' },
-                      { id: 'inbound', label: 'Inbound Call' },
-                    ] as { id: CallDirection; label: string }[]).map(option => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          setCallDirection(option.id);
-                          setEventError('');
-                        }}
-                        className={cn(
-                          "rounded-xl border-2 px-4 py-2 text-xs font-black uppercase tracking-widest",
-                          callDirection === option.id ? "border-pink-600 bg-pink-600 text-white" : "border-slate-200 bg-white text-slate-500"
-                        )}
-                      >
-                        {option.label}
+                    {selectedEventType && !isNoteOpen && (
+                      <button type="button" onClick={() => setIsNoteOpen(true)} className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-600">
+                        <PlusCircle className="h-4 w-4" />
+                        Add Note
                       </button>
-                    ))}
+                    )}
+
+                    {selectedEventType && isNoteOpen && (
+                      <textarea
+                        className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        placeholder={
+                          selectedEventType === 'completed_cleaning'
+                            ? 'Cleaning completion note required...'
+                            : selectedEventType === 'record_event'
+                              ? 'Describe the event...'
+                              : answerOutcome === 'follow_up_needed'
+                                ? 'Follow-up note required...'
+                                : answerOutcome === 'not_interested'
+                                  ? 'Optional reason or context...'
+                                  : 'Optional note...'
+                        }
+                        value={eventNote}
+                        onChange={e => setEventNote(e.target.value)}
+                      />
+                    )}
                   </div>
-                )}
-
-                {selectedEventType === 'knock' && answerOutcome === 'referral_given' && (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referral type" value={referralType} onChange={e => setReferralType(e.target.value)} />
-                    <input className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Referring rep name" value={referralRepName} onChange={e => setReferralRepName(e.target.value)} />
-                  </div>
-                )}
-
-                {selectedEventType && !isNoteOpen && (
-                  <button type="button" onClick={() => setIsNoteOpen(true)} className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-600">
-                    <PlusCircle className="h-4 w-4" />
-                    Add Note
-                  </button>
-                )}
-
-                {selectedEventType && isNoteOpen && (
-                  <textarea
-                    className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
-                    placeholder={
-                      selectedEventType === 'completed_cleaning'
-                        ? 'Cleaning completion note required...'
-                        : selectedEventType === 'record_event'
-                          ? 'Describe the event...'
-                          : answerOutcome === 'follow_up_needed'
-                            ? 'Follow-up note required...'
-                            : 'Optional note...'
-                    }
-                    value={eventNote}
-                    onChange={e => setEventNote(e.target.value)}
-                  />
                 )}
 
                 {eventError && (
@@ -7304,14 +7400,21 @@ function PropertyDrawer({
                   </div>
                 )}
 
-                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setIsEventModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
-                    Cancel
-                  </button>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+                  <div className="flex gap-3">
+                    {selectedEventType && (
+                      <button type="button" onClick={goBackInEventFlow} className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-slate-600">
+                        Back
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setIsEventModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
+                      Cancel
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={handleLogEvent}
-                    disabled={!selectedEventType || isLoggingEvent || !sectionPermissions.liveEventLogger.editable}
+                    disabled={!isEventPathReady || isLoggingEvent || !sectionPermissions.liveEventLogger.editable}
                     className="flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-100 disabled:opacity-50"
                   >
                     {isLoggingEvent ? <RefreshCw className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}

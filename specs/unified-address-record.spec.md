@@ -63,6 +63,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Desktop More actions can be partially stubbed, but present actions must not pretend to complete unavailable backend workflows.
 - Mobile must provide equivalent actions with a bottom-sheet style More menu.
 - Not Interested is represented as the locked `not_interested` sub-status on the address record, not as a new top-level stage.
+- Later interested activity must clear the current `not_interested` sub-status so the header never shows Not Interested beside renewed engagement.
 
 ## Edge Cases
 - Mobile: header/logger/feed should be attempted above the fold; if cramped, iterate.
@@ -103,6 +104,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a user marks Next Action complete, then the highlighted Next Action card is cleared and the completed action is retained only in record history/metadata for later audit expansion.
 - Given a Next Action due datetime is in the past and the action is not complete, then the record shows the action as overdue.
 - Given a user logs Knock -> Answer -> Not Interested, then the record shows Not Interested as the current sub-status while preserving activity history.
+- Given a record is marked Not Interested, when a user logs Estimate / Quote, Follow-Up, Referral, Completed Cleaning, or another answered/interested activity, then the current Not Interested badge is cleared while the old event remains in Activity Timeline.
 - Given a user logs Quote, Follow-Up, or Referral activity, then the relevant quote, next action, or referral contact data is captured before the modal closes.
 - Given the record opens, then Activity Timeline, Job/Property Info, People at Address, and Additional Details are collapsed by default while contact identity remains visible.
 - Given More is opened on mobile, then More actions appear as a bottom sheet rather than a desktop side card.
@@ -143,6 +145,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-19: Event logging composer moves to a modal launched by action buttons. The record keeps Activity Timeline visible, and Not Interested maps to address sub-status `not_interested`.
 - 2026-06-22: Browser tab resume should not resurrect stale contact/address drawer state; normalize transient address URLs when the app is hidden.
 - 2026-06-22: Activity modal outcomes should finish in place for Quote, Follow-Up, and Referral instead of redirecting to separate surfaces.
+- 2026-06-22: Interested activity clears stale `not_interested` current sub-status.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

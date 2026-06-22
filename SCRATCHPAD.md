@@ -1,6 +1,24 @@
 # Scratchpad
 
 ## 2026-06-22 — Current Objective
+**Task:** Clear stale Not Interested sub-status when a later interested activity is logged.
+**Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, and impacted specs.
+- [x] Inspect central event stage/status/sub-status derivation.
+- [x] Patch sub-status derivation so positive events clear `not_interested`.
+- [x] Update specs with the renewed-interest rule.
+- [ ] Run verification, commit, push, and deploy.
+
+## Assumptions
+- Quote requested, follow-up needed, referral given, completed cleaning, and generic answered knocks are positive/renewed-interest signals.
+- Clearing `not_interested` should remove sub-status metadata instead of leaving an old set timestamp/user attached to an empty sub-status.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-22 — Current Objective
 **Task:** Finish activity modal outcome workflows: inline quote builder, next-action follow-up, referral contact capture/linking.
 **Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`
 

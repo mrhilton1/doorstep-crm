@@ -698,9 +698,21 @@ const getStatusForEvent = (payload: LiveEventPayload, currentStatus: PropertySta
 
 const getSubStatusForEvent = (
   payload: LiveEventPayload,
-  _currentSubStatus?: PropertySubStatus | null
+  currentSubStatus?: PropertySubStatus | null
 ): PropertySubStatus | null | undefined => {
   if (payload.answerOutcome === 'not_interested') return 'not_interested';
+  if (
+    currentSubStatus === 'not_interested' &&
+    (
+      payload.answerOutcome === 'quote_requested' ||
+      payload.answerOutcome === 'follow_up_needed' ||
+      payload.answerOutcome === 'referral_given' ||
+      payload.eventType === 'completed_cleaning' ||
+      (payload.eventType === 'knock' && payload.knockResult === 'answer')
+    )
+  ) {
+    return null;
+  }
   return undefined;
 };
 
@@ -4088,14 +4100,20 @@ function CrmApp({
     const nextStage = getStageForEvent(payload, addressProperty.stage);
     const nextStatus = getStatusForEvent(payload, addressProperty.status);
     const nextSubStatus = getSubStatusForEvent(payload, addressProperty.subStatus);
-    const nextSubStatusSetAt = nextSubStatus !== addressProperty.subStatus ? Date.now() : addressProperty.subStatusSetAt;
-    const nextSubStatusSetBy = nextSubStatus !== addressProperty.subStatus ? userId : addressProperty.subStatusSetBy;
+    const effectiveSubStatus = nextSubStatus === undefined ? addressProperty.subStatus : nextSubStatus;
+    const subStatusChanged = effectiveSubStatus !== addressProperty.subStatus;
+    const nextSubStatusSetAt = subStatusChanged
+      ? (effectiveSubStatus ? Date.now() : null)
+      : addressProperty.subStatusSetAt;
+    const nextSubStatusSetBy = subStatusChanged
+      ? (effectiveSubStatus ? userId : null)
+      : addressProperty.subStatusSetBy;
 
     const finalProperty: PropertyContact = {
       ...addressProperty,
       stage: nextStage,
       status: nextStatus,
-      subStatus: nextSubStatus === undefined ? addressProperty.subStatus : nextSubStatus,
+      subStatus: effectiveSubStatus,
       subStatusSetAt: nextSubStatusSetAt || null,
       subStatusSetBy: nextSubStatusSetBy || null,
       interactions: [interaction, ...(addressProperty.interactions || [])],
@@ -4109,7 +4127,7 @@ function CrmApp({
       updateProperty(propertyId, {
         stage: nextStage,
         status: nextStatus,
-        subStatus: nextSubStatus === undefined ? property.subStatus : nextSubStatus,
+        subStatus: effectiveSubStatus,
         subStatusSetAt: nextSubStatusSetAt || null,
         subStatusSetBy: nextSubStatusSetBy || null,
         interactions: [interaction, ...(property.interactions || [])],

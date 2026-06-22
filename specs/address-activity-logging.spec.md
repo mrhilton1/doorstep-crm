@@ -38,6 +38,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Record Event requires a description.
 - Active Stage remains manually editable, but events can auto-move stage: Conversation/answered knock to Lead, Estimate/Quote Requested to Opportunity, Completed Cleaning or payment/job completion to Customer.
 - Knock -> Answer -> Not Interested must set the address sub-status to `not_interested` and must not auto-promote the address just because the knock was answered.
+- If an address is currently marked `not_interested`, later interested activity such as Estimate / Quote Requested, Follow-Up Needed, Referral Given, Completed Cleaning, or an answered knock must clear that stale sub-status.
 - Email, SMS, quote, invoice, appointment, and future actions should all use the same activity feed pattern.
 - Notes use `doorstep.notes` as source of truth and `doorstep.activities` as the timeline entry.
 - MVP detailed event taxonomy can be stored in `doorstep.activities.metadata`; the high-level `type` enum remains stable.
@@ -67,6 +68,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Given the user logs Knock -> Answer -> Estimate / Quote Requested, then the event is saved, the address is promoted to Opportunity, and the modal-built draft quote is saved to the address.
 - Given the user chooses Estimate / Quote Requested, then the primary button says `Build Quote`, logs the request, and then reveals a quote builder with catalog items, quantity controls, subtotal, and quote notes before save.
 - Given the user logs Knock -> Answer -> Not Interested, then the event is saved, the address shows Not Interested as the current sub-status, and the activity feed remains visible.
+- Given an address currently shows Not Interested, when the user logs a later interested activity, then Not Interested is removed from the current record while the historical Not Interested activity remains in the timeline.
 - Given the user chooses Follow-Up Needed, then the modal captures a next action title, optional due datetime, and context note before save.
 - Given the user chooses Referral Given, then the modal captures referral contact details, optional referral address, referring-contact link, and creates a follow-up next action.
 - Given the user is midway through a modal event path, when they tap Back, then the modal returns to the previous decision layer and preserves broader context.
@@ -104,6 +106,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - 2026-06-22: Activity logging modal should behave like a stepwise PWA flow with forward/back branch navigation.
 - 2026-06-22: Quote, Follow-Up, and Referral outcomes complete inside the modal. Quote builds a draft quote, Follow-Up creates the next action, and Referral captures contact details plus a linked follow-up task.
 - 2026-06-22: Quote activity is logged in two moments: quote requested when `Build Quote` is clicked, and quote built when the draft quote is saved.
+- 2026-06-22: Renewed-interest activity clears the current `not_interested` sub-status instead of letting it remain beside a later positive stage/outcome.
 
 ## Iteration History
 - 2026-06-09: Spec created.

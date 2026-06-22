@@ -5717,6 +5717,7 @@ function PropertyDrawer({
   const [referringContactId, setReferringContactId] = useState('');
   const [eventQuoteItems, setEventQuoteItems] = useState<QuoteLineItem[]>([]);
   const [eventQuoteNotes, setEventQuoteNotes] = useState('');
+  const [isEventQuoteBuilderOpen, setIsEventQuoteBuilderOpen] = useState(false);
   const [eventNextActionTitle, setEventNextActionTitle] = useState('');
   const [eventNextActionNote, setEventNextActionNote] = useState('');
   const [eventNextActionDue, setEventNextActionDue] = useState('');
@@ -5780,6 +5781,7 @@ function PropertyDrawer({
     setOpenSections({});
     setEventQuoteItems([]);
     setEventQuoteNotes('');
+    setIsEventQuoteBuilderOpen(false);
     setEventNextActionTitle('');
     setEventNextActionNote('');
     setEventNextActionDue('');
@@ -5834,6 +5836,7 @@ function PropertyDrawer({
     setReferringContactId('');
     setEventQuoteItems([]);
     setEventQuoteNotes('');
+    setIsEventQuoteBuilderOpen(false);
     setEventNextActionTitle('');
     setEventNextActionNote('');
     setEventNextActionDue('');
@@ -5862,6 +5865,7 @@ function PropertyDrawer({
     setReferringContactId('');
     setEventQuoteItems([]);
     setEventQuoteNotes('');
+    setIsEventQuoteBuilderOpen(false);
     setEventNextActionTitle(preset?.answerOutcome === 'follow_up_needed' ? 'Follow up' : '');
     setEventNextActionNote('');
     setEventNextActionDue('');
@@ -5875,7 +5879,7 @@ function PropertyDrawer({
     if (selectedEventType === 'knock') {
       if (!knockResult) return 'Choose Answer or No Answer.';
       if (knockResult === 'answer' && !answerOutcome) return 'Choose what happened after the answer.';
-      if (answerOutcome === 'quote_requested' && eventQuoteItems.length === 0) return 'Add at least one quote item.';
+      if (answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen && eventQuoteItems.length === 0) return 'Add at least one quote item.';
       if (answerOutcome === 'follow_up_needed' && !eventNextActionTitle.trim()) return 'Add a next action title.';
       if (answerOutcome === 'referral_given') {
         const hasReferralName = Boolean(`${referralFirstName} ${referralLastName}`.trim());
@@ -5912,13 +5916,17 @@ function PropertyDrawer({
     const eventBody = answerOutcome === 'follow_up_needed'
       ? [followUpTitle, followUpNote].filter(Boolean).join('\n')
       : answerOutcome === 'quote_requested'
-        ? [eventQuoteNotes.trim(), eventNote.trim()].filter(Boolean).join('\n')
+        ? [
+          isEventQuoteBuilderOpen ? `Quote built: $${eventQuoteSubtotal.toLocaleString()}` : 'Quote requested. Building quote.',
+          eventQuoteNotes.trim(),
+          eventNote.trim()
+        ].filter(Boolean).join('\n')
         : followUpNote || eventNote;
 
     const payload: LiveEventPayload = {
-      eventType: selectedEventType!,
-      knockResult: knockResult || undefined,
-      answerOutcome: answerOutcome || undefined,
+      eventType: answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen ? 'record_event' : selectedEventType!,
+      knockResult: answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen ? undefined : knockResult || undefined,
+      answerOutcome: answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen ? undefined : answerOutcome || undefined,
       callDirection: callDirection || undefined,
       note: eventBody,
       referralType,
@@ -5933,7 +5941,7 @@ function PropertyDrawer({
       const propertyUpdates: Partial<PropertyContact> = {};
       const nextCustomData = { ...(property.customData || {}) };
 
-      if (payload.answerOutcome === 'quote_requested') {
+      if (answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen) {
         const quote: Quote = {
           id: uuidv4(),
           lineItems: eventQuoteItems,
@@ -5950,7 +5958,7 @@ function PropertyDrawer({
           : property.stage;
       }
 
-      if (payload.answerOutcome === 'follow_up_needed' || payload.answerOutcome === 'referral_given') {
+      if (answerOutcome === 'follow_up_needed' || answerOutcome === 'referral_given') {
         nextCustomData.nextAction = {
           id: nextCustomData.nextAction?.id || uuidv4(),
           title: followUpTitle,
@@ -5959,11 +5967,11 @@ function PropertyDrawer({
           ownerName: 'Mike Hilton',
           createdAt: Date.now(),
           completedAt: null,
-          source: payload.answerOutcome
+          source: answerOutcome
         };
       }
 
-      if (payload.answerOutcome === 'referral_given') {
+      if (answerOutcome === 'referral_given') {
         const referralContact: Contact = {
           id: uuidv4(),
           firstName: referralFirstName.trim(),
@@ -6017,6 +6025,36 @@ function PropertyDrawer({
       window.setTimeout(() => setEventLoggedLabel(''), 2000);
     } catch (error: any) {
       setEventError(error.message || 'Event could not be saved. Please try again.');
+    } finally {
+      setIsLoggingEvent(false);
+    }
+  };
+
+  const handleBuildQuoteRequest = async () => {
+    if (!selectedEventType || answerOutcome !== 'quote_requested') return;
+
+    const payload: LiveEventPayload = {
+      eventType: selectedEventType,
+      knockResult: knockResult || undefined,
+      answerOutcome,
+      note: eventNote.trim() || 'Quote requested. Building quote.',
+    };
+
+    setIsLoggingEvent(true);
+    setEventError('');
+
+    try {
+      await onLogEvent(property.id, payload);
+      updateProperty(property.id, {
+        stage: STAGE_ORDER.indexOf(property.stage) < STAGE_ORDER.indexOf('opportunity')
+          ? 'opportunity'
+          : property.stage
+      });
+      setIsEventQuoteBuilderOpen(true);
+      setEventNote('');
+      setIsNoteOpen(false);
+    } catch (error: any) {
+      setEventError(error.message || 'Quote request could not be logged. Please try again.');
     } finally {
       setIsLoggingEvent(false);
     }
@@ -6264,15 +6302,29 @@ function PropertyDrawer({
       ? 'Add completion note'
       : selectedEventType === 'record_event'
         ? 'Describe the event'
-        : answerOutcome === 'follow_up_needed'
+        : answerOutcome === 'quote_requested' && !isEventQuoteBuilderOpen
+          ? 'Review quote request'
+          : answerOutcome === 'quote_requested'
+            ? 'Build quote'
+            : answerOutcome === 'follow_up_needed'
           ? 'Add follow-up note'
           : answerOutcome === 'referral_given'
             ? 'Capture referral details'
             : answerOutcome === 'not_interested'
               ? 'Optional not interested note'
               : 'Review and log';
+  const eventPrimaryActionLabel =
+    answerOutcome === 'quote_requested' && !isEventQuoteBuilderOpen
+      ? 'Build Quote'
+      : answerOutcome === 'quote_requested'
+        ? 'Save Quote'
+        : 'Log Event';
   const goBackInEventFlow = () => {
     setEventError('');
+    if (answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen) {
+      setIsEventQuoteBuilderOpen(false);
+      return;
+    }
     if (selectedEventType === 'knock' && answerOutcome) {
       setAnswerOutcome(null);
       setIsNoteOpen(false);
@@ -7555,12 +7607,24 @@ function PropertyDrawer({
                   <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">{eventDetailsTitle}</p>
-                      {answerOutcome === 'quote_requested' && (
-                        <p className="mt-1 text-xs font-bold text-slate-500">Build the draft quote here. It will save to this address when you log the event.</p>
+                      {answerOutcome === 'quote_requested' && !isEventQuoteBuilderOpen && (
+                        <p className="mt-1 text-xs font-bold text-slate-500">This will log that a quote was requested, then open the quote builder in this modal.</p>
+                      )}
+                      {answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen && (
+                        <p className="mt-1 text-xs font-bold text-slate-500">Build the draft quote here. Saving will log that the quote was built.</p>
                       )}
                     </div>
 
-                    {answerOutcome === 'quote_requested' && (
+                    {answerOutcome === 'quote_requested' && !isEventQuoteBuilderOpen && (
+                      <textarea
+                        className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        placeholder="Optional quote request note..."
+                        value={eventNote}
+                        onChange={event => setEventNote(event.target.value)}
+                      />
+                    )}
+
+                    {answerOutcome === 'quote_requested' && isEventQuoteBuilderOpen && (
                       <div className="space-y-4">
                         {catalog.bundles.length > 0 && (
                           <div>
@@ -7690,14 +7754,14 @@ function PropertyDrawer({
                       </div>
                     )}
 
-                    {selectedEventType && !isNoteOpen && (
+                    {selectedEventType && !isNoteOpen && answerOutcome !== 'quote_requested' && (
                       <button type="button" onClick={() => setIsNoteOpen(true)} className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-600">
                         <PlusCircle className="h-4 w-4" />
                         Add Note
                       </button>
                     )}
 
-                    {selectedEventType && isNoteOpen && answerOutcome !== 'follow_up_needed' && answerOutcome !== 'referral_given' && (
+                    {selectedEventType && isNoteOpen && answerOutcome !== 'quote_requested' && answerOutcome !== 'follow_up_needed' && answerOutcome !== 'referral_given' && (
                       <textarea
                         className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
                         placeholder={
@@ -7737,12 +7801,12 @@ function PropertyDrawer({
                   </div>
                   <button
                     type="button"
-                    onClick={handleLogEvent}
+                    onClick={answerOutcome === 'quote_requested' && !isEventQuoteBuilderOpen ? handleBuildQuoteRequest : handleLogEvent}
                     disabled={!isEventPathReady || isLoggingEvent || !sectionPermissions.liveEventLogger.editable}
                     className="flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-100 disabled:opacity-50"
                   >
                     {isLoggingEvent ? <RefreshCw className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
-                    {isLoggingEvent ? 'Saving Event...' : 'Log Event'}
+                    {isLoggingEvent ? 'Saving...' : eventPrimaryActionLabel}
                   </button>
                 </div>
               </div>

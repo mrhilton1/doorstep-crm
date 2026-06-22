@@ -34,7 +34,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Referral Given requires referral type and referring rep name.
 - Referral Given should capture referred contact name, phone or email, optional address, optional referral type, and the referring contact link. It should also create a follow-up next action for the referred contact.
 - Follow-Up Needed should create/edit the next action in the modal, including title, optional due date/time, and context note.
-- Estimate / Quote Requested should let the user build the draft quote inside the modal, including catalog items and quantities, before the event is logged.
+- Estimate / Quote Requested is a two-step modal path: first log the quote request with a `Build Quote` action, then build/save the draft quote in the same modal and log the quote completion.
 - Record Event requires a description.
 - Active Stage remains manually editable, but events can auto-move stage: Conversation/answered knock to Lead, Estimate/Quote Requested to Opportunity, Completed Cleaning or payment/job completion to Customer.
 - Knock -> Answer -> Not Interested must set the address sub-status to `not_interested` and must not auto-promote the address just because the knock was answered.
@@ -65,7 +65,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - Given an address editor is open, when the user logs Knock -> No Answer, then a new Supabase activity is created and the feed increments.
 - Given the user logs Knock -> Answer -> Follow-Up Needed without a note, then inline validation requires a note.
 - Given the user logs Knock -> Answer -> Estimate / Quote Requested, then the event is saved, the address is promoted to Opportunity, and the modal-built draft quote is saved to the address.
-- Given the user chooses Estimate / Quote Requested, then the modal shows a quote builder with catalog items, quantity controls, subtotal, and quote notes before save.
+- Given the user chooses Estimate / Quote Requested, then the primary button says `Build Quote`, logs the request, and then reveals a quote builder with catalog items, quantity controls, subtotal, and quote notes before save.
 - Given the user logs Knock -> Answer -> Not Interested, then the event is saved, the address shows Not Interested as the current sub-status, and the activity feed remains visible.
 - Given the user chooses Follow-Up Needed, then the modal captures a next action title, optional due datetime, and context note before save.
 - Given the user chooses Referral Given, then the modal captures referral contact details, optional referral address, referring-contact link, and creates a follow-up next action.
@@ -103,6 +103,7 @@ The address editor replaces the Visit Status area with a modal Live Event Logger
 - 2026-06-19: Event composer opens as a modal from record actions; the record keeps Activity Timeline visible. Not Interested is stored as a sub-status and does not trigger answer-based stage promotion.
 - 2026-06-22: Activity logging modal should behave like a stepwise PWA flow with forward/back branch navigation.
 - 2026-06-22: Quote, Follow-Up, and Referral outcomes complete inside the modal. Quote builds a draft quote, Follow-Up creates the next action, and Referral captures contact details plus a linked follow-up task.
+- 2026-06-22: Quote activity is logged in two moments: quote requested when `Build Quote` is clicked, and quote built when the draft quote is saved.
 
 ## Iteration History
 - 2026-06-09: Spec created.

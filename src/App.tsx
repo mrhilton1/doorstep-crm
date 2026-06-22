@@ -285,7 +285,7 @@ const buildAppPath = (view: AppView, propertyId?: string | null) => {
   if (!propertyId) return basePath;
   const encodedId = encodeURIComponent(propertyId);
   return view === 'dashboard'
-    ? `/dashboard/address/${encodedId}`
+    ? `/contacts/address/${encodedId}`
     : `${basePath}/address/${encodedId}`;
 };
 
@@ -5866,10 +5866,6 @@ function PropertyDrawer({
       setEventLoggedLabel(loggedLabel);
       resetEventForm();
       setIsEventModalOpen(false);
-
-      if (payload.answerOutcome === 'quote_requested') {
-        onQuote();
-      }
 
       window.setTimeout(() => setEventLoggedLabel(''), 2000);
     } catch (error: any) {

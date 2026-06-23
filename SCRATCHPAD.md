@@ -1,18 +1,20 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
-**Task:** Fix FamilyTreeNow source URL to omit ZIP, preserve property-info modal state when returning from the source tab, and prevent blank app screens on the property lookup route.
+**Task:** Fix FamilyTreeNow source URL/UX, preserve property-info modal state when returning from the source tab, and prevent tab-focus auth refreshes from resetting the app.
 **Target specs:** `/specs/property-info-enrichment.spec.md`, `/specs/unified-address-record.spec.md`
 
 ## Micro-Steps
-- [x] Re-read operating docs/scratchpad and inspect property info URL, visibility handlers, source opener, and address route render path.
-- [x] Update spec with city/state-only source URL and no hidden-tab route stripping.
-- [x] Patch URL builder, tab-hide behavior, source opener, and deep-link fallback/error recovery.
+- [x] Re-read operating docs/scratchpad and inspect property info URL, visibility handlers, source opener, auth refresh handling, and address route render path.
+- [x] Update spec with city/state-only source URL, copy-link-first UX, visible paste box, and no tab-focus reset.
+- [x] Patch URL builder, source opener, auth refresh handling, and visible paste modal.
 - [x] Run verification, commit, push, and deploy.
 
 ## Assumptions
 - FamilyTreeNow search should receive street plus city/state only, because ZIP harms this workflow.
+- FamilyTreeNow should receive `AZ`, not `Arizona`, for current Arizona addresses.
 - The previous hidden-tab route cleanup should not run while the user is in a modal that expects them to leave and return.
+- Supabase token refresh events on browser focus should not be treated as a new login or workspace switch.
 - If an unexpected render failure happens, showing an in-app recovery screen is better than leaving the user on a blank tab.
 
 ---

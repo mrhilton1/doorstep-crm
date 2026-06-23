@@ -20,7 +20,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 2. User clicks the house/property lookup icon next to the address.
 3. Modal explains the copy/paste workflow.
 4. User clicks OK/Open Source.
-5. App opens `https://www.familytreenow.com/search/genealogy/results?...` using the record street plus city/state, omitting ZIP from the `citystatezip` query value.
+5. App provides a copyable `https://www.familytreenow.com/search/genealogy/results?...` link using the record street plus city/state abbreviation, omitting ZIP from the `citystatezip` query value.
 6. User copies property details from the source site.
 7. User returns to DoorStep, pastes the copied text, and submits.
 8. App parses the text, saves a row in Supabase, updates the current address record with the latest parsed result, and displays a compact property info summary.
@@ -34,7 +34,9 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - The table permits 1:many property info rows per address over time, with newest row displayed on the record.
 - Do not scrape FamilyTreeNow from DoorStep in this MVP pass; use user-driven copy/paste to avoid brittle scraping and source-site blocking.
 - Leaving DoorStep for the source tab must not clear the open address record or property-info modal state when the user returns.
-- Source navigation should use a normal user-initiated anchor/link rather than a scripted popup when possible.
+- Source navigation should prefer copy-to-clipboard so the user can paste the URL into a new tab when source-site bot checks object to app-directed navigation.
+- The paste textarea must be visible in the same modal as the source URL/copy controls; the user should not have to rely on a second hidden step after returning.
+- External source URLs should use state abbreviations, such as `AZ`, where the app can derive them.
 - ZIP income demographics are stored as platform reference data in `doorstep.zip_income_demographics`; property info rows can later copy a point-in-time demographic snapshot into `demographics` when bid recommendation logic is introduced.
 - The Supabase table API is internal-only.
 
@@ -53,7 +55,8 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 
 ## Acceptance Criteria
 - Given a persisted address record is open, when the user clicks the house lookup icon, then the property info modal opens.
-- Given the user clicks OK/Open Source, then a new tab opens to FamilyTreeNow with URL-encoded street address and city/state query params, excluding ZIP.
+- Given the user clicks Copy Link, then the FamilyTreeNow URL is copied and the paste textarea remains visible in the modal.
+- Given the user clicks Open Source, then a new tab opens to FamilyTreeNow with URL-encoded street address and city/state abbreviation query params, excluding ZIP.
 - Given the user returns to DoorStep after opening the source tab, then the address record and paste modal remain open.
 - Given the user pastes property details and submits, then the app parses the approved JSON shape and saves a row to `doorstep.property_info_records`.
 - Given the save succeeds, then the latest property info summary appears on the address record without a page reload.
@@ -78,6 +81,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: Use ACS S1901 ZIP-level demographics as the first income reference source for future bid recommendations.
 - 2026-06-23: FamilyTreeNow source URLs omit ZIP and tab-hide behavior must preserve the property-info modal workflow.
 - 2026-06-23: Source opening uses an anchor-based new-tab link and the app has a recovery fallback instead of a blank screen if a render route fails.
+- 2026-06-23: Property lookup now uses copy-link-first UX, keeps the paste box visible in the same modal, and formats Arizona as `AZ` for FamilyTreeNow.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

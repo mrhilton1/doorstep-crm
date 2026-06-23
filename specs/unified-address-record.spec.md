@@ -159,6 +159,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-23: Add a FamilyTreeNow-assisted property info modal from the address header, with parsed results saved to `doorstep.property_info_records`.
 - 2026-06-23: Preserve the open address record/modal while the user leaves for a property source tab and returns to paste copied property details.
 - 2026-06-23: Deep-linked address routes should show a loading/unavailable fallback instead of leaving the app blank when a record is not yet loaded or cannot be opened.
+- 2026-06-23: Supabase auth token/session refresh events must not reset the current workspace, route, drawer, or modal state when the browser tab regains focus.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

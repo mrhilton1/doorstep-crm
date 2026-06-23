@@ -640,7 +640,27 @@ const getFamilyTreeNowUrl = (address: string) => {
   const parts = address.split(',').map(part => part.trim()).filter(Boolean);
   const streetAddress = parts[0] || address;
   const city = parts[1] || '';
-  const state = (parts[2] || '').replace(/\s+\d{5}(?:-\d{4})?\s*$/, '').trim();
+  const stateValue = (parts[2] || '').replace(/\s+\d{5}(?:-\d{4})?\s*$/, '').trim();
+  const stateAbbreviations: Record<string, string> = {
+    alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
+    colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
+    hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
+    kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+    massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO',
+    montana: 'MT', nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
+    'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH',
+    oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+    'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
+    virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
+    al: 'AL', ak: 'AK', az: 'AZ', ar: 'AR', ca: 'CA', co: 'CO', ct: 'CT', de: 'DE',
+    fl: 'FL', ga: 'GA', hi: 'HI', id: 'ID', il: 'IL', in: 'IN', ia: 'IA', ks: 'KS',
+    ky: 'KY', la: 'LA', me: 'ME', md: 'MD', ma: 'MA', mi: 'MI', mn: 'MN', ms: 'MS',
+    mo: 'MO', mt: 'MT', ne: 'NE', nv: 'NV', nh: 'NH', nj: 'NJ', nm: 'NM', ny: 'NY',
+    nc: 'NC', nd: 'ND', oh: 'OH', ok: 'OK', or: 'OR', pa: 'PA', ri: 'RI', sc: 'SC',
+    sd: 'SD', tn: 'TN', tx: 'TX', ut: 'UT', vt: 'VT', va: 'VA', wa: 'WA', wv: 'WV',
+    wi: 'WI', wy: 'WY',
+  };
+  const state = stateAbbreviations[stateValue.toLowerCase()] || stateValue;
   const cityState = [city, state].filter(Boolean).join(', ');
   return `https://www.familytreenow.com/search/genealogy/results?streetaddress=${encodeURIComponent(streetAddress)}&citystatezip=${encodeURIComponent(cityState)}`;
 };
@@ -2403,12 +2423,14 @@ function SupabaseShell() {
   const [error, setError] = useState<string | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const recordedSessionUserId = useRef<string | null>(null);
+  const sessionUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return;
+      sessionUserIdRef.current = data.session?.user?.id ?? null;
       setSession(data.session);
       setIsLoading(false);
     });
@@ -2417,11 +2439,16 @@ function SupabaseShell() {
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
       }
+      const previousUserId = sessionUserIdRef.current;
+      const nextUserId = nextSession?.user?.id ?? null;
+      sessionUserIdRef.current = nextUserId;
       setSession(nextSession);
-      setWorkspaceId(null);
-      setIsPlatformOwner(false);
-      setStealthContext(null);
-      setError(null);
+      if (event === 'SIGNED_OUT' || (previousUserId && nextUserId && previousUserId !== nextUserId)) {
+        setWorkspaceId(null);
+        setIsPlatformOwner(false);
+        setStealthContext(null);
+        setError(null);
+      }
     });
 
     return () => {
@@ -2530,7 +2557,7 @@ function SupabaseShell() {
     return () => {
       isMounted = false;
     };
-  }, [session]);
+  }, [session?.user?.id]);
 
   const handlePlatformWorkspaceAccess = useCallback(async (workspace: PlatformWorkspaceOverview, reason: string, targetUserId?: string | null) => {
     if (!session?.user || !isPlatformOwner) {
@@ -6110,11 +6137,11 @@ function PropertyDrawer({
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isPropertyInfoModalOpen, setIsPropertyInfoModalOpen] = useState(false);
-  const [propertyInfoStep, setPropertyInfoStep] = useState<'intro' | 'paste'>('intro');
   const [propertyInfoPaste, setPropertyInfoPaste] = useState('');
   const [propertyInfoError, setPropertyInfoError] = useState('');
   const [isSavingPropertyInfo, setIsSavingPropertyInfo] = useState(false);
   const [propertyInfoSourceOpened, setPropertyInfoSourceOpened] = useState(false);
+  const [propertyInfoCopyMessage, setPropertyInfoCopyMessage] = useState('');
   const [isAddingPhoneInline, setIsAddingPhoneInline] = useState(false);
   const [inlinePhone, setInlinePhone] = useState(property.phone || '');
   const [nextActionDraft, setNextActionDraft] = useState(property.customData?.nextAction?.title || '');
@@ -6161,7 +6188,6 @@ function PropertyDrawer({
     setIsMoreOpen(false);
     setIsEventModalOpen(false);
     setIsPropertyInfoModalOpen(false);
-    setPropertyInfoStep('intro');
     setPropertyInfoPaste('');
     setPropertyInfoError('');
     setPropertyInfoSourceOpened(false);
@@ -6508,16 +6534,27 @@ function PropertyDrawer({
   const latestPropertyInfo = property.customData?.propertyInfoLatest as PropertyInfoRecord | null | undefined;
 
   const openPropertyInfoModal = () => {
-    setPropertyInfoStep('intro');
     setPropertyInfoError('');
     setPropertyInfoSourceOpened(false);
+    setPropertyInfoCopyMessage('');
     setIsPropertyInfoModalOpen(true);
   };
 
   const openPropertyInfoSource = () => {
     setPropertyInfoError('');
-    setPropertyInfoStep('paste');
     setPropertyInfoSourceOpened(true);
+  };
+
+  const copyPropertyInfoSource = async () => {
+    setPropertyInfoError('');
+    setPropertyInfoSourceOpened(true);
+    try {
+      await navigator.clipboard.writeText(propertyInfoSourceUrl);
+      setPropertyInfoCopyMessage('Source link copied. Paste it into a new tab, copy Property Details, then paste the details below.');
+    } catch {
+      setPropertyInfoCopyMessage('');
+      setPropertyInfoError('Clipboard access was blocked. Select and copy the source URL below.');
+    }
   };
 
   const submitPropertyInfoPaste = async () => {
@@ -6535,7 +6572,6 @@ function PropertyDrawer({
       await onSavePropertyInfo(property, parsedData, rawText, propertyInfoSourceUrl);
       setIsPropertyInfoModalOpen(false);
       setPropertyInfoPaste('');
-      setPropertyInfoStep('intro');
     } catch (error: any) {
       setPropertyInfoError(error.message || 'Property info could not be saved. Please try again.');
     } finally {
@@ -8416,101 +8452,92 @@ function PropertyDrawer({
                 </button>
               </div>
 
-              {propertyInfoStep === 'intro' ? (
-                <div className="space-y-5">
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                    <div className="flex gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600">
-                        <Home className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-black text-slate-900">Copy the property details from FamilyTreeNow</p>
-                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
-                          On the next page, highlight and copy the Property Details section, then return to DoorStep and paste it here. DoorStep will parse the property details and save them to this address.
-                        </p>
-                      </div>
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                  <div className="flex gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600">
+                      <Home className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Copy the property details from FamilyTreeNow</p>
+                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
+                        Copy this search link, paste it into a new tab, then copy the Property Details section and paste those details below.
+                      </p>
                     </div>
                   </div>
+                </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source URL</p>
-                    <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" className="mt-2 block break-all text-xs font-bold text-blue-600 hover:underline">
-                      {propertyInfoSourceUrl}
-                    </a>
-                  </div>
-
-                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                    <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
-                      Cancel
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source URL</p>
+                  <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" onClick={openPropertyInfoSource} className="mt-2 block break-all text-xs font-bold text-blue-600 hover:underline">
+                    {propertyInfoSourceUrl}
+                  </a>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                    <button type="button" onClick={copyPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
+                      <Clipboard className="h-4 w-4" />
+                      Copy Link
                     </button>
-                    <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" onClick={openPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
+                    <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" onClick={openPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-slate-700">
                       <ExternalLink className="h-4 w-4" />
-                      OK, Open Source
+                      Open Source
                     </a>
                   </div>
+                  {propertyInfoCopyMessage && (
+                    <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold leading-5 text-emerald-700">
+                      {propertyInfoCopyMessage}
+                    </p>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start gap-3">
-                      <Clipboard className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
-                      <div>
-                        <p className="text-sm font-black text-slate-900">Paste the copied property details</p>
-                        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                          Paste only the Property Details text when possible. Missing fields will be saved as N/A.
-                        </p>
-                        {propertyInfoSourceOpened && (
-                          <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-black text-blue-600 hover:underline">
-                            Reopen source <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
 
-                  <textarea
-                    value={propertyInfoPaste}
-                    onChange={event => setPropertyInfoPaste(event.target.value)}
-                    className="min-h-56 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20"
-                    placeholder="Paste FamilyTreeNow Property Details here..."
-                  />
-
-                  {propertyInfoPaste.trim() && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Parsed Preview</p>
-                      <pre className="mt-3 max-h-56 overflow-auto rounded-xl bg-slate-950 p-3 text-[11px] font-semibold text-slate-100">
-                        {JSON.stringify(parsePropertyInfoText(propertyInfoPaste, property.address), null, 2)}
-                      </pre>
-                    </div>
-                  )}
-
-                  {propertyInfoError && (
-                    <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
-                      {propertyInfoError}
-                    </div>
-                  )}
-
-                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-                    <button type="button" onClick={() => setPropertyInfoStep('intro')} className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-slate-600">
-                      Back
-                    </button>
-                    <div className="flex gap-3">
-                      <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={submitPropertyInfoPaste}
-                        disabled={isSavingPropertyInfo || !propertyInfoPaste.trim()}
-                        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 disabled:opacity-50"
-                      >
-                        {isSavingPropertyInfo ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        {isSavingPropertyInfo ? 'Saving...' : 'Save Property Info'}
-                      </button>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Clipboard className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Paste the copied property details</p>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                        Paste only the Property Details text when possible. Missing fields will be saved as N/A.
+                      </p>
                     </div>
                   </div>
                 </div>
-              )}
+
+                <textarea
+                  value={propertyInfoPaste}
+                  onChange={event => setPropertyInfoPaste(event.target.value)}
+                  className="min-h-56 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Paste FamilyTreeNow Property Details here..."
+                />
+
+                {propertyInfoPaste.trim() && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Parsed Preview</p>
+                    <pre className="mt-3 max-h-56 overflow-auto rounded-xl bg-slate-950 p-3 text-[11px] font-semibold text-slate-100">
+                      {JSON.stringify(parsePropertyInfoText(propertyInfoPaste, property.address), null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {propertyInfoError && (
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                    {propertyInfoError}
+                  </div>
+                )}
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitPropertyInfoPaste}
+                    disabled={isSavingPropertyInfo || !propertyInfoPaste.trim()}
+                    className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 disabled:opacity-50"
+                  >
+                    {isSavingPropertyInfo ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {isSavingPropertyInfo ? 'Saving...' : 'Save Property Info'}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

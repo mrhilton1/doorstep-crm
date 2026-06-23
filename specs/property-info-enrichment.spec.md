@@ -34,6 +34,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - The table permits 1:many property info rows per address over time, with newest row displayed on the record.
 - Do not scrape FamilyTreeNow from DoorStep in this MVP pass; use user-driven copy/paste to avoid brittle scraping and source-site blocking.
 - Leaving DoorStep for the source tab must not clear the open address record or property-info modal state when the user returns.
+- Source navigation should use a normal user-initiated anchor/link rather than a scripted popup when possible.
 - ZIP income demographics are stored as platform reference data in `doorstep.zip_income_demographics`; property info rows can later copy a point-in-time demographic snapshot into `demographics` when bid recommendation logic is introduced.
 - The Supabase table API is internal-only.
 
@@ -76,6 +77,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: Keep income/demographics as future enrichment fields; do not block the MVP property parser.
 - 2026-06-23: Use ACS S1901 ZIP-level demographics as the first income reference source for future bid recommendations.
 - 2026-06-23: FamilyTreeNow source URLs omit ZIP and tab-hide behavior must preserve the property-info modal workflow.
+- 2026-06-23: Source opening uses an anchor-based new-tab link and the app has a recovery fallback instead of a blank screen if a render route fails.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

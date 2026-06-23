@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
   APIProvider,
@@ -2337,6 +2338,60 @@ function SupabaseConfigRequiredScreen() {
   );
 }
 
+class AppErrorBoundary extends React.Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  declare props: Readonly<{ children: ReactNode }>;
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('DoorStep app render failed.', error, errorInfo);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+        <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-white p-7 text-slate-900 shadow-2xl">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-red-500">DoorStep recovered</p>
+          <h1 className="mb-3 text-2xl font-black">This view hit a render error.</h1>
+          <p className="mb-5 text-sm font-semibold leading-6 text-slate-600">
+            The app caught the error instead of leaving a blank screen. Go back to Contacts and reopen the record.
+          </p>
+          <pre className="mb-5 max-h-32 overflow-auto rounded-2xl bg-slate-950 p-3 text-xs font-semibold text-slate-100">
+            {this.state.error.message}
+          </pre>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => {
+                window.history.replaceState({}, '', '/contacts');
+                window.location.reload();
+              }}
+              className="h-11 flex-1 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white"
+            >
+              Back to Contacts
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="h-11 flex-1 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-700"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
 function SupabaseShell() {
   const [session, setSession] = useState<Session | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -2559,17 +2614,19 @@ function SupabaseShell() {
   }
 
   return (
-    <CrmApp
-      workspaceId={workspaceId}
-      workspaceName={workspaceName}
-      userId={session.user.id}
-      userEmail={session.user.email || null}
-      isPlatformOwner={isPlatformOwner}
-      platformWorkspaces={platformWorkspaces}
-      stealthContext={stealthContext}
-      onRequestWorkspaceAccess={handlePlatformWorkspaceAccess}
-      onSignOut={() => supabase.auth.signOut()}
-    />
+    <AppErrorBoundary>
+      <CrmApp
+        workspaceId={workspaceId}
+        workspaceName={workspaceName}
+        userId={session.user.id}
+        userEmail={session.user.email || null}
+        isPlatformOwner={isPlatformOwner}
+        platformWorkspaces={platformWorkspaces}
+        stealthContext={stealthContext}
+        onRequestWorkspaceAccess={handlePlatformWorkspaceAccess}
+        onSignOut={() => supabase.auth.signOut()}
+      />
+    </AppErrorBoundary>
   );
 }
 
@@ -5737,6 +5794,54 @@ function CrmApp({
       </AnimatePresence>
 
       <AnimatePresence>
+        {isDrawerOpen && selectedPropertyId && !selectedProperty && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm"
+          >
+            <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-2xl">
+              {dataStatus === 'loading' ? (
+                <>
+                  <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Loading address</p>
+                  <h3 className="mt-2 text-xl font-black text-slate-900">Opening this record...</h3>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-red-500">Address unavailable</p>
+                  <h3 className="mt-2 text-xl font-black text-slate-900">This record could not be opened.</h3>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+                    It may be deleted, outside the current workspace, or still syncing.
+                  </p>
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPropertyId(null);
+                        setIsDrawerOpen(false);
+                      }}
+                      className="h-11 flex-1 rounded-xl bg-slate-100 px-4 text-xs font-black uppercase tracking-widest text-slate-700"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={refreshWorkspaceAddresses}
+                      className="h-11 flex-1 rounded-xl bg-blue-600 px-4 text-xs font-black uppercase tracking-widest text-white"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {isAddingSale && selectedProperty && (
           <SaleOverlay
             property={selectedProperty}
@@ -6413,10 +6518,6 @@ function PropertyDrawer({
     setPropertyInfoError('');
     setPropertyInfoStep('paste');
     setPropertyInfoSourceOpened(true);
-    const opened = window.open(propertyInfoSourceUrl, '_blank', 'noopener,noreferrer');
-    if (!opened) {
-      setPropertyInfoError('Your browser blocked the new tab. Use the source link below, then return here to paste the property details.');
-    }
   };
 
   const submitPropertyInfoPaste = async () => {
@@ -8342,10 +8443,10 @@ function PropertyDrawer({
                     <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
                       Cancel
                     </button>
-                    <button type="button" onClick={openPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
+                    <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" onClick={openPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
                       <ExternalLink className="h-4 w-4" />
                       OK, Open Source
-                    </button>
+                    </a>
                   </div>
                 </div>
               ) : (

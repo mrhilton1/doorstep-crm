@@ -13,14 +13,14 @@ Let a user enrich an address record with public property details copied from Fam
 The Unified Address Record has a Job Info section backed mostly by address `customData.jobInfo`. There is no dedicated property-info table, no source-assist workflow, and no parser for copied public property details.
 
 ## Desired Behavior
-Next to the address on the Unified Address Record, show a house lookup icon. Clicking it opens an in-app modal explaining that the user should highlight and copy the property details from the source page, then return to DoorStep and paste the text. After the user confirms, DoorStep opens a FamilyTreeNow search URL in a new tab using the current address. The modal remains available with a paste textarea. On submit, DoorStep parses the pasted text into a stable JSON shape and inserts a row into `doorstep.property_info_records`.
+Next to the address on the Unified Address Record, show a house lookup icon. Clicking it opens an in-app modal explaining that the user should copy the FamilyTreeNow search URL, paste it into a new tab manually, copy the property details from the source page, then return to DoorStep and paste the text. The modal remains available with a paste textarea. On submit, DoorStep parses the pasted text into a stable JSON shape and inserts a row into `doorstep.property_info_records`.
 
 ## User Flow
 1. User opens an address record.
 2. User clicks the house/property lookup icon next to the address.
 3. Modal explains the copy/paste workflow.
-4. User clicks OK/Open Source.
-5. App provides a copyable `https://www.familytreenow.com/search/genealogy/results?...` link using the record street plus city/state abbreviation, omitting ZIP from the `citystatezip` query value.
+4. App provides a copyable `https://www.familytreenow.com/search/genealogy/results?...` link using the record street plus city/state abbreviation, omitting ZIP from the `citystatezip` query value.
+5. User copies the source URL and pastes it into a new browser tab manually.
 6. User copies property details from the source site.
 7. User returns to DoorStep, pastes the copied text, and submits.
 8. App parses the text, saves a row in Supabase, updates the current address record with the latest parsed result, and displays a compact property info summary.
@@ -36,12 +36,15 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Leaving DoorStep for the source tab must not clear the open address record or property-info modal state when the user returns.
 - Source navigation should prefer copy-to-clipboard so the user can paste the URL into a new tab when source-site bot checks object to app-directed navigation.
 - The paste textarea must be visible in the same modal as the source URL/copy controls; the user should not have to rely on a second hidden step after returning.
+- Do not show an Open Source button for FamilyTreeNow; direct app-driven navigation is brittle and can trigger source-site bot checks.
+- Copy Link should not leave a permanent copied/success banner in the modal.
+- Parsing must use approved field labels as hard boundaries so run-together copied text such as `N/ABathrooms` or `$616,000Estimated Equity` resolves to separate values without bleeding into the next field.
 - External source URLs should use state abbreviations, such as `AZ`, where the app can derive them.
 - ZIP income demographics are stored as platform reference data in `doorstep.zip_income_demographics`; property info rows can later copy a point-in-time demographic snapshot into `demographics` when bid recommendation logic is introduced.
 - The Supabase table API is internal-only.
 
 ## Edge Cases
-- Popup blocked: modal should show the source URL as a clickable fallback.
+- Clipboard blocked: modal should show an inline error and leave the source URL visible for manual selection/copy.
 - Partial pasted text: parser should save known fields and mark missing values as `N/A`.
 - Missing city/state/county: derive city/state from address where possible and county from text or common city mapping when available.
 - Source save failure: modal remains open, preserves pasted text, and shows the backend/network error.
@@ -56,9 +59,9 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 ## Acceptance Criteria
 - Given a persisted address record is open, when the user clicks the house lookup icon, then the property info modal opens.
 - Given the user clicks Copy Link, then the FamilyTreeNow URL is copied and the paste textarea remains visible in the modal.
-- Given the user clicks Open Source, then a new tab opens to FamilyTreeNow with URL-encoded street address and city/state abbreviation query params, excluding ZIP.
 - Given the user returns to DoorStep after opening the source tab, then the address record and paste modal remain open.
 - Given the user pastes property details and submits, then the app parses the approved JSON shape and saves a row to `doorstep.property_info_records`.
+- Given FamilyTreeNow removes copied line breaks, when labels and values touch each other, then the parser still captures only the value between each approved field label and the next approved field label.
 - Given the save succeeds, then the latest property info summary appears on the address record without a page reload.
 - Given the record reloads later, then the latest property info row is loaded from Supabase and displayed.
 - Given save fails, then the modal shows an inline error and keeps the pasted text.
@@ -82,6 +85,8 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: FamilyTreeNow source URLs omit ZIP and tab-hide behavior must preserve the property-info modal workflow.
 - 2026-06-23: Source opening uses an anchor-based new-tab link and the app has a recovery fallback instead of a blank screen if a render route fails.
 - 2026-06-23: Property lookup now uses copy-link-first UX, keeps the paste box visible in the same modal, and formats Arizona as `AZ` for FamilyTreeNow.
+- 2026-06-23: Remove the FamilyTreeNow Open Source button and persistent copy-success banner; keep the workflow manual-copy-first.
+- 2026-06-23: Property info parsing treats FamilyTreeNow labels as boundaries to handle pasted text where labels are concatenated to previous values.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

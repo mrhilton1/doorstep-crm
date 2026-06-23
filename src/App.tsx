@@ -86,7 +86,6 @@ import {
   Hash,
   CheckCircle,
   Clock,
-  ExternalLink,
   Save,
   Clock3,
   Filter,
@@ -532,6 +531,15 @@ const cleanPropertyInfoValue = (value?: string | null) => {
   return cleaned || 'N/A';
 };
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const cleanParsedPropertyValue = (value?: string | null) => {
+  const cleaned = (value || '')
+    .replace(/\s+(Owners|Residents|Relatives|Neighbors|Previous Addresses|Associated People|Property History|Mortgage|Deed|Tax|People Search|View Details)\b.*$/i, '')
+    .replace(/\s+/g, ' ');
+  return cleanPropertyInfoValue(cleaned);
+};
+
 const COMMON_CITY_COUNTIES: Record<string, string> = {
   'queen creek': 'Maricopa County',
   phoenix: 'Maricopa County',
@@ -574,7 +582,7 @@ const parseAddressPartsForPropertyInfo = (address: string, rawText = '') => {
 };
 
 const parsePropertyInfoText = (rawText: string, address: string): ParsedPropertyInfo => {
-  const normalized = rawText.replace(/\s+/g, ' ');
+  const normalized = rawText.replace(/\r/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n+/g, ' ').trim();
   const addressParts = parseAddressPartsForPropertyInfo(address, rawText);
   const result: ParsedPropertyInfo = {
     bedrooms: 'N/A',
@@ -598,40 +606,70 @@ const parsePropertyInfoText = (rawText: string, address: string): ParsedProperty
     county: addressParts.county,
   };
 
-  const searchBetween = (keywords: string[], boundaries: string[]) => {
-    for (const keyword of keywords) {
-      for (const boundary of boundaries) {
-        const match = normalized.match(new RegExp(`${keyword}\\s*:?\\s*(.*?)\\s+${boundary}`, 'i'));
-        if (match?.[1]) return cleanPropertyInfoValue(match[1]);
-      }
+  const fieldLabels: Array<{ label: string; field: keyof ParsedPropertyInfo | null }> = [
+    { label: 'Property Details', field: null },
+    { label: 'Bedrooms', field: 'bedrooms' },
+    { label: 'Bathrooms', field: 'bathrooms' },
+    { label: 'Square Footage', field: 'squareFootage' },
+    { label: 'Square Feet', field: 'squareFootage' },
+    { label: 'Sq Ft', field: 'squareFootage' },
+    { label: 'SqFt', field: 'squareFootage' },
+    { label: 'Year Built', field: 'yearBuilt' },
+    { label: 'Estimated Value', field: 'estimatedValue' },
+    { label: 'Estimated Equity', field: 'estimatedEquity' },
+    { label: 'Last Sale Amount', field: 'salePrice' },
+    { label: 'Last Sale Price', field: 'salePrice' },
+    { label: 'Sale Price', field: 'salePrice' },
+    { label: 'Last Sale Date', field: 'saleDate' },
+    { label: 'Occupancy Type', field: 'occupancyType' },
+    { label: 'Ownership Type', field: 'ownershipType' },
+    { label: 'Related Land Use', field: 'landUse' },
+    { label: 'Land Use', field: 'landUse' },
+    { label: 'Property Class', field: 'propertyClass' },
+    { label: 'Subdivision', field: 'subdivision' },
+    { label: 'Lot Square Feet', field: 'lotSquareFeet' },
+    { label: 'Lot Sq Ft', field: 'lotSquareFeet' },
+    { label: 'APN', field: 'apnNumber' },
+    { label: 'Parcel ID', field: 'apnNumber' },
+    { label: 'School District', field: 'schoolDistrict' },
+  ];
+
+  const matches = fieldLabels.flatMap(labelInfo => {
+    const expression = new RegExp(escapeRegex(labelInfo.label), 'gi');
+    const found: Array<{ label: string; field: keyof ParsedPropertyInfo | null; start: number; end: number }> = [];
+    let match: RegExpExecArray | null;
+    while ((match = expression.exec(normalized)) !== null) {
+      found.push({
+        label: labelInfo.label,
+        field: labelInfo.field,
+        start: match.index,
+        end: match.index + match[0].length
+      });
+    }
+    return found;
+  }).sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+  const orderedLabels: typeof matches = [];
+  for (const match of matches) {
+    const previous = orderedLabels[orderedLabels.length - 1];
+    if (!previous || match.start >= previous.end) {
+      orderedLabels.push(match);
+      continue;
     }
 
-    for (const keyword of keywords) {
-      const match = normalized.match(new RegExp(`${keyword}\\s*:?\\s*([\\w\\d\\$,\\.\\/\\-]+(?:\\s+[\\w\\d\\$,\\.\\/\\-]+){0,4})`, 'i'));
-      if (match?.[1]) return cleanPropertyInfoValue(match[1]);
+    if ((match.end - match.start) > (previous.end - previous.start)) {
+      orderedLabels[orderedLabels.length - 1] = match;
     }
+  }
 
-    return 'N/A';
-  };
-
-  result.bedrooms = searchBetween(['Bedrooms'], ['Bathrooms', 'Square Feet', 'Year Built']);
-  result.bathrooms = searchBetween(['Bathrooms'], ['Square Feet', 'Year Built', 'Estimated Value']);
-  result.squareFootage = searchBetween(['Square Feet', 'Square Footage', 'Sq Ft', 'SqFt'], ['Year Built', 'Estimated Value']);
-  result.yearBuilt = searchBetween(['Year Built'], ['Estimated Value', 'Estimated Equity']);
-  result.estimatedValue = searchBetween(['Estimated Value'], ['Estimated Equity', 'Last Sale Amount', 'Last Sale Date']);
-  result.estimatedEquity = searchBetween(['Estimated Equity'], ['Last Sale Amount', 'Last Sale Date']);
-  result.salePrice = searchBetween(['Last Sale Amount', 'Last Sale Price', 'Sale Price'], ['Last Sale Date', 'Occupancy Type']);
-  result.saleDate = searchBetween(['Last Sale Date'], ['Occupancy Type', 'Ownership Type']);
-  result.occupancyType = searchBetween(['Occupancy Type'], ['Ownership Type', 'Land Use']);
-  result.ownershipType = searchBetween(['Ownership Type'], ['Related Land Use', 'Land Use', 'Property Class']);
-  result.landUse = searchBetween(['Related Land Use', 'Land Use'], ['Property Class', 'Subdivision']);
-  result.propertyClass = searchBetween(['Property Class'], ['Subdivision', 'Lot Square Feet']);
-  result.subdivision = searchBetween(['Subdivision'], ['Lot Square Feet', 'APN', 'School District']);
-  result.lotSquareFeet = searchBetween(['Lot Square Feet', 'Lot Sq Ft'], ['APN', 'School District']);
-  result.apnNumber = searchBetween(['APN', 'Parcel ID'], ['School District']);
-
-  const schoolMatch = normalized.match(/School\s+District\s*:?(\s*.*)$/i);
-  if (schoolMatch?.[1]) result.schoolDistrict = cleanPropertyInfoValue(schoolMatch[1]);
+  orderedLabels.forEach((match, index) => {
+    if (!match.field) return;
+    const nextLabel = orderedLabels[index + 1];
+    const value = cleanParsedPropertyValue(normalized.slice(match.end, nextLabel?.start ?? normalized.length));
+    if (value !== 'N/A' && result[match.field] === 'N/A') {
+      result[match.field] = value;
+    }
+  });
 
   return result;
 };
@@ -6140,8 +6178,6 @@ function PropertyDrawer({
   const [propertyInfoPaste, setPropertyInfoPaste] = useState('');
   const [propertyInfoError, setPropertyInfoError] = useState('');
   const [isSavingPropertyInfo, setIsSavingPropertyInfo] = useState(false);
-  const [propertyInfoSourceOpened, setPropertyInfoSourceOpened] = useState(false);
-  const [propertyInfoCopyMessage, setPropertyInfoCopyMessage] = useState('');
   const [isAddingPhoneInline, setIsAddingPhoneInline] = useState(false);
   const [inlinePhone, setInlinePhone] = useState(property.phone || '');
   const [nextActionDraft, setNextActionDraft] = useState(property.customData?.nextAction?.title || '');
@@ -6190,7 +6226,6 @@ function PropertyDrawer({
     setIsPropertyInfoModalOpen(false);
     setPropertyInfoPaste('');
     setPropertyInfoError('');
-    setPropertyInfoSourceOpened(false);
     setIsAddingPhoneInline(false);
     setOpenSections({});
     setEventQuoteItems([]);
@@ -6535,24 +6570,14 @@ function PropertyDrawer({
 
   const openPropertyInfoModal = () => {
     setPropertyInfoError('');
-    setPropertyInfoSourceOpened(false);
-    setPropertyInfoCopyMessage('');
     setIsPropertyInfoModalOpen(true);
-  };
-
-  const openPropertyInfoSource = () => {
-    setPropertyInfoError('');
-    setPropertyInfoSourceOpened(true);
   };
 
   const copyPropertyInfoSource = async () => {
     setPropertyInfoError('');
-    setPropertyInfoSourceOpened(true);
     try {
       await navigator.clipboard.writeText(propertyInfoSourceUrl);
-      setPropertyInfoCopyMessage('Source link copied. Paste it into a new tab, copy Property Details, then paste the details below.');
     } catch {
-      setPropertyInfoCopyMessage('');
       setPropertyInfoError('Clipboard access was blocked. Select and copy the source URL below.');
     }
   };
@@ -8469,24 +8494,15 @@ function PropertyDrawer({
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source URL</p>
-                  <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" onClick={openPropertyInfoSource} className="mt-2 block break-all text-xs font-bold text-blue-600 hover:underline">
+                  <p className="mt-2 break-all text-xs font-bold text-blue-600">
                     {propertyInfoSourceUrl}
-                  </a>
+                  </p>
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                     <button type="button" onClick={copyPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
                       <Copy className="h-4 w-4" />
                       Copy Link
                     </button>
-                    <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" onClick={openPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-slate-700">
-                      <ExternalLink className="h-4 w-4" />
-                      Open Source
-                    </a>
                   </div>
-                  {propertyInfoCopyMessage && (
-                    <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold leading-5 text-emerald-700">
-                      {propertyInfoCopyMessage}
-                    </p>
-                  )}
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

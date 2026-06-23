@@ -1,6 +1,24 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
+**Task:** Simplify FamilyTreeNow property lookup source controls and tighten pasted Property Details parsing.
+**Target specs:** `/specs/property-info-enrichment.spec.md`
+
+## Micro-Steps
+- [x] Re-read scratchpad/spec and inspect property lookup modal/parser.
+- [x] Remove Open Source button and permanent copy-success banner.
+- [x] Replace bleed-prone parser with approved-label boundary parsing for run-together copied text.
+- [x] Run verification, commit, push, and deploy.
+
+## Assumptions
+- The source URL should stay visible/selectable, but the app should not directly launch FamilyTreeNow from the modal.
+- Clipboard success can be silent; only blocked clipboard access needs inline feedback.
+- FamilyTreeNow pasted text may concatenate values with the next label, so labels must be parsing boundaries regardless of whitespace.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-23 — Current Objective
 **Task:** Fix FamilyTreeNow source URL/UX, preserve property-info modal state when returning from the source tab, and prevent tab-focus auth refreshes from resetting the app.
 **Target specs:** `/specs/property-info-enrichment.spec.md`, `/specs/unified-address-record.spec.md`
 

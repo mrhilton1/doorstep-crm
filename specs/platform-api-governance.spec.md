@@ -30,7 +30,7 @@ Every internal API, public API, RPC, webhook, edge function, or Pages Function i
 - Workspace Owner controls workspace-level integrations only where permitted by entitlement.
 
 ## Edge Cases
-- Empty states: Registry starts with known APIs: `/config`, `doorstep.record_platform_audit_event`, `doorstep.platform_dashboard_overview`, and `doorstep.soft_delete_address`.
+- Empty states: Registry starts with known APIs: `/config`, `doorstep.record_platform_audit_event`, `doorstep.platform_dashboard_overview`, `doorstep.soft_delete_address`, and internal Supabase tables such as `doorstep.property_info_records`.
 - Error states: Unregistered API should fail review before deployment, once enforcement exists.
 - Permissions: Platform Owner can change global API exposure; workspace roles cannot.
 - Duplicate data: API key/path/version combination should be unique.
@@ -60,6 +60,7 @@ Every internal API, public API, RPC, webhook, edge function, or Pages Function i
 - 2026-06-08: APIs default to internal unless specifically marked public.
 - 2026-06-18: `doorstep.api_registry` lives in the `doorstep` schema for MVP, with Platform Owner RLS and initial internal/public entries.
 - 2026-06-18: `/config` is public but non-sensitive runtime config; all privileged Supabase RPCs are internal.
+- 2026-06-23: `doorstep.property_info_records` is registered as an internal authenticated Supabase table API.
 
 ## Iteration History
 - 2026-06-08: Initial spec created.

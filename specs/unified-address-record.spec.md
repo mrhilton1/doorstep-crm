@@ -61,6 +61,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Activity-modal Next Action due selection must stay inside the app modal and provide an explicit Set/Clear action rather than relying on an awkward browser picker dismissal.
 - Existing Next Action records with only a legacy text due label should continue to display, but new saves should write `dueAt`.
 - New job/property details can persist in address `customData.jobInfo` until dedicated tables/fields are justified.
+- Public property info enrichment is launched from a house icon beside the address and persists parsed details to `doorstep.property_info_records`; the latest row may be displayed in Job Info.
 - All non-primary sections are collapsed by default. Contact/identity info remains expanded.
 - Desktop More actions can be partially stubbed, but present actions must not pretend to complete unavailable backend workflows.
 - Mobile must provide equivalent actions with a bottom-sheet style More menu.
@@ -112,6 +113,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Given a record is marked Not Interested, when a user logs Estimate / Quote, Follow-Up, Referral, Completed Cleaning, or another answered/interested activity, then the current Not Interested badge is cleared while the old event remains in Activity Timeline.
 - Given a user logs Quote, Follow-Up, or Referral activity, then the relevant quote, next action, or referral contact data is captured before the modal closes.
 - Given the record opens, then Activity Timeline, Job/Property Info, People at Address, and Additional Details are collapsed by default while contact identity remains visible.
+- Given a user saves copied public property details, then the latest parsed property info summary appears in Job Info without requiring a page reload.
 - Given More is opened on mobile, then More actions appear as a bottom sheet rather than a desktop side card.
 
 ## Validation Plan
@@ -119,6 +121,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - Run `npm run lint`.
 - Run `npm run verify:deploy-artifact`.
 - Apply Supabase migration for notes/quotes/invoices/transactions.
+- Apply Supabase migration for `doorstep.property_info_records` before deploying the property info modal.
 - Smoke test opening an address from Contacts, Recent Activity, Appointments, and Map.
 
 ## Open Questions
@@ -153,6 +156,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-22: Interested activity clears stale `not_interested` current sub-status.
 - 2026-06-22: Follow-Up due selection uses an in-modal picker with explicit Set/Clear actions, and activity save network failures preserve input with clearer retry guidance.
 - 2026-06-22: Event note linkage uses insert-time `source_activity_id` instead of a follow-up `PATCH` to `doorstep.notes`.
+- 2026-06-23: Add a FamilyTreeNow-assisted property info modal from the address header, with parsed results saved to `doorstep.property_info_records`.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

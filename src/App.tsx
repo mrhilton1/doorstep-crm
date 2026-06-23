@@ -395,6 +395,42 @@ type LiveEventPayload = {
   referralRepName?: string;
 };
 
+type ParsedPropertyInfo = {
+  bedrooms: string;
+  bathrooms: string;
+  squareFootage: string;
+  yearBuilt: string;
+  estimatedValue: string;
+  estimatedEquity: string;
+  salePrice: string;
+  saleDate: string;
+  occupancyType: string;
+  ownershipType: string;
+  landUse: string;
+  propertyClass: string;
+  subdivision: string;
+  lotSquareFeet: string;
+  apnNumber: string;
+  schoolDistrict: string;
+  city: string;
+  state: string;
+  county: string;
+};
+
+type PropertyInfoRecord = {
+  id: string;
+  addressId: string;
+  displayAddress: string;
+  city: string;
+  state: string;
+  county: string;
+  postalCode?: string | null;
+  sourceUrl?: string | null;
+  parsedData: ParsedPropertyInfo;
+  demographics?: Record<string, any>;
+  createdAt: number;
+};
+
 type AddressRecordSectionKey =
   | 'addressHeader'
   | 'stageControls'
@@ -489,6 +525,136 @@ const getActivitySaveErrorMessage = (error: any, fallback = 'Event could not be 
   }
   return message || fallback;
 };
+
+const cleanPropertyInfoValue = (value?: string | null) => {
+  const cleaned = (value || '').trim().replace(/^[:\-\s\u2013\u2014]+/, '').replace(/[:\-\s\u2013\u2014]+$/, '');
+  return cleaned || 'N/A';
+};
+
+const COMMON_CITY_COUNTIES: Record<string, string> = {
+  'queen creek': 'Maricopa County',
+  phoenix: 'Maricopa County',
+  gilbert: 'Maricopa County',
+  mesa: 'Maricopa County',
+  chandler: 'Maricopa County',
+  scottsdale: 'Maricopa County',
+  tempe: 'Maricopa County',
+  tucson: 'Pima County',
+  'san tan valley': 'Pinal County',
+};
+
+const parseAddressPartsForPropertyInfo = (address: string, rawText = '') => {
+  const parts = address.split(',').map(part => part.trim()).filter(Boolean);
+  const stateZip = parts[2] || parts[1] || '';
+  const stateZipMatch = stateZip.match(/\b([A-Z]{2})\b\s*(\d{5}(?:-\d{4})?)?/i);
+  let city = parts.length >= 3 ? parts[1] : 'N/A';
+  let state = stateZipMatch?.[1]?.toUpperCase() || 'N/A';
+  const postalCode = stateZipMatch?.[2] || null;
+
+  if (parts.length === 2 && stateZipMatch) {
+    const beforeState = parts[1].slice(0, stateZipMatch.index).trim().replace(/,$/, '');
+    if (beforeState) city = beforeState;
+  }
+
+  const countyMatch = rawText.match(/\b([A-Za-z][A-Za-z\s.'-]{1,40})\s+County\b/i);
+  let county = 'N/A';
+  if (countyMatch?.[1]) {
+    county = `${countyMatch[1].trim()} County`;
+  } else if (city && city !== 'N/A') {
+    county = COMMON_CITY_COUNTIES[city.toLowerCase()] || 'N/A';
+  }
+
+  return {
+    city: cleanPropertyInfoValue(city),
+    state: cleanPropertyInfoValue(state),
+    county: cleanPropertyInfoValue(county),
+    postalCode
+  };
+};
+
+const parsePropertyInfoText = (rawText: string, address: string): ParsedPropertyInfo => {
+  const normalized = rawText.replace(/\s+/g, ' ');
+  const addressParts = parseAddressPartsForPropertyInfo(address, rawText);
+  const result: ParsedPropertyInfo = {
+    bedrooms: 'N/A',
+    bathrooms: 'N/A',
+    squareFootage: 'N/A',
+    yearBuilt: 'N/A',
+    estimatedValue: 'N/A',
+    estimatedEquity: 'N/A',
+    salePrice: 'N/A',
+    saleDate: 'N/A',
+    occupancyType: 'N/A',
+    ownershipType: 'N/A',
+    landUse: 'N/A',
+    propertyClass: 'N/A',
+    subdivision: 'N/A',
+    lotSquareFeet: 'N/A',
+    apnNumber: 'N/A',
+    schoolDistrict: 'N/A',
+    city: addressParts.city,
+    state: addressParts.state,
+    county: addressParts.county,
+  };
+
+  const searchBetween = (keywords: string[], boundaries: string[]) => {
+    for (const keyword of keywords) {
+      for (const boundary of boundaries) {
+        const match = normalized.match(new RegExp(`${keyword}\\s*:?\\s*(.*?)\\s+${boundary}`, 'i'));
+        if (match?.[1]) return cleanPropertyInfoValue(match[1]);
+      }
+    }
+
+    for (const keyword of keywords) {
+      const match = normalized.match(new RegExp(`${keyword}\\s*:?\\s*([\\w\\d\\$,\\.\\/\\-]+(?:\\s+[\\w\\d\\$,\\.\\/\\-]+){0,4})`, 'i'));
+      if (match?.[1]) return cleanPropertyInfoValue(match[1]);
+    }
+
+    return 'N/A';
+  };
+
+  result.bedrooms = searchBetween(['Bedrooms'], ['Bathrooms', 'Square Feet', 'Year Built']);
+  result.bathrooms = searchBetween(['Bathrooms'], ['Square Feet', 'Year Built', 'Estimated Value']);
+  result.squareFootage = searchBetween(['Square Feet', 'Square Footage', 'Sq Ft', 'SqFt'], ['Year Built', 'Estimated Value']);
+  result.yearBuilt = searchBetween(['Year Built'], ['Estimated Value', 'Estimated Equity']);
+  result.estimatedValue = searchBetween(['Estimated Value'], ['Estimated Equity', 'Last Sale Amount', 'Last Sale Date']);
+  result.estimatedEquity = searchBetween(['Estimated Equity'], ['Last Sale Amount', 'Last Sale Date']);
+  result.salePrice = searchBetween(['Last Sale Amount', 'Last Sale Price', 'Sale Price'], ['Last Sale Date', 'Occupancy Type']);
+  result.saleDate = searchBetween(['Last Sale Date'], ['Occupancy Type', 'Ownership Type']);
+  result.occupancyType = searchBetween(['Occupancy Type'], ['Ownership Type', 'Land Use']);
+  result.ownershipType = searchBetween(['Ownership Type'], ['Related Land Use', 'Land Use', 'Property Class']);
+  result.landUse = searchBetween(['Related Land Use', 'Land Use'], ['Property Class', 'Subdivision']);
+  result.propertyClass = searchBetween(['Property Class'], ['Subdivision', 'Lot Square Feet']);
+  result.subdivision = searchBetween(['Subdivision'], ['Lot Square Feet', 'APN', 'School District']);
+  result.lotSquareFeet = searchBetween(['Lot Square Feet', 'Lot Sq Ft'], ['APN', 'School District']);
+  result.apnNumber = searchBetween(['APN', 'Parcel ID'], ['School District']);
+
+  const schoolMatch = normalized.match(/School\s+District\s*:?(\s*.*)$/i);
+  if (schoolMatch?.[1]) result.schoolDistrict = cleanPropertyInfoValue(schoolMatch[1]);
+
+  return result;
+};
+
+const getFamilyTreeNowUrl = (address: string) => {
+  const parts = address.split(',').map(part => part.trim()).filter(Boolean);
+  const streetAddress = parts[0] || address;
+  const cityStateZip = parts.slice(1).join(', ');
+  return `https://www.familytreenow.com/search/genealogy/results?streetaddress=${encodeURIComponent(streetAddress)}&citystatezip=${encodeURIComponent(cityStateZip)}`;
+};
+
+const propertyInfoRowToRecord = (row: any): PropertyInfoRecord => ({
+  id: row.id,
+  addressId: row.address_id,
+  displayAddress: row.display_address,
+  city: row.city || row.parsed_data?.city || 'N/A',
+  state: row.state || row.parsed_data?.state || 'N/A',
+  county: row.county || row.parsed_data?.county || 'N/A',
+  postalCode: row.postal_code || null,
+  sourceUrl: row.source_url || null,
+  parsedData: row.parsed_data || {},
+  demographics: row.demographics || {},
+  createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+});
 
 const formatNextActionDue = (action: any) => {
   if (action?.dueAt) {
@@ -2783,7 +2949,8 @@ function CrmApp({
     if (addressIds.length > 0) {
       const [
         { data: activities, error: activitiesError },
-        { data: addressContacts, error: addressContactsError }
+        { data: addressContacts, error: addressContactsError },
+        { data: propertyInfoRows, error: propertyInfoError }
       ] = await Promise.all([
         doorstepDb
           .from('activities')
@@ -2795,12 +2962,19 @@ function CrmApp({
           .from('address_contacts')
           .select('address_id,is_primary,relationship_label,contacts(id,first_name,last_name,role_title,email,phone,is_decision_maker,custom_data,deleted_at)')
           .eq('workspace_id', workspaceId)
+          .in('address_id', addressIds),
+        doorstepDb
+          .from('property_info_records')
+          .select('*')
+          .eq('workspace_id', workspaceId)
           .in('address_id', addressIds)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
       ]);
 
-      if (activitiesError || addressContactsError) {
+      if (activitiesError || addressContactsError || propertyInfoError) {
         setDataStatus('error');
-        setDataError(activitiesError?.message || addressContactsError?.message || 'Could not load address data.');
+        setDataError(activitiesError?.message || addressContactsError?.message || propertyInfoError?.message || 'Could not load address data.');
         hasLoadedRemoteAddresses.current = true;
         return;
       }
@@ -2815,14 +2989,25 @@ function CrmApp({
         activitiesByAddress.set(activity.address_id, list);
       });
 
+      const latestPropertyInfoByAddress = new Map<string, PropertyInfoRecord>();
+      (propertyInfoRows || []).forEach((row: any) => {
+        if (!row.address_id || latestPropertyInfoByAddress.has(row.address_id)) return;
+        latestPropertyInfoByAddress.set(row.address_id, propertyInfoRowToRecord(row));
+      });
+
       loadedProperties = loadedProperties.map(property => {
         const remoteInteractions = activitiesByAddress.get(property.id) || [];
         const legacyInteractions = property.interactions || [];
         const uniqueInteractions = new Map<string, Interaction>();
         [...remoteInteractions, ...legacyInteractions].forEach(interaction => uniqueInteractions.set(interaction.id, interaction));
+        const latestPropertyInfo = latestPropertyInfoByAddress.get(property.id) || property.customData?.propertyInfoLatest || null;
 
         return {
           ...property,
+          customData: {
+            ...(property.customData || {}),
+            propertyInfoLatest: latestPropertyInfo
+          },
           interactions: Array.from(uniqueInteractions.values()).sort((a, b) => b.createdAt - a.createdAt)
         };
       });
@@ -4160,6 +4345,57 @@ function CrmApp({
     return interaction;
   };
 
+  const savePropertyInfoRecord = async (
+    property: PropertyContact,
+    parsedData: ParsedPropertyInfo,
+    rawText: string,
+    sourceUrl: string
+  ) => {
+    if (!workspaceId || !userId) {
+      throw new Error('Workspace session is not ready. Please refresh and try again.');
+    }
+
+    if (property.customData?.isDraftActivityAddress) {
+      throw new Error('Log an activity first so this address exists before saving property info.');
+    }
+
+    const addressParts = parseAddressPartsForPropertyInfo(property.address, rawText);
+    const { data, error } = await doorstepDb
+      .from('property_info_records')
+      .insert({
+        workspace_id: workspaceId,
+        address_id: property.id,
+        normalized_address: normalizeAddress(property.address),
+        display_address: property.address,
+        city: parsedData.city || addressParts.city,
+        state: parsedData.state || addressParts.state,
+        county: parsedData.county || addressParts.county,
+        postal_code: addressParts.postalCode,
+        source: 'familytreenow',
+        source_url: sourceUrl,
+        raw_text: rawText,
+        parsed_data: parsedData,
+        demographics: {},
+        created_by: userId,
+        updated_by: userId,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const record = propertyInfoRowToRecord(data);
+    updateProperty(property.id, {
+      customData: {
+        ...(property.customData || {}),
+        propertyInfoLatest: record
+      }
+    });
+    return record;
+  };
+
   const stats = useMemo(() => {
     const todayStart = new Date().setHours(0,0,0,0);
     return {
@@ -5486,6 +5722,7 @@ function CrmApp({
             onLogEvent={logAddressEvent}
             onAddContact={createAddressContact}
             onSaveContact={upsertNormalizedContactForAddress}
+            onSavePropertyInfo={savePropertyInfoRecord}
             onMoveContacts={handleMoveContactsToAddress}
             onDeleteAddress={requestDeleteAddress}
             onDeleteContact={requestDeleteContact}
@@ -5711,6 +5948,7 @@ function PropertyDrawer({
   onLogEvent,
   onAddContact,
   onSaveContact,
+  onSavePropertyInfo,
   onMoveContacts,
   onDeleteAddress,
   onDeleteContact,
@@ -5726,6 +5964,7 @@ function PropertyDrawer({
   onLogEvent: (propertyId: string, payload: LiveEventPayload) => Promise<Interaction>,
   onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
   onSaveContact: (property: PropertyContact, contact: Contact, isPrimary: boolean) => Promise<void>,
+  onSavePropertyInfo: (property: PropertyContact, parsedData: ParsedPropertyInfo, rawText: string, sourceUrl: string) => Promise<PropertyInfoRecord>,
   onMoveContacts: (property: PropertyContact) => void,
   onDeleteAddress: (property: PropertyContact) => void,
   onDeleteContact: (property: PropertyContact, contact: Contact, isPrimary: boolean, onDeleted?: () => void) => void,
@@ -5778,6 +6017,12 @@ function PropertyDrawer({
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [isPropertyInfoModalOpen, setIsPropertyInfoModalOpen] = useState(false);
+  const [propertyInfoStep, setPropertyInfoStep] = useState<'intro' | 'paste'>('intro');
+  const [propertyInfoPaste, setPropertyInfoPaste] = useState('');
+  const [propertyInfoError, setPropertyInfoError] = useState('');
+  const [isSavingPropertyInfo, setIsSavingPropertyInfo] = useState(false);
+  const [propertyInfoSourceOpened, setPropertyInfoSourceOpened] = useState(false);
   const [isAddingPhoneInline, setIsAddingPhoneInline] = useState(false);
   const [inlinePhone, setInlinePhone] = useState(property.phone || '');
   const [nextActionDraft, setNextActionDraft] = useState(property.customData?.nextAction?.title || '');
@@ -5823,6 +6068,11 @@ function PropertyDrawer({
     setIsJobInfoEditing(false);
     setIsMoreOpen(false);
     setIsEventModalOpen(false);
+    setIsPropertyInfoModalOpen(false);
+    setPropertyInfoStep('intro');
+    setPropertyInfoPaste('');
+    setPropertyInfoError('');
+    setPropertyInfoSourceOpened(false);
     setIsAddingPhoneInline(false);
     setOpenSections({});
     setEventQuoteItems([]);
@@ -6162,6 +6412,49 @@ function PropertyDrawer({
     }
   };
 
+  const propertyInfoSourceUrl = getFamilyTreeNowUrl(property.address);
+  const latestPropertyInfo = property.customData?.propertyInfoLatest as PropertyInfoRecord | null | undefined;
+
+  const openPropertyInfoModal = () => {
+    setPropertyInfoStep('intro');
+    setPropertyInfoError('');
+    setPropertyInfoSourceOpened(false);
+    setIsPropertyInfoModalOpen(true);
+  };
+
+  const openPropertyInfoSource = () => {
+    setPropertyInfoError('');
+    setPropertyInfoStep('paste');
+    setPropertyInfoSourceOpened(true);
+    const opened = window.open(propertyInfoSourceUrl, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      setPropertyInfoError('Your browser blocked the new tab. Use the source link below, then return here to paste the property details.');
+    }
+  };
+
+  const submitPropertyInfoPaste = async () => {
+    const rawText = propertyInfoPaste.trim();
+    if (!rawText) {
+      setPropertyInfoError('Paste the copied property details before submitting.');
+      return;
+    }
+
+    setIsSavingPropertyInfo(true);
+    setPropertyInfoError('');
+
+    try {
+      const parsedData = parsePropertyInfoText(rawText, property.address);
+      await onSavePropertyInfo(property, parsedData, rawText, propertyInfoSourceUrl);
+      setIsPropertyInfoModalOpen(false);
+      setPropertyInfoPaste('');
+      setPropertyInfoStep('intro');
+    } catch (error: any) {
+      setPropertyInfoError(error.message || 'Property info could not be saved. Please try again.');
+    } finally {
+      setIsSavingPropertyInfo(false);
+    }
+  };
+
   const primaryDisplayName = `${firstName} ${lastName}`.trim() || businessName || property.address.split(',')[0] || 'Unnamed Lead';
   const initials = primaryDisplayName
     .split(/\s+/)
@@ -6455,9 +6748,20 @@ function PropertyDrawer({
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm font-semibold text-slate-600 truncate">
-            {streetLine}
-          </p>
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            <p className="min-w-0 truncate text-sm font-semibold text-slate-600">
+              {streetLine}
+            </p>
+            <button
+              type="button"
+              onClick={openPropertyInfoModal}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600 transition hover:border-blue-200 hover:bg-blue-100"
+              title="Lookup property info"
+              aria-label="Lookup property info"
+            >
+              <Home className="h-4 w-4" />
+            </button>
+          </div>
           {cityLine && (
             <p className="text-sm font-semibold text-slate-600 truncate">
               {cityLine}
@@ -7043,6 +7347,43 @@ function PropertyDrawer({
           )}
 
           <div className="grid grid-cols-1 gap-3">
+             {latestPropertyInfo && (
+               <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                 <div className="flex items-start justify-between gap-3">
+                   <div>
+                     <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Public Property Info</p>
+                     <p className="mt-1 text-xs font-bold text-slate-500">
+                       Saved {new Date(latestPropertyInfo.createdAt).toLocaleDateString()} from FamilyTreeNow
+                     </p>
+                   </div>
+                   <button
+                     type="button"
+                     onClick={openPropertyInfoModal}
+                     className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:bg-blue-50"
+                   >
+                     Refresh
+                   </button>
+                 </div>
+                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                   {[
+                     ['Beds', latestPropertyInfo.parsedData.bedrooms],
+                     ['Baths', latestPropertyInfo.parsedData.bathrooms],
+                     ['Sq Ft', latestPropertyInfo.parsedData.squareFootage],
+                     ['Built', latestPropertyInfo.parsedData.yearBuilt],
+                     ['Value', latestPropertyInfo.parsedData.estimatedValue],
+                     ['Sale', latestPropertyInfo.parsedData.salePrice],
+                     ['APN', latestPropertyInfo.parsedData.apnNumber],
+                     ['County', latestPropertyInfo.county || latestPropertyInfo.parsedData.county],
+                   ].map(([label, value]) => (
+                     <div key={label} className="rounded-xl bg-white p-3">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+                       <p className="mt-1 truncate text-xs font-black text-slate-800">{value || 'N/A'}</p>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             )}
+
              {/* Dynamic Address-Level Custom Fields */}
              {settings.contactFields
                 .filter(f => f.scope === 'Address' && f.visible && (!f.applicableTo || f.applicableTo === 'Both' || f.applicableTo === property.type))
@@ -7959,6 +8300,129 @@ function PropertyDrawer({
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isPropertyInfoModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2200] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.96, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.96, y: 20 }}
+              className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+            >
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Property Info Lookup</p>
+                  <h3 className="mt-1 text-2xl font-black text-slate-900">{streetLine}</h3>
+                  {cityLine && <p className="mt-1 text-sm font-semibold text-slate-500">{cityLine}</p>}
+                </div>
+                <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {propertyInfoStep === 'intro' ? (
+                <div className="space-y-5">
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                    <div className="flex gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600">
+                        <Home className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900">Copy the property details from FamilyTreeNow</p>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
+                          On the next page, highlight and copy the Property Details section, then return to DoorStep and paste it here. DoorStep will parse the property details and save them to this address.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source URL</p>
+                    <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" className="mt-2 block break-all text-xs font-bold text-blue-600 hover:underline">
+                      {propertyInfoSourceUrl}
+                    </a>
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
+                      Cancel
+                    </button>
+                    <button type="button" onClick={openPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
+                      <ExternalLink className="h-4 w-4" />
+                      OK, Open Source
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <Clipboard className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+                      <div>
+                        <p className="text-sm font-black text-slate-900">Paste the copied property details</p>
+                        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                          Paste only the Property Details text when possible. Missing fields will be saved as N/A.
+                        </p>
+                        {propertyInfoSourceOpened && (
+                          <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-black text-blue-600 hover:underline">
+                            Reopen source <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={propertyInfoPaste}
+                    onChange={event => setPropertyInfoPaste(event.target.value)}
+                    className="min-h-56 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20"
+                    placeholder="Paste FamilyTreeNow Property Details here..."
+                  />
+
+                  {propertyInfoPaste.trim() && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Parsed Preview</p>
+                      <pre className="mt-3 max-h-56 overflow-auto rounded-xl bg-slate-950 p-3 text-[11px] font-semibold text-slate-100">
+                        {JSON.stringify(parsePropertyInfoText(propertyInfoPaste, property.address), null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  {propertyInfoError && (
+                    <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                      {propertyInfoError}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+                    <button type="button" onClick={() => setPropertyInfoStep('intro')} className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-slate-600">
+                      Back
+                    </button>
+                    <div className="flex gap-3">
+                      <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitPropertyInfoPaste}
+                        disabled={isSavingPropertyInfo || !propertyInfoPaste.trim()}
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 disabled:opacity-50"
+                      >
+                        {isSavingPropertyInfo ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {isSavingPropertyInfo ? 'Saving...' : 'Save Property Info'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

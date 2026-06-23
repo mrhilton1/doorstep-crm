@@ -1,5 +1,24 @@
 # Scratchpad
 
+## 2026-06-23 — Current Objective
+**Task:** Add FamilyTreeNow-assisted property info enrichment from the Unified Address Record.
+**Target specs:** `/specs/property-info-enrichment.spec.md`, `/specs/unified-address-record.spec.md`, `/specs/address-crm-core.spec.md`, `/specs/platform-api-governance.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, relevant specs, and the AiStudio reference file.
+- [x] Create a focused property info enrichment spec.
+- [x] Add Supabase migration for `doorstep.property_info_records`, RLS, permission, and API registry entry.
+- [x] Add parser, FamilyTreeNow URL builder, modal flow, and latest property info display.
+- [ ] Run verification, apply migration, commit, push, and deploy.
+
+## Assumptions
+- MVP uses manual copy/paste from FamilyTreeNow, not scraping.
+- Income by ZIP belongs in a future demographics/enrichment pass after choosing a data source such as Census ACS or a paid provider.
+- The latest property info row can be cached into `customData.propertyInfoLatest` for immediate display while Supabase remains the source of truth.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
 ## 2026-06-22 — Current Objective
 **Task:** Fix Supabase CORS failure when activity notes try to PATCH `doorstep.notes`.
 **Target specs:** `/specs/address-activity-logging.spec.md`, `/specs/unified-address-record.spec.md`

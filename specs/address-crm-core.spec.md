@@ -41,6 +41,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Residential and commercial address types must both be supported.
 - Default premises type for new address creation comes from workspace settings, defaulting to Residential, and can be changed later in address edit mode.
 - Address data must be workspace-scoped.
+- Property enrichment records must be workspace-scoped, link to `doorstep.addresses`, and allow multiple rows per address over time.
 - The Unified Address Record is the only address-level detail surface.
 - Activity and notes should be Supabase-backed, not browser/local nested state.
 - Contacts should be normalized into `doorstep.contacts` before implementing higher-risk contact move/merge flows.
@@ -80,6 +81,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - Given Supabase does not confirm an address delete, then the address remains visible and the app surfaces an error instead of pretending the delete succeeded.
 - Given the delete request hangs or fails, then the confirmation modal stops showing a working state and displays the backend/network error.
 - Given a user is on Contacts, Appointments, Map, or an opened address record, when the browser refreshes, then the app restores that page/record from the URL after data loads.
+- Given a user enriches an address with copied property details, then a `doorstep.property_info_records` row is created for that address/workspace.
 - Given local mode is active, when the user adds records, then the local demo still behaves.
 
 ## Validation Plan
@@ -107,6 +109,7 @@ The Unified Address Record is the canonical address view and replaces duplicate 
 - 2026-06-12: Unified Address Record and card views expose Delete Address using existing soft-delete behavior with app modal confirmation.
 - 2026-06-12: Address delete is backend-confirmed through `doorstep.soft_delete_address` before UI removal; MVP pages and address records are URL-backed.
 - 2026-06-13: `doorstep.soft_delete_address` is `SECURITY DEFINER` because setting `deleted_at` intentionally makes the row fail active-record RLS. The function must keep explicit permission checks and restricted grants.
+- 2026-06-23: Property info enrichment rows are first-class Supabase records linked to addresses, not only address `custom_data`.
 
 ## Iteration History
 - 2026-06-08: Supabase address load/upsert/soft-delete wired into app.

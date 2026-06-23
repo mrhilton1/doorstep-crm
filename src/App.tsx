@@ -552,17 +552,45 @@ const COMMON_CITY_COUNTIES: Record<string, string> = {
   'san tan valley': 'Pinal County',
 };
 
+const STATE_ABBREVIATIONS: Record<string, string> = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
+  colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
+  hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
+  kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO',
+  montana: 'MT', nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
+  'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH',
+  oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+  'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
+  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
+  al: 'AL', ak: 'AK', az: 'AZ', ar: 'AR', ca: 'CA', co: 'CO', ct: 'CT', de: 'DE',
+  fl: 'FL', ga: 'GA', hi: 'HI', id: 'ID', il: 'IL', in: 'IN', ia: 'IA', ks: 'KS',
+  ky: 'KY', la: 'LA', me: 'ME', md: 'MD', ma: 'MA', mi: 'MI', mn: 'MN', ms: 'MS',
+  mo: 'MO', mt: 'MT', ne: 'NE', nv: 'NV', nh: 'NH', nj: 'NJ', nm: 'NM', ny: 'NY',
+  nc: 'NC', nd: 'ND', oh: 'OH', ok: 'OK', or: 'OR', pa: 'PA', ri: 'RI', sc: 'SC',
+  sd: 'SD', tn: 'TN', tx: 'TX', ut: 'UT', vt: 'VT', va: 'VA', wa: 'WA', wv: 'WV',
+  wi: 'WI', wy: 'WY',
+};
+
 const parseAddressPartsForPropertyInfo = (address: string, rawText = '') => {
   const parts = address.split(',').map(part => part.trim()).filter(Boolean);
-  const stateZip = parts[2] || parts[1] || '';
-  const stateZipMatch = stateZip.match(/\b([A-Z]{2})\b\s*(\d{5}(?:-\d{4})?)?/i);
+  const stateZip = parts.length >= 3 ? parts.slice(2).join(' ') : parts[1] || '';
+  const zipMatch = stateZip.match(/\b(\d{5}(?:-\d{4})?)\b/);
+  let stateCandidate = stateZip.replace(/\b\d{5}(?:-\d{4})?\b/g, '').trim().replace(/,$/, '');
+  const state = STATE_ABBREVIATIONS[stateCandidate.toLowerCase()] || 'N/A';
   let city = parts.length >= 3 ? parts[1] : 'N/A';
-  let state = stateZipMatch?.[1]?.toUpperCase() || 'N/A';
-  const postalCode = stateZipMatch?.[2] || null;
+  const postalCode = zipMatch?.[1] || null;
 
-  if (parts.length === 2 && stateZipMatch) {
-    const beforeState = parts[1].slice(0, stateZipMatch.index).trim().replace(/,$/, '');
-    if (beforeState) city = beforeState;
+  if (parts.length === 2) {
+    const cityState = parts[1].replace(/\b\d{5}(?:-\d{4})?\b/g, '').trim();
+    const stateKey = Object.keys(STATE_ABBREVIATIONS)
+      .sort((a, b) => b.length - a.length)
+      .find(key => cityState.toLowerCase() === key || cityState.toLowerCase().endsWith(` ${key}`));
+    if (stateKey) {
+      stateCandidate = stateKey;
+      const beforeState = cityState.slice(0, cityState.length - stateKey.length).trim().replace(/,$/, '');
+      if (beforeState) city = beforeState;
+    }
   }
 
   const countyMatch = rawText.match(/\b([A-Za-z][A-Za-z\s.'-]{1,40})\s+County\b/i);
@@ -575,7 +603,7 @@ const parseAddressPartsForPropertyInfo = (address: string, rawText = '') => {
 
   return {
     city: cleanPropertyInfoValue(city),
-    state: cleanPropertyInfoValue(state),
+    state: cleanPropertyInfoValue(STATE_ABBREVIATIONS[stateCandidate.toLowerCase()] || state),
     county: cleanPropertyInfoValue(county),
     postalCode
   };
@@ -679,26 +707,7 @@ const getFamilyTreeNowUrl = (address: string) => {
   const streetAddress = parts[0] || address;
   const city = parts[1] || '';
   const stateValue = (parts[2] || '').replace(/\s+\d{5}(?:-\d{4})?\s*$/, '').trim();
-  const stateAbbreviations: Record<string, string> = {
-    alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
-    colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
-    hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
-    kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
-    massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO',
-    montana: 'MT', nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
-    'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH',
-    oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
-    'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
-    virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
-    al: 'AL', ak: 'AK', az: 'AZ', ar: 'AR', ca: 'CA', co: 'CO', ct: 'CT', de: 'DE',
-    fl: 'FL', ga: 'GA', hi: 'HI', id: 'ID', il: 'IL', in: 'IN', ia: 'IA', ks: 'KS',
-    ky: 'KY', la: 'LA', me: 'ME', md: 'MD', ma: 'MA', mi: 'MI', mn: 'MN', ms: 'MS',
-    mo: 'MO', mt: 'MT', ne: 'NE', nv: 'NV', nh: 'NH', nj: 'NJ', nm: 'NM', ny: 'NY',
-    nc: 'NC', nd: 'ND', oh: 'OH', ok: 'OK', or: 'OR', pa: 'PA', ri: 'RI', sc: 'SC',
-    sd: 'SD', tn: 'TN', tx: 'TX', ut: 'UT', vt: 'VT', va: 'VA', wa: 'WA', wv: 'WV',
-    wi: 'WI', wy: 'WY',
-  };
-  const state = stateAbbreviations[stateValue.toLowerCase()] || stateValue;
+  const state = STATE_ABBREVIATIONS[stateValue.toLowerCase()] || stateValue;
   const cityState = [city, state].filter(Boolean).join(', ');
   return `https://www.familytreenow.com/search/genealogy/results?streetaddress=${encodeURIComponent(streetAddress)}&citystatezip=${encodeURIComponent(cityState)}`;
 };

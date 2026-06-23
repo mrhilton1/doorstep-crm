@@ -1,6 +1,22 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
+**Task:** Fix property-info state and ZIP extraction from full display addresses.
+**Target specs:** `/specs/property-info-enrichment.spec.md`
+
+## Micro-Steps
+- [x] Inspect property-info address parser and save path.
+- [x] Share state-name abbreviation mapping with the FamilyTreeNow URL builder.
+- [x] Extract postal code from full state-name address segments like `Arizona 85142`.
+- [x] Run verification, commit, push, and deploy.
+
+## Assumptions
+- Existing rows with `state = N/A` and `postal_code = NULL` need a separate backfill or a refresh/resave, because this code fix affects future saves.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-23 — Current Objective
 **Task:** Polish property lookup modal with latest Supabase view, transient copy feedback, and explicit refresh mode.
 **Target specs:** `/specs/property-info-enrichment.spec.md`
 

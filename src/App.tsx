@@ -8474,7 +8474,7 @@ function PropertyDrawer({
                   </a>
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                     <button type="button" onClick={copyPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
-                      <Clipboard className="h-4 w-4" />
+                      <Copy className="h-4 w-4" />
                       Copy Link
                     </button>
                     <a href={propertyInfoSourceUrl} target="_blank" rel="noreferrer" onClick={openPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-slate-700">
@@ -8491,7 +8491,7 @@ function PropertyDrawer({
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-start gap-3">
-                    <Clipboard className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+                    <Copy className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
                     <div>
                       <p className="text-sm font-black text-slate-900">Paste the copied property details</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">

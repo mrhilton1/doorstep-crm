@@ -1,6 +1,25 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
+**Task:** Polish property lookup modal with latest Supabase view, transient copy feedback, and explicit refresh mode.
+**Target specs:** `/specs/property-info-enrichment.spec.md`
+
+## Micro-Steps
+- [x] Inspect existing property-info save/load paths and modal UI.
+- [x] Add direct latest-row Supabase check when opening the modal.
+- [x] Add saved-info view with Refresh-to-paste mode.
+- [x] Add transient copied feedback and blank-tab opening from Copy Link.
+- [x] Run verification, commit, push, and deploy.
+
+## Assumptions
+- Existing property info should be shown read-only first so users do not accidentally overwrite it.
+- Refreshing means adding a new latest property-info row while preserving history.
+- Opening `about:blank` after Copy Link is safer than navigating directly to FamilyTreeNow and should reduce bot-check friction.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-23 — Current Objective
 **Task:** Simplify FamilyTreeNow property lookup source controls and tighten pasted Property Details parsing.
 **Target specs:** `/specs/property-info-enrichment.spec.md`
 

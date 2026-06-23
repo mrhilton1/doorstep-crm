@@ -4520,6 +4520,41 @@ function CrmApp({
     return record;
   };
 
+  const loadLatestPropertyInfoRecord = async (property: PropertyContact) => {
+    if (!workspaceId) {
+      throw new Error('Workspace session is not ready. Please refresh and try again.');
+    }
+
+    if (property.customData?.isDraftActivityAddress) {
+      return null;
+    }
+
+    const { data, error } = await doorstepDb
+      .from('property_info_records')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('address_id', property.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data) return null;
+
+    const record = propertyInfoRowToRecord(data);
+    updateProperty(property.id, {
+      customData: {
+        ...(property.customData || {}),
+        propertyInfoLatest: record
+      }
+    });
+    return record;
+  };
+
   const stats = useMemo(() => {
     const todayStart = new Date().setHours(0,0,0,0);
     return {
@@ -5832,6 +5867,7 @@ function CrmApp({
             onAddContact={createAddressContact}
             onSaveContact={upsertNormalizedContactForAddress}
             onSavePropertyInfo={savePropertyInfoRecord}
+            onLoadLatestPropertyInfo={loadLatestPropertyInfoRecord}
             onMoveContacts={handleMoveContactsToAddress}
             onDeleteAddress={requestDeleteAddress}
             onDeleteContact={requestDeleteContact}
@@ -6106,6 +6142,7 @@ function PropertyDrawer({
   onAddContact,
   onSaveContact,
   onSavePropertyInfo,
+  onLoadLatestPropertyInfo,
   onMoveContacts,
   onDeleteAddress,
   onDeleteContact,
@@ -6122,6 +6159,7 @@ function PropertyDrawer({
   onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
   onSaveContact: (property: PropertyContact, contact: Contact, isPrimary: boolean) => Promise<void>,
   onSavePropertyInfo: (property: PropertyContact, parsedData: ParsedPropertyInfo, rawText: string, sourceUrl: string) => Promise<PropertyInfoRecord>,
+  onLoadLatestPropertyInfo: (property: PropertyContact) => Promise<PropertyInfoRecord | null>,
   onMoveContacts: (property: PropertyContact) => void,
   onDeleteAddress: (property: PropertyContact) => void,
   onDeleteContact: (property: PropertyContact, contact: Contact, isPrimary: boolean, onDeleted?: () => void) => void,
@@ -6177,6 +6215,10 @@ function PropertyDrawer({
   const [isPropertyInfoModalOpen, setIsPropertyInfoModalOpen] = useState(false);
   const [propertyInfoPaste, setPropertyInfoPaste] = useState('');
   const [propertyInfoError, setPropertyInfoError] = useState('');
+  const [propertyInfoToast, setPropertyInfoToast] = useState('');
+  const [propertyInfoMode, setPropertyInfoMode] = useState<'view' | 'refresh'>('refresh');
+  const [modalPropertyInfo, setModalPropertyInfo] = useState<PropertyInfoRecord | null>(null);
+  const [isLoadingLatestPropertyInfo, setIsLoadingLatestPropertyInfo] = useState(false);
   const [isSavingPropertyInfo, setIsSavingPropertyInfo] = useState(false);
   const [isAddingPhoneInline, setIsAddingPhoneInline] = useState(false);
   const [inlinePhone, setInlinePhone] = useState(property.phone || '');
@@ -6226,6 +6268,10 @@ function PropertyDrawer({
     setIsPropertyInfoModalOpen(false);
     setPropertyInfoPaste('');
     setPropertyInfoError('');
+    setPropertyInfoToast('');
+    setModalPropertyInfo(null);
+    setPropertyInfoMode('refresh');
+    setIsLoadingLatestPropertyInfo(false);
     setIsAddingPhoneInline(false);
     setOpenSections({});
     setEventQuoteItems([]);
@@ -6568,18 +6614,47 @@ function PropertyDrawer({
   const propertyInfoSourceUrl = getFamilyTreeNowUrl(property.address);
   const latestPropertyInfo = property.customData?.propertyInfoLatest as PropertyInfoRecord | null | undefined;
 
-  const openPropertyInfoModal = () => {
+  const showPropertyInfoToast = (message: string) => {
+    setPropertyInfoToast(message);
+    window.setTimeout(() => setPropertyInfoToast(''), 2400);
+  };
+
+  const openPropertyInfoModal = async () => {
     setPropertyInfoError('');
+    setPropertyInfoToast('');
+    setPropertyInfoPaste('');
+    setModalPropertyInfo(latestPropertyInfo || null);
+    setPropertyInfoMode(latestPropertyInfo ? 'view' : 'refresh');
     setIsPropertyInfoModalOpen(true);
+    setIsLoadingLatestPropertyInfo(true);
+
+    try {
+      const freshRecord = await onLoadLatestPropertyInfo(property);
+      setModalPropertyInfo(freshRecord);
+      setPropertyInfoMode(freshRecord ? 'view' : 'refresh');
+    } catch (error: any) {
+      setPropertyInfoError(error.message || 'Could not check for existing property info. You can still paste and save refreshed details.');
+    } finally {
+      setIsLoadingLatestPropertyInfo(false);
+    }
   };
 
   const copyPropertyInfoSource = async () => {
     setPropertyInfoError('');
+    const blankTab = window.open('about:blank', '_blank');
     try {
       await navigator.clipboard.writeText(propertyInfoSourceUrl);
+      showPropertyInfoToast(blankTab ? 'Copied link and opened a blank tab.' : 'Copied link.');
     } catch {
+      blankTab?.close();
       setPropertyInfoError('Clipboard access was blocked. Select and copy the source URL below.');
     }
+  };
+
+  const startPropertyInfoRefresh = () => {
+    setPropertyInfoError('');
+    setPropertyInfoPaste('');
+    setPropertyInfoMode('refresh');
   };
 
   const submitPropertyInfoPaste = async () => {
@@ -6594,9 +6669,11 @@ function PropertyDrawer({
 
     try {
       const parsedData = parsePropertyInfoText(rawText, property.address);
-      await onSavePropertyInfo(property, parsedData, rawText, propertyInfoSourceUrl);
-      setIsPropertyInfoModalOpen(false);
+      const savedRecord = await onSavePropertyInfo(property, parsedData, rawText, propertyInfoSourceUrl);
+      setModalPropertyInfo(savedRecord);
+      setPropertyInfoMode('view');
       setPropertyInfoPaste('');
+      showPropertyInfoToast('Property info saved.');
     } catch (error: any) {
       setPropertyInfoError(error.message || 'Property info could not be saved. Please try again.');
     } finally {
@@ -8492,45 +8569,84 @@ function PropertyDrawer({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source URL</p>
-                  <p className="mt-2 break-all text-xs font-bold text-blue-600">
-                    {propertyInfoSourceUrl}
-                  </p>
-                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                    <button type="button" onClick={copyPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
-                      <Copy className="h-4 w-4" />
-                      Copy Link
-                    </button>
+                {isLoadingLatestPropertyInfo && (
+                  <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-black uppercase tracking-widest text-slate-500">
+                    <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
+                    Checking saved property info
                   </div>
-                </div>
+                )}
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <Copy className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
-                    <div>
-                      <p className="text-sm font-black text-slate-900">Paste the copied property details</p>
-                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        Paste only the Property Details text when possible. Missing fields will be saved as N/A.
-                      </p>
+                {propertyInfoMode === 'view' && modalPropertyInfo ? (
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Latest Saved Property Info</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">
+                          Saved {new Date(modalPropertyInfo.createdAt).toLocaleString()} from FamilyTreeNow
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={startPropertyInfoRefresh}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-100 bg-white px-4 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:bg-blue-50"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Refresh
+                      </button>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {[
+                        ['Beds', modalPropertyInfo.parsedData.bedrooms],
+                        ['Baths', modalPropertyInfo.parsedData.bathrooms],
+                        ['Sq Ft', modalPropertyInfo.parsedData.squareFootage],
+                        ['Built', modalPropertyInfo.parsedData.yearBuilt],
+                        ['Value', modalPropertyInfo.parsedData.estimatedValue],
+                        ['Equity', modalPropertyInfo.parsedData.estimatedEquity],
+                        ['Sale', modalPropertyInfo.parsedData.salePrice],
+                        ['Sale Date', modalPropertyInfo.parsedData.saleDate],
+                        ['Occupancy', modalPropertyInfo.parsedData.occupancyType],
+                        ['Land Use', modalPropertyInfo.parsedData.landUse],
+                        ['APN', modalPropertyInfo.parsedData.apnNumber],
+                        ['County', modalPropertyInfo.county || modalPropertyInfo.parsedData.county],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-xl bg-white p-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+                          <p className="mt-1 truncate text-xs font-black text-slate-800">{value || 'N/A'}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source URL</p>
+                      <p className="mt-2 break-all text-xs font-bold text-blue-600">
+                        {propertyInfoSourceUrl}
+                      </p>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                        <button type="button" onClick={copyPropertyInfoSource} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100">
+                          <Copy className="h-4 w-4" />
+                          {propertyInfoToast.startsWith('Copied') ? 'Copied' : 'Copy Link'}
+                        </button>
+                      </div>
+                    </div>
 
-                <textarea
-                  value={propertyInfoPaste}
-                  onChange={event => setPropertyInfoPaste(event.target.value)}
-                  className="min-h-56 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Paste FamilyTreeNow Property Details here..."
-                />
+                    <textarea
+                      value={propertyInfoPaste}
+                      onChange={event => setPropertyInfoPaste(event.target.value)}
+                      className="min-h-56 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20"
+                      placeholder="Paste FamilyTreeNow Property Details here..."
+                    />
 
-                {propertyInfoPaste.trim() && (
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Parsed Preview</p>
-                    <pre className="mt-3 max-h-56 overflow-auto rounded-xl bg-slate-950 p-3 text-[11px] font-semibold text-slate-100">
-                      {JSON.stringify(parsePropertyInfoText(propertyInfoPaste, property.address), null, 2)}
-                    </pre>
-                  </div>
+                    {propertyInfoPaste.trim() && (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Parsed Preview</p>
+                        <pre className="mt-3 max-h-56 overflow-auto rounded-xl bg-slate-950 p-3 text-[11px] font-semibold text-slate-100">
+                          {JSON.stringify(parsePropertyInfoText(propertyInfoPaste, property.address), null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {propertyInfoError && (
@@ -8541,19 +8657,34 @@ function PropertyDrawer({
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                   <button type="button" onClick={() => setIsPropertyInfoModalOpen(false)} className="h-11 rounded-xl bg-slate-100 px-5 text-xs font-black uppercase tracking-widest text-slate-600">
-                    Cancel
+                    {propertyInfoMode === 'view' ? 'Done' : 'Cancel'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={submitPropertyInfoPaste}
-                    disabled={isSavingPropertyInfo || !propertyInfoPaste.trim()}
-                    className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 disabled:opacity-50"
-                  >
-                    {isSavingPropertyInfo ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    {isSavingPropertyInfo ? 'Saving...' : 'Save Property Info'}
-                  </button>
+                  {propertyInfoMode === 'refresh' && (
+                    <button
+                      type="button"
+                      onClick={submitPropertyInfoPaste}
+                      disabled={isSavingPropertyInfo || !propertyInfoPaste.trim()}
+                      className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 disabled:opacity-50"
+                    >
+                      {isSavingPropertyInfo ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {isSavingPropertyInfo ? 'Saving...' : 'Save Property Info'}
+                    </button>
+                  )}
                 </div>
               </div>
+              <AnimatePresence>
+                {propertyInfoToast && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="fixed bottom-6 left-1/2 z-[2300] flex -translate-x-1/2 items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white shadow-2xl"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                    {propertyInfoToast}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </motion.div>
         )}

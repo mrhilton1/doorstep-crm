@@ -38,6 +38,11 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - The paste textarea must be visible in the same modal as the source URL/copy controls; the user should not have to rely on a second hidden step after returning.
 - Do not show an Open Source button for FamilyTreeNow; direct app-driven navigation is brittle and can trigger source-site bot checks.
 - Copy Link should not leave a permanent copied/success banner in the modal.
+- Copy Link should give transient feedback, such as a toast or short button-label change, so the user knows the link was copied.
+- Copy Link may open a blank tab after copying so the user can paste the FamilyTreeNow URL manually without app-directed source navigation.
+- Opening the property info modal must check Supabase for the latest `property_info_records` row for the current address. If one exists, show that latest saved data first.
+- If latest saved data exists, refreshing property info is an explicit action that switches the modal into copy/paste mode and saves a new latest row after submit.
+- Do not show a duplicate paste-instruction bubble between the source URL and textarea when the primary help text already explains the paste flow.
 - Parsing must use approved field labels as hard boundaries so run-together copied text such as `N/ABathrooms` or `$616,000Estimated Equity` resolves to separate values without bleeding into the next field.
 - External source URLs should use state abbreviations, such as `AZ`, where the app can derive them.
 - ZIP income demographics are stored as platform reference data in `doorstep.zip_income_demographics`; property info rows can later copy a point-in-time demographic snapshot into `demographics` when bid recommendation logic is introduced.
@@ -59,6 +64,9 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 ## Acceptance Criteria
 - Given a persisted address record is open, when the user clicks the house lookup icon, then the property info modal opens.
 - Given the user clicks Copy Link, then the FamilyTreeNow URL is copied and the paste textarea remains visible in the modal.
+- Given the user clicks Copy Link, then the app shows transient copied feedback and opens a blank tab when the browser allows it.
+- Given the address already has saved property info, when the user opens the modal, then the latest saved row from Supabase is displayed before any refresh workflow.
+- Given saved property info is displayed, when the user clicks Refresh, then the modal switches to copy/paste mode for a new source paste.
 - Given the user returns to DoorStep after opening the source tab, then the address record and paste modal remain open.
 - Given the user pastes property details and submits, then the app parses the approved JSON shape and saves a row to `doorstep.property_info_records`.
 - Given FamilyTreeNow removes copied line breaks, when labels and values touch each other, then the parser still captures only the value between each approved field label and the next approved field label.
@@ -87,6 +95,8 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: Property lookup now uses copy-link-first UX, keeps the paste box visible in the same modal, and formats Arizona as `AZ` for FamilyTreeNow.
 - 2026-06-23: Remove the FamilyTreeNow Open Source button and persistent copy-success banner; keep the workflow manual-copy-first.
 - 2026-06-23: Property info parsing treats FamilyTreeNow labels as boundaries to handle pasted text where labels are concatenated to previous values.
+- 2026-06-23: Property lookup modal checks Supabase on open, displays latest saved info first, and uses Refresh to enter the paste/update workflow.
+- 2026-06-23: Copy Link uses transient copied feedback and can open a blank tab for manual URL paste.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

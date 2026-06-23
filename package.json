@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
+    "import:zip-demographics": "node scripts/import-acs-s1901-zip-demographics.mjs",
     "lint": "tsc --noEmit",
     "verify:deploy-artifact": "node scripts/verify-deploy-artifact.mjs",
     "verify": "npm run build && npm run lint && npm run verify:deploy-artifact"

@@ -1,6 +1,25 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
+**Task:** Add ACS S1901 ZIP income demographics as platform reference data for future bid recommendations.
+**Target specs:** `/specs/zip-income-demographics.spec.md`, `/specs/property-info-enrichment.spec.md`, `/specs/platform-api-governance.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs, scratchpad, relevant specs, and inspect Census CSV metadata/data shape.
+- [x] Create a focused ZIP demographics reference-data spec.
+- [x] Add Supabase migration for `doorstep.zip_income_demographics`, RLS, indexes, and API registry entry.
+- [x] Add an import script that extracts ZIP from `NAME`, skips the Census label row, normalizes values, and upserts selected fields.
+- [x] Run verification and document how to import/apply.
+
+## Assumptions
+- ACS ZIP demographics are global platform reference data, not workspace-owned CRM data.
+- MVP keeps 24 source CSV fields: GEO_ID, NAME, 12 household/family summary values, and 10 household distribution bucket estimates.
+- Raw full Census rows can be kept in JSONB for traceability without making every source column part of the product contract.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-23 — Current Objective
 **Task:** Add FamilyTreeNow-assisted property info enrichment from the Unified Address Record.
 **Target specs:** `/specs/property-info-enrichment.spec.md`, `/specs/unified-address-record.spec.md`, `/specs/address-crm-core.spec.md`, `/specs/platform-api-governance.spec.md`
 

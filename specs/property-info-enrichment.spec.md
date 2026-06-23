@@ -33,7 +33,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Source URL is stored for auditability.
 - The table permits 1:many property info rows per address over time, with newest row displayed on the record.
 - Do not scrape FamilyTreeNow from DoorStep in this MVP pass; use user-driven copy/paste to avoid brittle scraping and source-site blocking.
-- Future demographic/enrichment data such as median or average income by ZIP may be stored in nullable enrichment fields/JSON but should not block the MVP parser.
+- ZIP income demographics are stored as platform reference data in `doorstep.zip_income_demographics`; property info rows can later copy a point-in-time demographic snapshot into `demographics` when bid recommendation logic is introduced.
 - The Supabase table API is internal-only.
 
 ## Edge Cases
@@ -65,13 +65,14 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Smoke test parsing the provided sample text against an existing address.
 
 ## Open Questions
-- [ ] Which demographic source should power average/median income by ZIP: Census ACS, paid property data provider, or manual import?
+- [x] Which demographic source should power average/median income by ZIP: Census ACS, paid property data provider, or manual import? Decision: ACS S1901 ZIP-level data imported into `doorstep.zip_income_demographics`.
 - [ ] Should property info rows be editable after save, or append-only with superseding rows?
 
 ## Decisions Made
 - 2026-06-23: Use manual copy/paste from FamilyTreeNow for MVP rather than scraping.
 - 2026-06-23: Persist parsed property details in a dedicated Supabase table with 1:many rows per address.
 - 2026-06-23: Keep income/demographics as future enrichment fields; do not block the MVP property parser.
+- 2026-06-23: Use ACS S1901 ZIP-level demographics as the first income reference source for future bid recommendations.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

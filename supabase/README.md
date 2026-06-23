@@ -57,3 +57,24 @@ VITE_APP_URL=https://app.clearview.win
 ```
 
 Never expose the Supabase service role key to the frontend.
+
+## Import ACS ZIP Income Demographics
+
+The ACS S1901 ZIP income demographics importer is a local admin script. It reads
+the Census CSV, skips the second label row, extracts ZIP from `NAME`, normalizes
+selected values, and upserts into `doorstep.zip_income_demographics`.
+
+Dry-run first:
+
+```bash
+npm run import:zip-demographics -- --data /path/to/ACSST5Y2024.S1901-Data.csv
+```
+
+Apply with a service role key only in the local shell. Never commit this key and
+never expose it to frontend code:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=... \
+SUPABASE_URL=https://vupriscnyrqmibmfowdx.supabase.co \
+npm run import:zip-demographics -- --data /path/to/ACSST5Y2024.S1901-Data.csv --apply
+```

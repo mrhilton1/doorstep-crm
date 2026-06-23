@@ -540,6 +540,25 @@ const cleanParsedPropertyValue = (value?: string | null) => {
   return cleanPropertyInfoValue(cleaned);
 };
 
+const copyTextWithoutPermissionPrompt = (value: string) => {
+  const textArea = document.createElement('textarea');
+  textArea.value = value;
+  textArea.setAttribute('readonly', 'true');
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  textArea.style.top = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  textArea.setSelectionRange(0, value.length);
+  const didCopy = document.execCommand('copy');
+  document.body.removeChild(textArea);
+
+  if (!didCopy) {
+    throw new Error('Copy was blocked. Select and copy the source URL below.');
+  }
+};
+
 const COMMON_CITY_COUNTIES: Record<string, string> = {
   'queen creek': 'Maricopa County',
   phoenix: 'Maricopa County',
@@ -3402,27 +3421,11 @@ function CrmApp({
         }
       }
 
-      // 3. Fallback to geolocation only if map is totally fresh.
-      if (navigator.geolocation && !mapCenter) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const loc: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-            setUserLocation(loc);
-            setMapCenter(loc);
-            setMapZoom(17);
-            setHasInitializedLocation(true);
-          },
-          () => {
-            // Default fallback if everything fails
-            const defaultLoc: [number, number] = [39.8283, -98.5795]; // Center of USA
-            setMapCenter(defaultLoc);
-            setMapZoom(4);
-            setHasInitializedLocation(true);
-          }
-        );
-      } else {
-        setHasInitializedLocation(true);
-      }
+      // 3. Default fallback if no saved workspace location exists. Do not ask for browser location on page load.
+      const defaultLoc: [number, number] = [39.8283, -98.5795]; // Center of USA
+      setMapCenter(defaultLoc);
+      setMapZoom(4);
+      setHasInitializedLocation(true);
     };
 
     initializeMap();
@@ -6650,13 +6653,12 @@ function PropertyDrawer({
 
   const copyPropertyInfoSource = async () => {
     setPropertyInfoError('');
-    const blankTab = window.open('about:blank', '_blank');
     try {
-      await navigator.clipboard.writeText(propertyInfoSourceUrl);
+      copyTextWithoutPermissionPrompt(propertyInfoSourceUrl);
+      const blankTab = window.open('about:blank', '_blank');
       showPropertyInfoToast(blankTab ? 'Copied link and opened a blank tab.' : 'Copied link.');
-    } catch {
-      blankTab?.close();
-      setPropertyInfoError('Clipboard access was blocked. Select and copy the source URL below.');
+    } catch (error: any) {
+      setPropertyInfoError(error.message || 'Copy was blocked. Select and copy the source URL below.');
     }
   };
 
@@ -8564,19 +8566,21 @@ function PropertyDrawer({
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                  <div className="flex gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600">
-                      <Home className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-slate-900">Copy the property details from FamilyTreeNow</p>
-                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
-                        Copy this search link, paste it into a new tab, then copy the Property Details section and paste those details below.
-                      </p>
+                {propertyInfoMode === 'refresh' && (
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                    <div className="flex gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600">
+                        <Home className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900">Copy the property details from FamilyTreeNow</p>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
+                          Copy this search link, paste it into a new tab, then copy the Property Details section and paste those details below.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {isLoadingLatestPropertyInfo && (
                   <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-black uppercase tracking-widest text-slate-500">

@@ -1,6 +1,25 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
+**Task:** Hide property lookup paste instructions when saved data exists and reduce permission prompts.
+**Target specs:** `/specs/property-info-enrichment.spec.md`
+
+## Micro-Steps
+- [x] Inspect property lookup modal, clipboard copy path, and geolocation prompts.
+- [x] Show the FamilyTreeNow instruction card only in refresh/paste mode.
+- [x] Replace browser Clipboard API usage with click-scoped copy fallback.
+- [x] Remove automatic geolocation request from initial map load; keep user-click location button.
+- [x] Run verification, commit, push, and deploy.
+
+## Assumptions
+- The saved-data modal should be a quiet read-only summary unless the user explicitly clicks Refresh.
+- Location permission should only appear after an intentional location-control click, not during page/app load.
+- Copy Link should avoid permission prompts where possible, but some browsers may still block programmatic copy and require manual selection.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-23 — Current Objective
 **Task:** Fix property-info state and ZIP extraction from full display addresses.
 **Target specs:** `/specs/property-info-enrichment.spec.md`
 

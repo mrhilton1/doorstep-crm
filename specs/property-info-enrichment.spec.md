@@ -43,6 +43,8 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Opening the property info modal must check Supabase for the latest `property_info_records` row for the current address. If one exists, show that latest saved data first.
 - If latest saved data exists, refreshing property info is an explicit action that switches the modal into copy/paste mode and saves a new latest row after submit.
 - Do not show a duplicate paste-instruction bubble between the source URL and textarea when the primary help text already explains the paste flow.
+- Do not show the FamilyTreeNow paste/copy instruction card when latest saved property info is already displayed; only show it in refresh/paste mode.
+- Copy Link should avoid browser permission prompts where possible; if copy is blocked, leave the source URL visible for manual copy.
 - Parsing must use approved field labels as hard boundaries so run-together copied text such as `N/ABathrooms` or `$616,000Estimated Equity` resolves to separate values without bleeding into the next field.
 - External source URLs should use state abbreviations, such as `AZ`, where the app can derive them.
 - Property info records should derive `state` and `postal_code` from the address display string when the address contains either a full state name such as `Arizona` or a two-letter abbreviation such as `AZ`.
@@ -99,6 +101,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: Property lookup modal checks Supabase on open, displays latest saved info first, and uses Refresh to enter the paste/update workflow.
 - 2026-06-23: Copy Link uses transient copied feedback and can open a blank tab for manual URL paste.
 - 2026-06-23: Property info address parsing accepts full state names and two-letter state abbreviations so `Arizona 85142` saves as `AZ` plus postal code `85142`.
+- 2026-06-23: Hide FamilyTreeNow paste instructions when showing saved data, and use a click-scoped copy path that avoids the browser Clipboard API permission prompt.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

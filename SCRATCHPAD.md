@@ -1,6 +1,23 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
+**Task:** Fix FamilyTreeNow source URL to omit ZIP and preserve property-info modal state when returning from the source tab.
+**Target specs:** `/specs/property-info-enrichment.spec.md`, `/specs/unified-address-record.spec.md`
+
+## Micro-Steps
+- [x] Re-read operating docs/scratchpad and inspect property info URL + visibility handlers.
+- [x] Update spec with city/state-only source URL and no hidden-tab route stripping.
+- [x] Patch URL builder and tab-hide behavior.
+- [ ] Run verification, commit, push, and deploy.
+
+## Assumptions
+- FamilyTreeNow search should receive street plus city/state only, because ZIP harms this workflow.
+- The previous hidden-tab route cleanup should not run while the user is in a modal that expects them to leave and return.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-23 — Current Objective
 **Task:** Add ACS S1901 ZIP income demographics as platform reference data for future bid recommendations.
 **Target specs:** `/specs/zip-income-demographics.spec.md`, `/specs/property-info-enrichment.spec.md`, `/specs/platform-api-governance.spec.md`
 

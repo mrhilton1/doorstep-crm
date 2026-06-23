@@ -638,8 +638,10 @@ const parsePropertyInfoText = (rawText: string, address: string): ParsedProperty
 const getFamilyTreeNowUrl = (address: string) => {
   const parts = address.split(',').map(part => part.trim()).filter(Boolean);
   const streetAddress = parts[0] || address;
-  const cityStateZip = parts.slice(1).join(', ');
-  return `https://www.familytreenow.com/search/genealogy/results?streetaddress=${encodeURIComponent(streetAddress)}&citystatezip=${encodeURIComponent(cityStateZip)}`;
+  const city = parts[1] || '';
+  const state = (parts[2] || '').replace(/\s+\d{5}(?:-\d{4})?\s*$/, '').trim();
+  const cityState = [city, state].filter(Boolean).join(', ');
+  return `https://www.familytreenow.com/search/genealogy/results?streetaddress=${encodeURIComponent(streetAddress)}&citystatezip=${encodeURIComponent(cityState)}`;
 };
 
 const propertyInfoRowToRecord = (row: any): PropertyInfoRecord => ({
@@ -4625,21 +4627,6 @@ function CrmApp({
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
     }
-  }, [currentView, isDrawerOpen, selectedPropertyId]);
-
-  useEffect(() => {
-    const stripTransientAddressRoute = () => {
-      if (document.visibilityState !== 'hidden') return;
-      if (!isDrawerOpen || !selectedPropertyId) return;
-
-      const basePath = buildAppPath(currentView);
-      if (window.location.pathname !== basePath) {
-        window.history.replaceState({}, '', basePath);
-      }
-    };
-
-    document.addEventListener('visibilitychange', stripTransientAddressRoute);
-    return () => document.removeEventListener('visibilitychange', stripTransientAddressRoute);
   }, [currentView, isDrawerOpen, selectedPropertyId]);
 
   return (

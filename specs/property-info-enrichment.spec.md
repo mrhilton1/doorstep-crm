@@ -20,7 +20,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 2. User clicks the house/property lookup icon next to the address.
 3. Modal explains the copy/paste workflow.
 4. User clicks OK/Open Source.
-5. App opens `https://www.familytreenow.com/search/genealogy/results?...` using the record address.
+5. App opens `https://www.familytreenow.com/search/genealogy/results?...` using the record street plus city/state, omitting ZIP from the `citystatezip` query value.
 6. User copies property details from the source site.
 7. User returns to DoorStep, pastes the copied text, and submits.
 8. App parses the text, saves a row in Supabase, updates the current address record with the latest parsed result, and displays a compact property info summary.
@@ -33,6 +33,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Source URL is stored for auditability.
 - The table permits 1:many property info rows per address over time, with newest row displayed on the record.
 - Do not scrape FamilyTreeNow from DoorStep in this MVP pass; use user-driven copy/paste to avoid brittle scraping and source-site blocking.
+- Leaving DoorStep for the source tab must not clear the open address record or property-info modal state when the user returns.
 - ZIP income demographics are stored as platform reference data in `doorstep.zip_income_demographics`; property info rows can later copy a point-in-time demographic snapshot into `demographics` when bid recommendation logic is introduced.
 - The Supabase table API is internal-only.
 
@@ -51,7 +52,8 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 
 ## Acceptance Criteria
 - Given a persisted address record is open, when the user clicks the house lookup icon, then the property info modal opens.
-- Given the user clicks OK/Open Source, then a new tab opens to FamilyTreeNow with URL-encoded street address and city/state/ZIP query params.
+- Given the user clicks OK/Open Source, then a new tab opens to FamilyTreeNow with URL-encoded street address and city/state query params, excluding ZIP.
+- Given the user returns to DoorStep after opening the source tab, then the address record and paste modal remain open.
 - Given the user pastes property details and submits, then the app parses the approved JSON shape and saves a row to `doorstep.property_info_records`.
 - Given the save succeeds, then the latest property info summary appears on the address record without a page reload.
 - Given the record reloads later, then the latest property info row is loaded from Supabase and displayed.
@@ -73,6 +75,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: Persist parsed property details in a dedicated Supabase table with 1:many rows per address.
 - 2026-06-23: Keep income/demographics as future enrichment fields; do not block the MVP property parser.
 - 2026-06-23: Use ACS S1901 ZIP-level demographics as the first income reference source for future bid recommendations.
+- 2026-06-23: FamilyTreeNow source URLs omit ZIP and tab-hide behavior must preserve the property-info modal workflow.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

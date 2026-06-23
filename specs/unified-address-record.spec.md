@@ -157,6 +157,7 @@ Every address opens into the Unified Address Record. The first implementation ma
 - 2026-06-22: Follow-Up due selection uses an in-modal picker with explicit Set/Clear actions, and activity save network failures preserve input with clearer retry guidance.
 - 2026-06-22: Event note linkage uses insert-time `source_activity_id` instead of a follow-up `PATCH` to `doorstep.notes`.
 - 2026-06-23: Add a FamilyTreeNow-assisted property info modal from the address header, with parsed results saved to `doorstep.property_info_records`.
+- 2026-06-23: Preserve the open address record/modal while the user leaves for a property source tab and returns to paste copied property details.
 
 ## Iteration History
 - 2026-06-09: Spec created from target-user PRD and follow-up decisions.

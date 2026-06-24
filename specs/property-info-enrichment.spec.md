@@ -49,6 +49,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Parsing must use approved field labels as hard boundaries so run-together copied text such as `N/ABathrooms` or `$616,000Estimated Equity` resolves to separate values without bleeding into the next field.
 - External source URLs should use state abbreviations, such as `AZ`, where the app can derive them.
 - Property info records should derive `state` and `postal_code` from the address display string when the address contains either a full state name such as `Arizona` or a two-letter abbreviation such as `AZ`.
+- Workspace settings let admins choose which saved property fields are visible on the address record and in the property info modal.
 - ZIP income demographics are stored as platform reference data in `doorstep.zip_income_demographics`; property info rows can later copy a point-in-time demographic snapshot into `demographics` when bid recommendation logic is introduced.
 - The Supabase table API is internal-only.
 
@@ -77,6 +78,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Given FamilyTreeNow removes copied line breaks, when labels and values touch each other, then the parser still captures only the value between each approved field label and the next approved field label.
 - Given the save succeeds, then the latest property info summary appears on the address record without a page reload.
 - Given the record reloads later, then the latest property info row is loaded from Supabase and displayed.
+- Given a workspace admin changes visible property info fields in settings, then the address record and property info modal use that same configured field list.
 - Given save fails, then the modal shows an inline error and keeps the pasted text.
 
 ## Validation Plan
@@ -105,6 +107,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: Property info address parsing accepts full state names and two-letter state abbreviations so `Arizona 85142` saves as `AZ` plus postal code `85142`.
 - 2026-06-23: Hide FamilyTreeNow paste instructions when showing saved data, and use a click-scoped copy path that avoids the browser Clipboard API permission prompt.
 - 2026-06-23: Property info save can promote a draft map-selected address into a persisted address without requiring an activity event first.
+- 2026-06-23: Property info display fields are workspace-configurable and shared by the address record summary and property lookup modal.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

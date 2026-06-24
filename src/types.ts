@@ -121,6 +121,7 @@ export interface Settings {
     color: string;
     description: string;
   }>;
+  propertyInfoVisibleFields?: string[];
   subStatusConfig?: Record<PropertySubStatus, {
     label: string;
     parentStages: PropertyStage[];

@@ -431,6 +431,75 @@ type PropertyInfoRecord = {
   createdAt: number;
 };
 
+type PropertyInfoDisplayFieldKey =
+  | keyof ParsedPropertyInfo
+  | 'postalCode';
+
+const PROPERTY_INFO_DISPLAY_FIELDS: Array<{
+  key: PropertyInfoDisplayFieldKey;
+  label: string;
+  getValue: (record: PropertyInfoRecord) => string | null | undefined;
+}> = [
+  { key: 'bedrooms', label: 'Beds', getValue: record => record.parsedData.bedrooms },
+  { key: 'bathrooms', label: 'Baths', getValue: record => record.parsedData.bathrooms },
+  { key: 'squareFootage', label: 'Sq Ft', getValue: record => record.parsedData.squareFootage },
+  { key: 'yearBuilt', label: 'Built', getValue: record => record.parsedData.yearBuilt },
+  { key: 'estimatedValue', label: 'Value', getValue: record => record.parsedData.estimatedValue },
+  { key: 'estimatedEquity', label: 'Equity', getValue: record => record.parsedData.estimatedEquity },
+  { key: 'salePrice', label: 'Sale', getValue: record => record.parsedData.salePrice },
+  { key: 'saleDate', label: 'Sale Date', getValue: record => record.parsedData.saleDate },
+  { key: 'occupancyType', label: 'Occupancy', getValue: record => record.parsedData.occupancyType },
+  { key: 'ownershipType', label: 'Ownership', getValue: record => record.parsedData.ownershipType },
+  { key: 'landUse', label: 'Land Use', getValue: record => record.parsedData.landUse },
+  { key: 'propertyClass', label: 'Class', getValue: record => record.parsedData.propertyClass },
+  { key: 'subdivision', label: 'Subdivision', getValue: record => record.parsedData.subdivision },
+  { key: 'lotSquareFeet', label: 'Lot Sq Ft', getValue: record => record.parsedData.lotSquareFeet },
+  { key: 'apnNumber', label: 'APN', getValue: record => record.parsedData.apnNumber },
+  { key: 'schoolDistrict', label: 'School District', getValue: record => record.parsedData.schoolDistrict },
+  { key: 'city', label: 'City', getValue: record => record.city || record.parsedData.city },
+  { key: 'state', label: 'State', getValue: record => record.state || record.parsedData.state },
+  { key: 'county', label: 'County', getValue: record => record.county || record.parsedData.county },
+  { key: 'postalCode', label: 'ZIP', getValue: record => record.postalCode },
+];
+
+const DEFAULT_PROPERTY_INFO_VISIBLE_FIELDS: PropertyInfoDisplayFieldKey[] = [
+  'bedrooms',
+  'bathrooms',
+  'squareFootage',
+  'yearBuilt',
+  'estimatedValue',
+  'estimatedEquity',
+  'salePrice',
+  'saleDate',
+  'occupancyType',
+  'landUse',
+  'apnNumber',
+  'county',
+];
+
+const PROPERTY_INFO_FIELD_KEYS = new Set(PROPERTY_INFO_DISPLAY_FIELDS.map(field => field.key));
+
+const getVisiblePropertyInfoFieldKeys = (settings: AppSettings): PropertyInfoDisplayFieldKey[] => {
+  const configured = settings.propertyInfoVisibleFields || DEFAULT_PROPERTY_INFO_VISIBLE_FIELDS;
+  const validFields = configured.filter((key): key is PropertyInfoDisplayFieldKey =>
+    PROPERTY_INFO_FIELD_KEYS.has(key as PropertyInfoDisplayFieldKey)
+  );
+  return validFields.length ? validFields : DEFAULT_PROPERTY_INFO_VISIBLE_FIELDS;
+};
+
+const getPropertyInfoDisplayItems = (record: PropertyInfoRecord, settings: AppSettings) => {
+  const selected = new Set(getVisiblePropertyInfoFieldKeys(settings));
+  return PROPERTY_INFO_DISPLAY_FIELDS
+    .filter(field => selected.has(field.key))
+    .map(field => ({
+      key: field.key,
+      label: field.label,
+      value: field.getValue(record) || 'N/A'
+    }));
+};
+
+type SettingsTabKey = 'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'property' | 'team';
+
 type AddressRecordSectionKey =
   | 'addressHeader'
   | 'stageControls'
@@ -1795,6 +1864,7 @@ const createDefaultSettings = (): AppSettings => ({
     phone: '',
     email: ''
   },
+  propertyInfoVisibleFields: DEFAULT_PROPERTY_INFO_VISIBLE_FIELDS,
   defaultPremisesType: 'Residential',
   stageConfig: {
     prospect: { color: DEFAULT_STAGE_COLORS.prospect, description: 'Address exists with no contact information yet.' },
@@ -2989,7 +3059,7 @@ function CrmApp({
   const [isOverdueInvoicesOpen, setIsOverdueInvoicesOpen] = useState(false);
   const [isDisplacedContactsOpen, setIsDisplacedContactsOpen] = useState(false);
   const [displacedContacts, setDisplacedContacts] = useState<DisplacedContactRow[]>([]);
-  const [settingsActiveTab, setSettingsActiveTab] = useState<'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'>('business');
+  const [settingsActiveTab, setSettingsActiveTab] = useState<SettingsTabKey>('business');
   const [routes, setRoutes] = useState<ProspectRoute[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState(false);
@@ -7632,17 +7702,8 @@ function PropertyDrawer({
                    </button>
                  </div>
                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                   {[
-                     ['Beds', latestPropertyInfo.parsedData.bedrooms],
-                     ['Baths', latestPropertyInfo.parsedData.bathrooms],
-                     ['Sq Ft', latestPropertyInfo.parsedData.squareFootage],
-                     ['Built', latestPropertyInfo.parsedData.yearBuilt],
-                     ['Value', latestPropertyInfo.parsedData.estimatedValue],
-                     ['Sale', latestPropertyInfo.parsedData.salePrice],
-                     ['APN', latestPropertyInfo.parsedData.apnNumber],
-                     ['County', latestPropertyInfo.county || latestPropertyInfo.parsedData.county],
-                   ].map(([label, value]) => (
-                     <div key={label} className="rounded-xl bg-white p-3">
+                   {getPropertyInfoDisplayItems(latestPropertyInfo, settings).map(({ key, label, value }) => (
+                     <div key={key} className="rounded-xl bg-white p-3">
                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
                        <p className="mt-1 truncate text-xs font-black text-slate-800">{value || 'N/A'}</p>
                      </div>
@@ -8638,21 +8699,8 @@ function PropertyDrawer({
                       </button>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      {[
-                        ['Beds', modalPropertyInfo.parsedData.bedrooms],
-                        ['Baths', modalPropertyInfo.parsedData.bathrooms],
-                        ['Sq Ft', modalPropertyInfo.parsedData.squareFootage],
-                        ['Built', modalPropertyInfo.parsedData.yearBuilt],
-                        ['Value', modalPropertyInfo.parsedData.estimatedValue],
-                        ['Equity', modalPropertyInfo.parsedData.estimatedEquity],
-                        ['Sale', modalPropertyInfo.parsedData.salePrice],
-                        ['Sale Date', modalPropertyInfo.parsedData.saleDate],
-                        ['Occupancy', modalPropertyInfo.parsedData.occupancyType],
-                        ['Land Use', modalPropertyInfo.parsedData.landUse],
-                        ['APN', modalPropertyInfo.parsedData.apnNumber],
-                        ['County', modalPropertyInfo.county || modalPropertyInfo.parsedData.county],
-                      ].map(([label, value]) => (
-                        <div key={label} className="rounded-xl bg-white p-3">
+                      {getPropertyInfoDisplayItems(modalPropertyInfo, settings).map(({ key, label, value }) => (
+                        <div key={key} className="rounded-xl bg-white p-3">
                           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
                           <p className="mt-1 truncate text-xs font-black text-slate-800">{value || 'N/A'}</p>
                         </div>
@@ -10223,9 +10271,10 @@ function SettingsOverlay({
   properties: PropertyContact[],
   setPromptConfig: any,
   onNotice: (title: string, message: string, tone?: ConfirmActionConfig['tone']) => void,
-  initialTab?: 'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'
+  initialTab?: SettingsTabKey
 }) {
-  const [activeConfig, setActiveConfig] = useState<'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'team'>(initialTab);
+  const [activeConfig, setActiveConfig] = useState<SettingsTabKey>(initialTab);
+  const visiblePropertyInfoFields = getVisiblePropertyInfoFieldKeys(settings);
 
   return (
     <motion.div
@@ -10248,16 +10297,16 @@ function SettingsOverlay({
       </div>
 
       <div className="flex border-b border-[#E2E8F0] overflow-x-auto no-scrollbar">
-        {['business', 'general', 'targets', 'contact', 'catalog', 'labels', 'team'].map((tab) => (
+        {(['business', 'general', 'targets', 'contact', 'catalog', 'labels', 'property', 'team'] as SettingsTabKey[]).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveConfig(tab as any)}
+            onClick={() => setActiveConfig(tab)}
             className={cn(
               "px-6 py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all whitespace-nowrap",
               activeConfig === tab ? "border-[#2563EB] text-[#2563EB]" : "border-transparent text-gray-400"
             )}
           >
-            {tab === 'catalog' ? settings.labels.catalog : tab}
+            {tab === 'catalog' ? settings.labels.catalog : tab === 'property' ? 'Property Info' : tab}
           </button>
         ))}
       </div>
@@ -10689,6 +10738,70 @@ function SettingsOverlay({
                 + Add Custom Field
               </button>
             </section>
+          </div>
+        )}
+
+        {activeConfig === 'property' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Property Info Display</h3>
+              <p className="mt-2 text-xs font-bold leading-relaxed text-slate-500">
+                Choose which saved house data appears on address records and in the property info modal.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {PROPERTY_INFO_DISPLAY_FIELDS.map(field => {
+                const isVisible = visiblePropertyInfoFields.includes(field.key);
+                const isLastVisible = isVisible && visiblePropertyInfoFields.length === 1;
+                return (
+                  <button
+                    key={field.key}
+                    type="button"
+                    onClick={() => {
+                      if (isLastVisible) return;
+                      setSettings(prev => {
+                        const current = getVisiblePropertyInfoFieldKeys(prev);
+                        const next = current.includes(field.key)
+                          ? current.filter(key => key !== field.key)
+                          : [...current, field.key];
+                        return {
+                          ...prev,
+                          propertyInfoVisibleFields: next
+                        };
+                      });
+                    }}
+                    className={cn(
+                      "flex items-center justify-between rounded-2xl border p-4 text-left shadow-sm transition-all",
+                      isVisible
+                        ? "border-blue-100 bg-white text-[#1E293B]"
+                        : "border-[#E2E8F0] bg-slate-50 text-slate-400",
+                      isLastVisible && "cursor-not-allowed opacity-80"
+                    )}
+                  >
+                    <div>
+                      <p className="text-sm font-black">{field.label}</p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">{field.key}</p>
+                    </div>
+                    <div className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-xl border",
+                      isVisible ? "border-blue-100 bg-blue-50 text-blue-600" : "border-slate-200 bg-white text-slate-300"
+                    )}>
+                      {isVisible ? <Check className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSettings(prev => ({
+                ...prev,
+                propertyInfoVisibleFields: DEFAULT_PROPERTY_INFO_VISIBLE_FIELDS
+              }))}
+              className="rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-blue-600 shadow-sm hover:bg-blue-50"
+            >
+              Reset to default
+            </button>
           </div>
         )}
 

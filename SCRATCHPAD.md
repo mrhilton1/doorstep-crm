@@ -143,6 +143,7 @@
 - MVP uses manual copy/paste from FamilyTreeNow, not scraping.
 - Income by ZIP belongs in a future demographics/enrichment pass after choosing a data source such as Census ACS or a paid provider.
 - The latest property info row can be cached into `customData.propertyInfoLatest` for immediate display while Supabase remains the source of truth.
+- Property info display fields should be configured once in workspace settings and reused anywhere saved property info appears.
 
 ---
 *Wipe entries older than 30 days. This is working memory, not history.*

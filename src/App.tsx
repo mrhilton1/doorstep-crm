@@ -4491,18 +4491,36 @@ function CrmApp({
       throw new Error('Workspace session is not ready. Please refresh and try again.');
     }
 
-    if (property.customData?.isDraftActivityAddress) {
-      throw new Error('Log an activity first so this address exists before saving property info.');
+    const isDraftActivityAddress = Boolean(property.customData?.isDraftActivityAddress);
+    const addressProperty: PropertyContact = isDraftActivityAddress
+      ? {
+          ...property,
+          stage: 'prospect',
+          customData: {
+            ...(property.customData || {}),
+            isDraftActivityAddress: undefined
+          }
+        }
+      : property;
+
+    if (isDraftActivityAddress) {
+      const { error: addressError } = await doorstepDb
+        .from('addresses')
+        .upsert(propertyToAddressRow(addressProperty, workspaceId, userId), { onConflict: 'id' });
+
+      if (addressError) {
+        throw new Error(addressError.message);
+      }
     }
 
-    const addressParts = parseAddressPartsForPropertyInfo(property.address, rawText);
+    const addressParts = parseAddressPartsForPropertyInfo(addressProperty.address, rawText);
     const { data, error } = await doorstepDb
       .from('property_info_records')
       .insert({
         workspace_id: workspaceId,
-        address_id: property.id,
-        normalized_address: normalizeAddress(property.address),
-        display_address: property.address,
+        address_id: addressProperty.id,
+        normalized_address: normalizeAddress(addressProperty.address),
+        display_address: addressProperty.address,
         city: parsedData.city || addressParts.city,
         state: parsedData.state || addressParts.state,
         county: parsedData.county || addressParts.county,
@@ -4523,12 +4541,24 @@ function CrmApp({
     }
 
     const record = propertyInfoRowToRecord(data);
-    updateProperty(property.id, {
-      customData: {
-        ...(property.customData || {}),
-        propertyInfoLatest: record
-      }
-    });
+    const nextCustomData = {
+      ...(addressProperty.customData || {}),
+      propertyInfoLatest: record
+    };
+
+    if (isDraftActivityAddress) {
+      setProperties(prev => [{
+        ...addressProperty,
+        customData: nextCustomData,
+        updatedAt: Date.now()
+      }, ...prev.filter(item => item.id !== addressProperty.id)]);
+      setPendingActivityProperty(null);
+    } else {
+      updateProperty(addressProperty.id, {
+        customData: nextCustomData
+      });
+    }
+
     return record;
   };
 

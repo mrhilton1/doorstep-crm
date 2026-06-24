@@ -27,6 +27,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 
 ## Business Rules
 - Address remains the primary CRM object; property info rows link to `doorstep.addresses`.
+- Property info can be saved for a newly selected route/address record before any activity is logged; the app must persist the address row first, then attach the property info row.
 - Property info rows are workspace-scoped and RLS-protected.
 - The parser captures only the approved MVP fields: bedrooms, bathrooms, squareFootage, yearBuilt, estimatedValue, estimatedEquity, salePrice, saleDate, occupancyType, ownershipType, landUse, propertyClass, subdivision, lotSquareFeet, apnNumber, schoolDistrict, city, state, county.
 - Raw pasted text is stored for traceability/debugging.
@@ -56,7 +57,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Partial pasted text: parser should save known fields and mark missing values as `N/A`.
 - Missing city/state/county: derive city/state from address where possible and county from text or common city mapping when available.
 - Source save failure: modal remains open, preserves pasted text, and shows the backend/network error.
-- Draft/unpersisted address records: hide or disable property info save until the address exists in Supabase.
+- Draft/unpersisted address records created from map selection should be promoted to persisted address records when property info is saved, even if no activity has been logged.
 
 ## Non-Goals
 - Automated scraping.
@@ -72,6 +73,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - Given saved property info is displayed, when the user clicks Refresh, then the modal switches to copy/paste mode for a new source paste.
 - Given the user returns to DoorStep after opening the source tab, then the address record and paste modal remain open.
 - Given the user pastes property details and submits, then the app parses the approved JSON shape and saves a row to `doorstep.property_info_records`.
+- Given the address was created from a map click and has no activity yet, when the user saves property info, then the app creates the address row and saves the property info row without requiring an activity first.
 - Given FamilyTreeNow removes copied line breaks, when labels and values touch each other, then the parser still captures only the value between each approved field label and the next approved field label.
 - Given the save succeeds, then the latest property info summary appears on the address record without a page reload.
 - Given the record reloads later, then the latest property info row is loaded from Supabase and displayed.
@@ -102,6 +104,7 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 - 2026-06-23: Copy Link uses transient copied feedback and can open a blank tab for manual URL paste.
 - 2026-06-23: Property info address parsing accepts full state names and two-letter state abbreviations so `Arizona 85142` saves as `AZ` plus postal code `85142`.
 - 2026-06-23: Hide FamilyTreeNow paste instructions when showing saved data, and use a click-scoped copy path that avoids the browser Clipboard API permission prompt.
+- 2026-06-23: Property info save can promote a draft map-selected address into a persisted address without requiring an activity event first.
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.

@@ -1,6 +1,23 @@
 # Scratchpad
 
 ## 2026-06-23 — Current Objective
+**Task:** Allow property info save before any activity is logged.
+**Target specs:** `/specs/property-info-enrichment.spec.md`
+
+## Micro-Steps
+- [x] Inspect draft address and property-info save paths.
+- [x] Promote draft map-selected addresses into persisted Supabase address rows during property-info save.
+- [x] Save property info against the new address row without requiring an activity event.
+- [x] Run verification, commit, push, and deploy before starting settings/import work.
+
+## Assumptions
+- Saving property data should create an address record but should not fabricate an activity log.
+- Route/map-selected addresses remain prospects until a later activity or user action moves them.
+
+---
+*Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-06-23 — Current Objective
 **Task:** Hide property lookup paste instructions when saved data exists and reduce permission prompts.
 **Target specs:** `/specs/property-info-enrichment.spec.md`
 

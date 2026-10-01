@@ -36,6 +36,9 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
   const rows = googleFields.filter(([key]) => typeof data[key] === 'string' && data[key] !== 'N/A');
   const url = googlePropertyUrl(searchAddress);
   const assessorUrl = countyAssessorUrl(data);
+  const otherRows = rows.filter(([key]) => !['squareFootage', 'county', 'apnNumber'].includes(key));
+  const summaryValue = (key: string) => typeof data[key] === 'string' && data[key] !== 'N/A' && data[key] ? String(data[key]) : 'Not found';
+  const isGoogleSource = editing || cached?.sourceUrl?.startsWith('https://www.google.com/');
   const submit = async () => {
     if (busy || !confirmed || !rows.length || !text.trim()) return;
     setBusy(true); setError('');
@@ -64,6 +67,21 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
       <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-5">
         {loading ? <p role="status" className="flex gap-2"><Loader2 className="animate-spin" size={20}/>Checking saved property details…</p> : <>
           {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+          <section aria-label="Bid essentials" className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-bold text-blue-950">Square footage for your bid</h3>
+              <p className="mt-1 text-2xl font-black text-slate-900 break-words">{summaryValue('squareFootage')}</p>
+              <p className="mt-1 text-xs text-slate-600">{isGoogleSource ? 'Google AI Overview · unverified' : 'Previously imported property data'}</p>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 border-t border-blue-200 pt-3 text-sm">
+              <div className="min-w-0"><dt className="text-slate-600">County</dt><dd className="font-bold text-slate-900 break-words">{summaryValue('county')}</dd></div>
+              <div className="min-w-0"><dt className="text-slate-600">Parcel number</dt><dd className="font-bold text-slate-900 break-words">{summaryValue('apnNumber')}</dd></div>
+            </dl>
+            {assessorUrl ? <>
+              <a href={assessorUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white border border-blue-200 p-3 font-bold text-blue-700">Open county assessor <ExternalLink size={16}/></a>
+              <p className="text-xs text-slate-600">Confirm the address on the county page. Opening it does not change your saved square footage.</p>
+            </> : <p className="text-xs text-slate-600">{summaryValue('county') === 'Not found' || summaryValue('apnNumber') === 'Not found' ? 'Add County and Parcel Number from Google to populate the assessor link. You can save square footage without them.' : 'Automatic links currently support Maricopa County with a valid parcel number. You can still save these details.'}</p>}
+          </section>
           {!editing && cached && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-950">
             <p className="font-bold">{saved ? 'Saved to CRM and cached' : 'Saved property details'}</p>
             <p>Saved {new Date(cached.createdAt).toLocaleString()}. No new search needed.</p>
@@ -83,12 +101,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
             {parsed.conflicts.length > 0 && <p className="text-sm text-amber-800">Conflicting duplicate fields were excluded: {parsed.conflicts.join(', ')}.</p>}
             {parsed.reportedAddress && <p className="text-sm text-slate-700">Address in pasted text: <strong>{parsed.reportedAddress}</strong></p>}
           </>}
-          {rows.length > 0 && <section><h3 className="font-bold text-slate-900 mb-2">{editing ? 'Review before saving' : 'Property details'}</h3><dl className="divide-y rounded-xl border px-3">{rows.map(([key, label]) => <div key={key} className="py-3 grid grid-cols-2 gap-3 text-sm"><dt className="text-slate-500">{label}</dt><dd className="font-semibold text-slate-900 break-words">{String(data[key])}</dd></div>)}</dl></section>}
-          {assessorUrl && <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700 space-y-2">
-            <p className="font-bold">Check the county record</p>
-            <p>Search Maricopa County using parcel {String(data.apnNumber)}. Confirm the address on the assessor page before using its details.</p>
-            <a href={assessorUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 p-3 font-bold text-blue-700">Open county assessor <ExternalLink size={16}/></a>
-          </div>}
+          {otherRows.length > 0 && <section><h3 className="font-bold text-slate-900 mb-2">Other property details</h3><dl className="divide-y rounded-xl border px-3">{otherRows.map(([key, label]) => <div key={key} className="py-3 grid grid-cols-2 gap-3 text-sm"><dt className="text-slate-500">{label}</dt><dd className="font-semibold text-slate-900 break-words">{String(data[key])}</dd></div>)}</dl></section>}
           {editing && rows.length > 0 && <label className="flex gap-3 items-start rounded-xl bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" disabled={busy} checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0"/><span>I checked that these details belong to <strong>{address}</strong>. Google AI results will be saved as unverified. This becomes the latest property snapshot; previous imports remain in history.</span></label>}
         </>}
       </div>

@@ -926,3 +926,9 @@ Steps: inspect existing save/load; add isolated parser/panel; retain source and 
 Validation: npm run verify passed (existing CSS import/chunk-size warnings). Focused prompt/parser checks passed. Local component harness at 390x844 passed paste, preview, address-confirmation gate, simulated save and refresh display, no horizontal overflow. Harness removed. Live authenticated Supabase save still requires user's phone acceptance run.
 
 Follow-up: add County and Neighborhood to the exact user query, map Neighborhood to subdivision, and offer a user-clicked Maricopa assessor search only for explicitly reported Maricopa county plus valid parcel. Do not infer Google county from city. Verify query/parser/link conditions and rebuild/deploy.
+
+## 2026-10-01 — Bid essentials
+Objective: prioritize square footage, county, parcel in Google panel without dropping other fields.
+Steps: add top summary for preview and cached view; move assessor link into summary; show missing states without blocking partial saves; validate/build/deploy. No automated county fetch in this iteration.
+
+Bid essentials validation: build, TypeScript, deploy artifact and parser checks passed. Component checked at 390x844 with matching document width, prominent square footage, county/APN link and all other fields below. Temporary harness removed.

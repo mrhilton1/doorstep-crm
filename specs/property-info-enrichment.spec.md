@@ -120,3 +120,5 @@ Search prompt updated per user: property details for "{street}" {city} {state} {
 Parser handles bullets or pipe-delimited responses, preserves qualifiers, excludes Not found and conflicting duplicate values.
 
 Follow-up acceptance: County after Address and Neighborhood after Parcel Number in prompt. County is taken from pasted text, not inferred from city. Neighborhood maps to subdivision. Maricopa assessor link uses explicit county plus a validated 8-digit APN (optional letter suffix), strips hyphens, appears in preview and saved view. Other/missing counties or invalid/missing APNs produce no assessor link. Link is external lookup only; assessor retrieval/import is not implemented.
+
+Bid essentials acceptance: display imported square footage prominently, then County and Parcel at top in both preview and cached view. Missing values read Not found; partial imports remain saveable. Keep qualifiers and source label. Populate supported county URL immediately when County/APN are usable. Keep all remaining details below. County data must not overwrite Google square footage; this iteration only opens assessor links.

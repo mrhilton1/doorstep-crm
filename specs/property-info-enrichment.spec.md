@@ -118,3 +118,5 @@ Acceptance: Google icon immediately right of house; full-width phone slide-out; 
 
 Search prompt updated per user: property details for "{street}" {city} {state} {ZIP}. Return ONLY a bulleted list using exactly this template: Address: | Home Type: | Bedrooms: | Bathrooms: | Total Interior Area: | Lot Size: | Year Built: | Roof Material: | Parking Spaces: | HOA Fee: | Parcel Number: | Tax Assessed Value: | Annual Tax Amount:. Use "Not found" if unavailable.
 Parser handles bullets or pipe-delimited responses, preserves qualifiers, excludes Not found and conflicting duplicate values.
+
+Follow-up acceptance: County after Address and Neighborhood after Parcel Number in prompt. County is taken from pasted text, not inferred from city. Neighborhood maps to subdivision. Maricopa assessor link uses explicit county plus a validated 8-digit APN (optional letter suffix), strips hyphens, appears in preview and saved view. Other/missing counties or invalid/missing APNs produce no assessor link. Link is external lookup only; assessor retrieval/import is not implemented.

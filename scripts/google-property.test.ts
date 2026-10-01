@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { googlePropertyPrompt, googlePropertyUrl, parseGoogleProperty } from '../src/lib/googleProperty.ts';
+import { countyAssessorUrl, googlePropertyPrompt, googlePropertyUrl, parseGoogleProperty } from '../src/lib/googleProperty.ts';
 const address = '19848 E Raven Dr, Queen Creek, AZ 85142';
 assert.ok(googlePropertyPrompt(address).startsWith('property details for "19848 E Raven Dr" Queen Creek AZ 85142.'));
 assert.equal(new URL(googlePropertyUrl(address)).searchParams.get('q'), googlePropertyPrompt(address));
@@ -14,3 +14,14 @@ assert.deepEqual(parseGoogleProperty('Bedrooms: 4\nBedrooms: 5').conflicts,['bed
 assert.deepEqual(parseGoogleProperty('Bedrooms: 4\nBedrooms: 5').fields,{});
 assert.deepEqual(parseGoogleProperty('Some random search results 42 square feet').fields,{});
 console.log('Google prompt and parser checks passed.');
+
+assert.ok(googlePropertyPrompt(address).includes('Address: | County: | Home Type:'));
+assert.ok(googlePropertyPrompt(address).includes('Parcel Number: | Neighborhood:'));
+const countyResult = parseGoogleProperty('County: Maricopa County | Parcel Number: 314-04-472 | Neighborhood: Raven Estates');
+assert.equal(countyResult.fields.subdivision, 'Raven Estates');
+assert.equal(countyAssessorUrl(countyResult.fields), 'https://mcassessor.maricopa.gov/mcs/?q=31404472');
+assert.equal(countyAssessorUrl({county:'Pinal County',apnNumber:'31404472'}),null);
+assert.equal(countyAssessorUrl({county:'Maricopa',apnNumber:'Not found'}),null);
+assert.equal(countyAssessorUrl({apnNumber:'31404472'}),null);
+assert.equal(countyAssessorUrl({county:'Maricopa',apnNumber:'31404472&other=1'}),null);
+console.log('County and assessor-link checks passed.');

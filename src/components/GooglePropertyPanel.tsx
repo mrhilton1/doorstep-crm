@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ExternalLink, Loader2 } from 'lucide-react';
-import { googleFields, googlePropertyUrl, parseGoogleProperty } from '../lib/googleProperty';
+import { countyAssessorUrl, googleFields, googlePropertyUrl, parseGoogleProperty } from '../lib/googleProperty';
 
 type RecordView = { parsedData: object; sourceUrl?: string | null; createdAt: number };
 type Props = {
@@ -35,6 +35,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
   const data = editing ? parsed.fields : (cached?.parsedData || {}) as Record<string, unknown>;
   const rows = googleFields.filter(([key]) => typeof data[key] === 'string' && data[key] !== 'N/A');
   const url = googlePropertyUrl(searchAddress);
+  const assessorUrl = countyAssessorUrl(data);
   const submit = async () => {
     if (busy || !confirmed || !rows.length || !text.trim()) return;
     setBusy(true); setError('');
@@ -83,6 +84,11 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
             {parsed.reportedAddress && <p className="text-sm text-slate-700">Address in pasted text: <strong>{parsed.reportedAddress}</strong></p>}
           </>}
           {rows.length > 0 && <section><h3 className="font-bold text-slate-900 mb-2">{editing ? 'Review before saving' : 'Property details'}</h3><dl className="divide-y rounded-xl border px-3">{rows.map(([key, label]) => <div key={key} className="py-3 grid grid-cols-2 gap-3 text-sm"><dt className="text-slate-500">{label}</dt><dd className="font-semibold text-slate-900 break-words">{String(data[key])}</dd></div>)}</dl></section>}
+          {assessorUrl && <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700 space-y-2">
+            <p className="font-bold">Check the county record</p>
+            <p>Search Maricopa County using parcel {String(data.apnNumber)}. Confirm the address on the assessor page before using its details.</p>
+            <a href={assessorUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 p-3 font-bold text-blue-700">Open county assessor <ExternalLink size={16}/></a>
+          </div>}
           {editing && rows.length > 0 && <label className="flex gap-3 items-start rounded-xl bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" disabled={busy} checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0"/><span>I checked that these details belong to <strong>{address}</strong>. Google AI results will be saved as unverified. This becomes the latest property snapshot; previous imports remain in history.</span></label>}
         </>}
       </div>

@@ -7068,7 +7068,7 @@ function PropertyDrawer({
         close={() => setIsGooglePropertyOpen(false)}
         load={() => onLoadLatestPropertyInfo(property)}
         save={(fields, text, url) => onSavePropertyInfo(property, {
-          ...parsePropertyInfoText('', property.address), ...fields,
+          ...parsePropertyInfoText('', property.address), ...fields, county: fields.county || 'N/A',
           ...{ _googleImport: { verification: 'unverified', addressConfirmedByUser: true, importedAt: new Date().toISOString() } }
         }, text, url)} />}
       <div className="px-5 pt-5 pb-4 sm:px-8 sm:pt-8">

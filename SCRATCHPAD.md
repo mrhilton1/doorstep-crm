@@ -924,3 +924,5 @@ Assumptions: mobile uses new-tab search and manual paste; no extension or embedd
 Steps: inspect existing save/load; add isolated parser/panel; retain source and raw text; validate parsing/build/types; deploy for phone test.
 
 Validation: npm run verify passed (existing CSS import/chunk-size warnings). Focused prompt/parser checks passed. Local component harness at 390x844 passed paste, preview, address-confirmation gate, simulated save and refresh display, no horizontal overflow. Harness removed. Live authenticated Supabase save still requires user's phone acceptance run.
+
+Follow-up: add County and Neighborhood to the exact user query, map Neighborhood to subdivision, and offer a user-clicked Maricopa assessor search only for explicitly reported Maricopa county plus valid parcel. Do not infer Google county from city. Verify query/parser/link conditions and rebuild/deploy.

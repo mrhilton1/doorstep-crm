@@ -1,11 +1,13 @@
 export const googlePropertyPrompt = (address: string) => {
   const [street, ...location] = address.replace(/"/g, '').split(',').map(part => part.trim());
-  return `property details for "${street}" ${location.join(' ')}. Return ONLY a bulleted list using exactly this template: Address: | Home Type: | Bedrooms: | Bathrooms: | Total Interior Area: | Lot Size: | Year Built: | Roof Material: | Parking Spaces: | HOA Fee: | Parcel Number: | Tax Assessed Value: | Annual Tax Amount:. Use "Not found" if unavailable.`;
+  return `property details for "${street}" ${location.join(' ')}. Return ONLY a bulleted list using exactly this template: Address: | County: | Home Type: | Bedrooms: | Bathrooms: | Total Interior Area: | Lot Size: | Year Built: | Roof Material: | Parking Spaces: | HOA Fee: | Parcel Number: | Neighborhood: | Tax Assessed Value: | Annual Tax Amount:. Use "Not found" if unavailable.`;
 };
 export const googlePropertyUrl = (address: string) =>
   `https://www.google.com/search?q=${encodeURIComponent(googlePropertyPrompt(address))}`;
 
 export const googleFields = [
+  ['county', 'County', ['County']],
+  ['subdivision', 'Neighborhood', ['Neighborhood', 'Subdivision']],
   ['bedrooms', 'Bedrooms', ['Bedrooms', 'Beds']],
   ['bathrooms', 'Bathrooms', ['Bathrooms', 'Baths']],
   ['squareFootage', 'Interior square feet', ['Total Interior Area', 'Interior Area', 'Living Area', 'Square Footage', 'Square Feet', 'Sq Ft']],
@@ -44,4 +46,13 @@ export function parseGoogleProperty(text: string) {
   }
   for (const key of conflicts) delete fields[key];
   return { fields, reportedAddress, conflicts: [...conflicts] };
+}
+
+// Explicit county matching prevents routing same-named cities to the wrong assessor.
+export function countyAssessorUrl(fields: Record<string, unknown>): string | null {
+  if (typeof fields.county !== 'string' || !/^maricopa(?: county)?$/i.test(fields.county.trim())) return null;
+  if (typeof fields.apnNumber !== 'string') return null;
+  const parcel = fields.apnNumber.trim().replace(/[-\s]/g, '');
+  if (!/^\d{8}[a-z]?$/i.test(parcel)) return null;
+  return `https://mcassessor.maricopa.gov/mcs/?q=${encodeURIComponent(parcel)}`;
 }

@@ -21,6 +21,10 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudMessage, setCloudMessage] = useState('');
+  const cloudAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => cloudAbort.current?.abort(), []);
   const [countyBusy, setCountyBusy] = useState(false);
   const [countyError, setCountyError] = useState('');
   const [countyRetry, setCountyRetry] = useState(0);
@@ -67,6 +71,25 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
     })();
     return () => { active=false; };
   }, [cached?.id, editing, countyRetry]);
+  const testCloudLookup = async () => {
+    if(cloudBusy || text.trim()) return;
+    setCloudBusy(true); setCloudMessage('Starting a desktop browser in Cloudflare…');
+    const controller = new AbortController(); cloudAbort.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(),35000);
+    try {
+      const {data:sessionData} = await supabase.auth.getSession();
+      if(!sessionData.session) throw new Error('Sign in to test cloud lookup.');
+      const response = await fetch('https://doorstep-browser-pilot.steep-field-929d.workers.dev', {
+        method:'POST',headers:{'content-type':'application/json',Authorization:`Bearer ${sessionData.session.access_token}`},
+        body:JSON.stringify({address:searchAddress}),signal:controller.signal
+      });
+      const result = await response.json();
+      if(!response.ok) throw new Error(result.error || result.message || 'Cloud lookup failed.');
+      setCloudMessage(result.message + (result.elapsedMs ? ` (${(result.elapsedMs/1000).toFixed(1)} seconds)` : ''));
+      if(result.status === 'candidate' && typeof result.rawText === 'string') {setText(result.rawText);setConfirmed(false);}
+    } catch(e:any) {setCloudMessage(controller.signal.aborted ? 'Cloud lookup stopped. You can use manual copy/paste.' : e.message || 'Cloud lookup failed.');}
+    finally {window.clearTimeout(timeout);setCloudBusy(false);}
+  };
   const submit = async () => {
     if (busy || !confirmed || !rows.length || !text.trim()) return;
     setBusy(true); setError('');
@@ -131,9 +154,12 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
               <p>Open Google, copy the AI Overview’s property details, then return here and paste. Google opens in another tab.</p>
               <a href={url} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 p-3 font-bold text-white">Search this address <ExternalLink size={16}/></a>
               <p>Complete any Google verification there. If no AI Overview appears, try again later.</p>
+              <button type="button" disabled={cloudBusy || busy || Boolean(text.trim())} onClick={testCloudLookup} className="w-full min-h-11 rounded-xl border border-blue-200 bg-white p-3 font-bold text-blue-700 disabled:opacity-40">{cloudBusy ? 'Testing cloud lookup…' : 'Test cloud lookup (pilot)'}</button>
+              <p className="text-xs">Works from phone or desktop. Google may block the cloud browser. Results come back for review; nothing is saved automatically. Clear pasted text before testing.</p>
+              {cloudMessage && <p role="status" className="rounded-lg bg-white p-3 text-sm">{cloudMessage}</p>}
             </div>
             <label className="block text-sm font-bold text-slate-800">Paste Google property details
-              <textarea disabled={busy} value={text} maxLength={30000} onChange={e => { setText(e.target.value); setConfirmed(false); }} placeholder="Address: …\nBedrooms: 4\nTotal Interior Area: 2,757 square feet" className="mt-2 w-full min-h-44 rounded-xl border border-slate-300 p-3 text-base font-normal"/>
+              <textarea disabled={busy || cloudBusy} value={text} maxLength={30000} onChange={e => { setText(e.target.value); setConfirmed(false); }} placeholder="Address: …\nBedrooms: 4\nTotal Interior Area: 2,757 square feet" className="mt-2 w-full min-h-44 rounded-xl border border-slate-300 p-3 text-base font-normal"/>
             </label>
             {text.trim() && !rows.length && <p role="status" className="text-sm text-amber-800">No labeled property fields found. Copy the bulleted details with labels such as Bedrooms: and Year Built:.</p>}
             {parsed.conflicts.length > 0 && <p className="text-sm text-amber-800">Conflicting duplicate fields were excluded: {parsed.conflicts.join(', ')}.</p>}

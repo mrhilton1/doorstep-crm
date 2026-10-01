@@ -56,3 +56,6 @@ Only deploy `dist`. Never deploy the repository root, because root-level docs an
 
 ## County enrichment
 `POST /api/property-assessor` is a Pages Function using the caller's Supabase JWT and existing property_info_records RLS. It accepts only a saved record ID; county, parcel and address come from that authorized row. Maricopa public-page property facts are cached under parsed_data.countyAssessor for 30 days. Google fields and raw text remain intact. Detailed building API access requires a county-issued token and is not implemented in this public-page adapter. No new environment secrets or schema changes.
+
+## Cloud browser pilot
+Isolated Worker `doorstep-browser-pilot` deployed with `wrangler deploy --config workers/browser-pilot/wrangler.jsonc`. Browser binding uses content Quick Action, 1365x900 viewport, networkidle2, 20s navigation timeout. Only authenticated active DoorStep members can call; 2 requests/min per user and 6/min pilot-wide per Cloudflare rate limiter (approximate local enforcement, not global billing cap). One attempt, no retries or challenge bypass. Pilot returns candidate text for review and does not write CRM records. Supabase URL/anon key in worker vars are public browser-equivalent configuration, not privileged credentials.

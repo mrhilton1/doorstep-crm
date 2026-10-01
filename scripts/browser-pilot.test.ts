@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {extractOverview} from '../workers/browser-pilot/extract';
+import worker from '../workers/browser-pilot/index';
+const address='19848 E Raven Dr, Queen Creek, AZ 85142';
+const fixture='<section><h2>AI Overview</h2><ul><li>Address: '+address+'</li><li>County: Maricopa County</li><li>Parcel Number: 314-04-472</li><li>Total Interior Area: 2,501 square feet</li></ul></section>';
+const result=extractOverview(fixture,address);
+assert.equal(result.status,'candidate');assert.equal(result.fields?.squareFootage,'2,501 square feet');
+assert.equal(extractOverview(fixture,'19828 E Raven Dr, Queen Creek, AZ 85142').status,'address_unverified');
+assert.equal(extractOverview('<p>Our systems have detected unusual traffic from your computer network.</p>',address).status,'verification_required');
+assert.equal(extractOverview('<p>Before you continue to Google</p>',address).status,'consent_required');
+assert.equal(extractOverview('<ul><li>Bedrooms: 4</li></ul>',address).status,'no_overview');
+assert.equal(extractOverview('<h2>AI Overview</h2><p>Nothing relevant</p>',address).status,'unrecognized_overview');
+assert.equal((await worker.fetch(new Request('https://pilot.test/',{method:'POST'}),{})).status,401);
+assert.equal((await worker.fetch(new Request('https://pilot.test/',{method:'POST',headers:{Origin:'https://untrusted.test'}}),{})).status,403);
+console.log('Pilot extraction, challenge, missing result, address mismatch and access checks passed.');

@@ -939,3 +939,8 @@ Evidence: ordinary server HTTP can load parcel HTML. Building JSON request retur
 Steps: public-page adapter with strict address/parcel match; authenticated RLS-backed Pages endpoint updating only nested county metadata with optimistic concurrency; auto trigger on load/save; show partial source details separately; meaningful auth/parser/cache tests; deploy. No bypass of county API access and no owner/contact harvesting.
 
 Validation: live Node server retrieval matched 19848 E Raven Dr / 31404472 and extracted 12 public property fields. API details 403 confirmed; no retry/bypass. Parser/address/cache/access-denial/concurrency tests and app verify passed. Phone component test with mocked auth/backend populated county details automatically on mount, no click, 390px no overflow. Production authenticated save cannot be verified here because browser is signed out.
+
+## 2026-10-01 — Cloudflare browser pilot
+User chose cloud browser pilot usable on mobile and desktop. Build isolated Browser Run worker with authenticated on-demand request, active CRM membership check, rate limits, fixed Google destination, 20s navigation and no retries/challenge bypass. Classify challenge/no overview/address mismatch separately. Return candidate text for existing review/save; no automatic lead writes. Test a known address from cloud and report actual outcome.
+
+Cloud pilot evidence: real Browser Run remote test for 19848 E Raven Dr returned verification_required in 5.376 seconds, browser time 3988ms. No overview extracted or record written. Temporary fixed-address remote probe stopped and deleted. Worker dry-run, extraction/challenge/address/access tests passed. This one-shot pilot stops at verification and uses manual fallback, not a persistent live-view handoff.

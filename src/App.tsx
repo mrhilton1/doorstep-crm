@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, grantedDeviceLocation, requestDeviceLocation } from './lib/deviceLocation';
 import { GooglePropertyPanel } from './components/GooglePropertyPanel';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
@@ -2005,8 +2006,8 @@ const LeafletMapController = ({ center, zoom }: { center: [number, number] | nul
     if (center && map) {
       const currentCenter = map.getCenter();
       const dist = Math.sqrt(Math.pow(currentCenter.lat - center[0], 2) + Math.pow(currentCenter.lng - center[1], 2));
-      if (dist > 0.0001) {
-        const targetZoom = zoom || 17;
+      const targetZoom = zoom ?? 17;
+      if (dist > 0.0001 || map.getZoom() !== targetZoom) {
         map.flyTo(center, targetZoom, { animate: true, duration: 1.5 });
       }
     }
@@ -3070,8 +3071,8 @@ function CrmApp({
   const [isRouteActive, setIsRouteActive] = useState(false);
   const [workingRouteId, setWorkingRouteId] = useState<string | null>(null);
   const [selectingStartForRouteId, setSelectingStartForRouteId] = useState<string | null>(null);
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-  const [mapZoom, setMapZoom] = useState<number>(13);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(DEFAULT_MAP_CENTER);
+  const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM);
 
   const [mapMode, setMapMode] = useState<'street' | 'satellite'>('street');
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
@@ -3461,46 +3462,27 @@ function CrmApp({
 
   // Initial Location Logic - One-time setup
   useEffect(() => {
-    if (hasInitializedLocation) return;
-
+    if (hasInitializedLocation || currentView !== 'map' || dataStatus === 'loading') return;
+    let active = true;
     const initializeMap = async () => {
-      // 1. If we have Supabase-loaded properties, center on the first record.
-      if (properties.length > 0) {
-        const p = properties[0];
-        setMapCenter([p.lat, p.lng]);
-        setMapZoom(17);
+      const devicePosition = await grantedDeviceLocation(navigator);
+      if (!active) return;
+      if (devicePosition) {
+        setUserLocation(devicePosition);
+        setMapCenter(devicePosition);
+        setMapZoom(18);
         setHasInitializedLocation(true);
         return;
       }
-
-      // 2. Try business city position from settings.
-      const city = settings.businessInfo.city;
-      if (city) {
-        try {
-          const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(city)}&limit=1`);
-          const data = await res.json();
-          if (data.features && data.features.length > 0) {
-            const f = data.features[0];
-            const pos: [number, number] = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
-            setMapCenter(pos);
-            setMapZoom(12); // Contextual city zoom
-            setHasInitializedLocation(true);
-            return;
-          }
-        } catch (e) {
-          console.error("Failed to fetch business city pos", e);
-        }
-      }
-
-      // 3. Default fallback if no saved workspace location exists. Do not ask for browser location on page load.
-      const defaultLoc: [number, number] = [39.8283, -98.5795]; // Center of USA
-      setMapCenter(defaultLoc);
-      setMapZoom(4);
+      // User-selected default when device location is unavailable or not permitted.
+      setMapCenter(DEFAULT_MAP_CENTER);
+      setMapZoom(DEFAULT_MAP_ZOOM);
       setHasInitializedLocation(true);
     };
 
     initializeMap();
-  }, [hasInitializedLocation, settings.businessInfo.city, properties.length]);
+    return () => { active = false; };
+  }, [hasInitializedLocation, currentView, dataStatus]);
 
   const handleDeleteProperty = useCallback(async (id: string) => {
     if (workspaceId) {
@@ -5170,7 +5152,7 @@ function CrmApp({
         {hasValidKey ? (
           <APIProvider apiKey={API_KEY}>
             <GoogleMap
-              defaultCenter={mapCenter ? { lat: mapCenter[0], lng: mapCenter[1] } : { lat: 39.8283, lng: -98.5795 }}
+              defaultCenter={mapCenter ? { lat: mapCenter[0], lng: mapCenter[1] } : { lat: DEFAULT_MAP_CENTER[0], lng: DEFAULT_MAP_CENTER[1] }}
               defaultZoom={mapZoom}
               mapId="e39d489ae42fed52"
               className="h-full w-full"
@@ -5321,7 +5303,7 @@ function CrmApp({
           </APIProvider>
         ) : (
           <MapContainer
-            center={mapCenter ? [mapCenter[0], mapCenter[1]] : [39.8283, -98.5795]}
+            center={mapCenter ? [mapCenter[0], mapCenter[1]] : DEFAULT_MAP_CENTER}
             zoom={mapZoom}
             scrollWheelZoom={true}
             className="h-full w-full"
@@ -5486,21 +5468,22 @@ function CrmApp({
           <button
             onClick={(e) => {
               stopMapControlEvent(e);
-              if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((pos) => {
-                  setMapCenter([pos.coords.latitude, pos.coords.longitude]);
-                  setMapZoom(18);
-                }, (err) => {
-                  console.error("Location error", err);
-                  showNotice('Location Unavailable', 'Could not get your location. Please check permissions.', 'danger');
-                }, { enableHighAccuracy: true });
-              }
+              if (isLocating) return;
+              setIsLocating(true);
+              setHasInitializedLocation(true);
+              requestDeviceLocation(navigator.geolocation).then(position => {
+                setUserLocation(position);
+                setMapCenter(position);
+                setMapZoom(18);
+              }).catch(error => showNotice('Location Unavailable', error.message, 'danger'))
+                .finally(() => setIsLocating(false));
             }}
             className="p-3 bg-white/95 backdrop-blur-md rounded-full shadow-lg border border-[#E2E8F0] text-[#1E293B] active:scale-95 transition-transform"
-            title="Center on My Location"
+            disabled={isLocating}
+            title={isLocating ? "Finding your location…" : "Center on My Location"}
             aria-label="Center on my location"
           >
-            <Target className="w-6 h-6" />
+            <Target className={cn("w-6 h-6", isLocating && "animate-pulse")} />
           </button>
           <button
             onClick={(e) => {

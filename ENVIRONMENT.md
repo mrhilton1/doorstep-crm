@@ -53,3 +53,6 @@ Only deploy `dist`. Never deploy the repository root, because root-level docs an
 - `npm run verify`
 - `curl -I https://app.clearview.win/`
 - `curl -s https://app.clearview.win/config`
+
+## County enrichment
+`POST /api/property-assessor` is a Pages Function using the caller's Supabase JWT and existing property_info_records RLS. It accepts only a saved record ID; county, parcel and address come from that authorized row. Maricopa public-page property facts are cached under parsed_data.countyAssessor for 30 days. Google fields and raw text remain intact. Detailed building API access requires a county-issued token and is not implemented in this public-page adapter. No new environment secrets or schema changes.

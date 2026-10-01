@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { X, ExternalLink, Loader2 } from 'lucide-react';
 import { countyAssessorUrl, googleFields, googlePropertyUrl, parseGoogleProperty } from '../lib/googleProperty';
 
-type RecordView = { parsedData: object; sourceUrl?: string | null; createdAt: number };
+type RecordView = { id?: string; parsedData: object; sourceUrl?: string | null; createdAt: number };
 type Props = {
   key?: string;
   address: string;
@@ -20,6 +21,9 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [countyBusy, setCountyBusy] = useState(false);
+  const [countyError, setCountyError] = useState('');
+  const [countyRetry, setCountyRetry] = useState(0);
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -39,6 +43,30 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
   const otherRows = rows.filter(([key]) => !['squareFootage', 'county', 'apnNumber'].includes(key));
   const summaryValue = (key: string) => typeof data[key] === 'string' && data[key] !== 'N/A' && data[key] ? String(data[key]) : 'Not found';
   const isGoogleSource = editing || cached?.sourceUrl?.startsWith('https://www.google.com/');
+  const countyData = (cached?.parsedData as any)?.countyAssessor;
+  useEffect(() => {
+    if (editing || !cached?.id || !countyAssessorUrl(cached.parsedData as Record<string, unknown>)) return;
+    let active = true;
+    setCountyBusy(true); setCountyError('');
+    (async () => {
+      try {
+        const {data:sessionData} = await supabase.auth.getSession();
+        if (!sessionData.session) throw new Error('Sign in to load county details.');
+        const response = await fetch('/api/property-assessor', {method:'POST',
+          headers:{'content-type':'application/json',Authorization:`Bearer ${sessionData.session.access_token}`},
+          body:JSON.stringify({recordId:cached.id}),signal:AbortSignal.timeout(25000)});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'County lookup failed.');
+        if (active) {
+          setCached(previous => previous ? {...previous,parsedData:{...previous.parsedData,countyAssessor:result.assessor}} : previous);
+          // Refresh the parent address summary after the backend persists the enrichment.
+          await load();
+        }
+      } catch(e:any) { if(active) setCountyError(e.message || 'County lookup failed.'); }
+      finally { if(active) setCountyBusy(false); }
+    })();
+    return () => { active=false; };
+  }, [cached?.id, editing, countyRetry]);
   const submit = async () => {
     if (busy || !confirmed || !rows.length || !text.trim()) return;
     setBusy(true); setError('');
@@ -79,7 +107,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
             </dl>
             {assessorUrl ? <>
               <a href={assessorUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white border border-blue-200 p-3 font-bold text-blue-700">Open county assessor <ExternalLink size={16}/></a>
-              <p className="text-xs text-slate-600">Confirm the address on the county page. Opening it does not change your saved square footage.</p>
+              <p className="text-xs text-slate-600">Confirm the address on the county page. County details load separately after saving; your original square footage stays unchanged.</p>
             </> : <p className="text-xs text-slate-600">{summaryValue('county') === 'Not found' || summaryValue('apnNumber') === 'Not found' ? 'Add County and Parcel Number from Google to populate the assessor link. You can save square footage without them.' : 'Automatic links currently support Maricopa County with a valid parcel number. You can still save these details.'}</p>}
           </section>
           {!editing && cached && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-950">
@@ -88,6 +116,16 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
             <p className="mt-2">{cached.sourceUrl?.startsWith('https://www.google.com/') ? 'Source: Google AI Overview · unverified' : 'Source: previous property import'}</p>
             {cached.sourceUrl?.startsWith('https://') && <a className="underline" href={cached.sourceUrl} target="_blank" rel="noopener noreferrer">View source search</a>}
           </div>}
+          {!editing && assessorUrl && <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3" aria-label="County enrichment">
+            <h3 className="font-bold text-slate-900">County assessor details</h3>
+            {countyBusy && <p role="status" className="text-sm flex items-center gap-2"><Loader2 size={16} className="animate-spin"/>Loading county record in the background…</p>}
+            {countyError && <div role="alert" className="text-sm text-red-800"><p>{countyError}</p><button type="button" onClick={() => setCountyRetry(value=>value+1)} className="mt-2 min-h-11 underline font-bold">Retry county lookup</button></div>}
+            {countyData && <>
+              <p className="text-xs text-slate-600">Maricopa County · address matched · fetched {new Date(countyData.fetchedAt).toLocaleString()}</p>
+              <p className="text-sm text-slate-700">{countyData.notice}</p>
+              <dl className="divide-y divide-emerald-200">{Object.entries(countyData.fields || {}).map(([label,value]) => <div key={label} className="py-2 grid grid-cols-2 gap-3 text-sm"><dt className="text-slate-600">{label}</dt><dd className="font-semibold break-words">{String(value)}</dd></div>)}</dl>
+            </>}
+          </section>}
           {editing && <>
             <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-950 space-y-3">
               <p>Open Google, copy the AI Overview’s property details, then return here and paste. Google opens in another tab.</p>

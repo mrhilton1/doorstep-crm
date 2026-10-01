@@ -932,3 +932,10 @@ Objective: prioritize square footage, county, parcel in Google panel without dro
 Steps: add top summary for preview and cached view; move assessor link into summary; show missing states without blocking partial saves; validate/build/deploy. No automated county fetch in this iteration.
 
 Bid essentials validation: build, TypeScript, deploy artifact and parser checks passed. Component checked at 390x844 with matching document width, prominent square footage, county/APN link and all other fields below. Temporary harness removed.
+
+## 2026-10-01 — Automatic assessor enrichment
+Objective: opening Google panel with saved County/APN triggers authenticated background retrieval and durable caching.
+Evidence: ordinary server HTTP can load parcel HTML. Building JSON request returned 403; official API documentation requires issued token. Public HTML contains address, parcel, lot, subdivision, school districts and sale/deed facts.
+Steps: public-page adapter with strict address/parcel match; authenticated RLS-backed Pages endpoint updating only nested county metadata with optimistic concurrency; auto trigger on load/save; show partial source details separately; meaningful auth/parser/cache tests; deploy. No bypass of county API access and no owner/contact harvesting.
+
+Validation: live Node server retrieval matched 19848 E Raven Dr / 31404472 and extracted 12 public property fields. API details 403 confirmed; no retry/bypass. Parser/address/cache/access-denial/concurrency tests and app verify passed. Phone component test with mocked auth/backend populated county details automatically on mount, no click, 390px no overflow. Production authenticated save cannot be verified here because browser is signed out.

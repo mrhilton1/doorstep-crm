@@ -126,3 +126,15 @@ Bid essentials acceptance: display imported square footage prominently, then Cou
 Automatic enrichment acceptance: on opening a saved property with supported county/APN, and after Google save, request backend assessor enrichment without another click. Use authenticated user's RLS; no service key. Verify exact normalized address and parcel. Cache nested countyAssessor for 30 days in existing row; preserve source/raw text and Google values. Compare updated_at before patching to prevent lost updates. Show loading, retryable failures, fetched timestamp and fields separately. Public-page-only enrichment is explicitly partial; building detail API requires issued token.
 
 Cloud browser pilot: manual Test cloud lookup action in import view on all device sizes; no UA-based claims of desktop access. Authenticate and require active CRM membership; fixed Google query template, bounded address/body/output, capped page timeout and request rate. Only extract labeled list under AI Overview marker, require returned address match; no generic search-result parsing as overview. On challenge, stop and show copy/paste fallback. One-shot sessions close automatically; no live CAPTCHA handoff in pilot. Candidate text requires existing review/confirm/save.
+
+## Human verification handoff — supersedes one-shot pilot
+- On-device Google remains primary; verification occurs in its own tab; paste results on return; no cloud browser starts automatically.
+- Cloud fallback launches only on explicit click. Return a short-lived interactive Live View for challenge/consent/missing overview. Embed if supported and provide external Live View fallback.
+- Authenticated user owns one session; requests use unguessable lookup ID, cannot access another user's session, and cannot resume an old session against a new address.
+- Continue reads the same browser tab after user verification; only Google search results with matching address produce preview data. No CRM write until existing review/save.
+- Close on success/cancel, panel dismissal best effort, and backend five-minute alarm; no polling or automatic retry.
+- Preserve pasted text; cloud fallback disabled while text exists.
+
+Latest acceptance overrides review-only cloud behavior: cloud candidates with exact normalized full address automatically save through existing Supabase workflow, metadata marks automatic address match and unverified Google source. Manual paste retains user confirmation. Trusted mouse/touch/key/wheel input in browser frames extends 60s idle deadline; rendered pages/status polling do not. Server checks every5s and closes idle/success sessions independently of the client; five-minute hard limit remains.
+
+Display implementation: hosted Live View did not render in the embedded test. Use authenticated browser screenshot and user-tap/scroll forwarding in the panel, with full Live View as optional external control. Screens are temporary session state, never CRM data. Browser closes before client Supabase persistence so save latency does not add browser time. If the app closes before receiving a candidate, no server-only save is promised.

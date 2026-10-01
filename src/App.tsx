@@ -7067,9 +7067,9 @@ function PropertyDrawer({
         searchAddress={[property.address.split(',')[0], parseAddressPartsForPropertyInfo(property.address).city, `${parseAddressPartsForPropertyInfo(property.address).state} ${parseAddressPartsForPropertyInfo(property.address).postalCode || ''}`].join(', ')}
         close={() => setIsGooglePropertyOpen(false)}
         load={() => onLoadLatestPropertyInfo(property)}
-        save={(fields, text, url) => onSavePropertyInfo(property, {
+        save={(fields, text, url, automatic = false) => onSavePropertyInfo(property, {
           ...parsePropertyInfoText('', property.address), ...fields, county: fields.county || 'N/A',
-          ...{ _googleImport: { verification: 'unverified', addressConfirmedByUser: true, importedAt: new Date().toISOString() } }
+          ...{ _googleImport: { verification: 'unverified', addressConfirmedByUser: !automatic, addressMatchedAutomatically: automatic, importedAt: new Date().toISOString() } }
         }, text, url)} />}
       <div className="px-5 pt-5 pb-4 sm:px-8 sm:pt-8">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">

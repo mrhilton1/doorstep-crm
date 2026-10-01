@@ -9,7 +9,7 @@ type Props = {
   address: string;
   searchAddress: string;
   load: () => Promise<RecordView | null>;
-  save: (fields: Record<string, string>, text: string, url: string) => Promise<RecordView>;
+  save: (fields: Record<string, string>, text: string, url: string, automatic?: boolean) => Promise<RecordView>;
   close: () => void;
 };
 export function GooglePropertyPanel({ address, searchAddress, load, save, close }: Props) {
@@ -24,7 +24,61 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudMessage, setCloudMessage] = useState('');
   const cloudAbort = useRef<AbortController | null>(null);
-  useEffect(() => () => cloudAbort.current?.abort(), []);
+  const cloudSaving=useRef(false);
+  const acceptedCloudLookups=useRef(new Set<string>());
+  const [cloudScreen,setCloudScreen]=useState<string>('');
+  const [cloudInputBusy,setCloudInputBusy]=useState(false);
+  const [cloudView, setCloudView] = useState<{liveViewUrl:string;expiresAt:number} | null>(null);
+  const cloudSession = useRef<{id:string;token:string} | null>(null);
+  const cloudEndpoint = 'https://doorstep-browser-pilot.steep-field-929d.workers.dev';
+  const cancelCloud = async () => {
+    const session=cloudSession.current;
+    if(!session)return;
+    cloudSession.current=null;
+    try { await fetch(cloudEndpoint,{method:'POST',keepalive:true,
+      headers:{'content-type':'application/json',Authorization:`Bearer ${session.token}`},
+      body:JSON.stringify({action:'cancel',lookupId:session.id,address:searchAddress})}); } catch { /* Backend alarm closes abandoned sessions. */ }
+  };
+  useEffect(() => () => {cloudAbort.current?.abort();void cancelCloud();}, []);
+  useEffect(() => {
+    if(!cloudView)return;
+    const timer=window.setTimeout(()=>{setCloudView(null);setCloudMessage('Cloud session expired. Open Google on your device or start a new lookup.');void cancelCloud();},Math.max(0,cloudView.expiresAt-Date.now()));
+    return ()=>window.clearTimeout(timer);
+  },[cloudView]);
+  const acceptCloudResult = async (result:any) => {
+    if(result.status!=='candidate' || typeof result.rawText!=='string' || typeof result.lookupId!=='string' || cloudSaving.current || acceptedCloudLookups.current.has(result.lookupId))return;
+    acceptedCloudLookups.current.add(result.lookupId);
+    cloudSaving.current=true;setCloudView(null);cloudSession.current=null;
+    setText(result.rawText);setConfirmed(false);setBusy(true);
+    setCloudMessage('Address matched. Saving property details to the CRM…');
+    try {
+      const fields=parseGoogleProperty(result.rawText).fields;
+      const record=await save(fields,result.rawText,googlePropertyUrl(searchAddress),true);
+      setCached(record);setEditing(false);setText('');setSaved(true);
+      setCloudMessage('Saved to CRM. Cloud browser closed.');
+    } catch(e:any){setError(e.message || 'Save failed. Extracted details remain below for retry.');}
+    finally{setBusy(false);cloudSaving.current=false;}
+  };
+  useEffect(()=>{
+    if(!cloudView)return;
+    let stopped=false;let timer:number;
+    const poll=async()=>{
+      const session=cloudSession.current;if(!session||stopped)return;
+      try {
+        const response=await fetch(cloudEndpoint,{method:'POST',headers:{'content-type':'application/json',Authorization:`Bearer ${session.token}`},
+          body:JSON.stringify({action:'status',lookupId:session.id,address:searchAddress}),signal:AbortSignal.timeout(10000)});
+        if(stopped)return;
+        const result=await response.json();
+        if(stopped)return;
+        if(response.ok && typeof result.screen==='string')setCloudScreen(result.screen);
+        if(response.ok && result.status==='candidate'){await acceptCloudResult(result);return;}
+        if(response.ok && !['waiting','busy'].includes(result.status)){setCloudMessage(result.message);setCloudView(null);cloudSession.current=null;return;}
+      } catch { /* Keep the existing session; server enforces idle cleanup. */ }
+      if(!stopped)timer=window.setTimeout(poll,3000);
+    };
+    timer=window.setTimeout(poll,3000);
+    return()=>{stopped=true;window.clearTimeout(timer);};
+  },[cloudView]);
   const [countyBusy, setCountyBusy] = useState(false);
   const [countyError, setCountyError] = useState('');
   const [countyRetry, setCountyRetry] = useState(0);
@@ -71,24 +125,41 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
     })();
     return () => { active=false; };
   }, [cached?.id, editing, countyRetry]);
-  const testCloudLookup = async () => {
+  const testCloudLookup = async (action:'start'|'resume'='start') => {
     if(cloudBusy || text.trim()) return;
-    setCloudBusy(true); setCloudMessage('Starting a desktop browser in Cloudflare…');
+    if(action==='resume' && !cloudSession.current)return;
+    setCloudBusy(true); setCloudMessage(action==='start'?'Opening a cloud browser…':'Reading the verified Google page…');
     const controller = new AbortController(); cloudAbort.current = controller;
     const timeout = window.setTimeout(() => controller.abort(),35000);
     try {
       const {data:sessionData} = await supabase.auth.getSession();
       if(!sessionData.session) throw new Error('Sign in to test cloud lookup.');
-      const response = await fetch('https://doorstep-browser-pilot.steep-field-929d.workers.dev', {
+      const lookupId=action==='start'?crypto.randomUUID():cloudSession.current!.id;
+      cloudSession.current={id:lookupId,token:sessionData.session.access_token};
+      const response = await fetch(cloudEndpoint, {
         method:'POST',headers:{'content-type':'application/json',Authorization:`Bearer ${sessionData.session.access_token}`},
-        body:JSON.stringify({address:searchAddress}),signal:controller.signal
+        body:JSON.stringify({action,lookupId,address:searchAddress}),signal:controller.signal
       });
       const result = await response.json();
+      if(controller.signal.aborted)return;
       if(!response.ok) throw new Error(result.error || result.message || 'Cloud lookup failed.');
       setCloudMessage(result.message + (result.elapsedMs ? ` (${(result.elapsedMs/1000).toFixed(1)} seconds)` : ''));
-      if(result.status === 'candidate' && typeof result.rawText === 'string') {setText(result.rawText);setConfirmed(false);}
-    } catch(e:any) {setCloudMessage(controller.signal.aborted ? 'Cloud lookup stopped. You can use manual copy/paste.' : e.message || 'Cloud lookup failed.');}
+      if(result.status==='human_input' && typeof result.liveViewUrl==='string' && new URL(result.liveViewUrl).origin==='https://live.browser.run') {setCloudScreen(result.screen || '');setCloudView({liveViewUrl:result.liveViewUrl,expiresAt:result.expiresAt});}
+      else if(result.status!=='busy'){setCloudView(null);cloudSession.current=null;}
+      if(result.status === 'candidate') await acceptCloudResult(result);
+    } catch(e:any) {await cancelCloud();setCloudView(null);setCloudMessage(controller.signal.aborted ? 'Cloud lookup stopped. You can use manual copy/paste.' : e.message || 'Cloud lookup failed.');}
     finally {window.clearTimeout(timeout);setCloudBusy(false);}
+  };
+  const sendCloudInput=async(input:{x?:number;y?:number;scroll?:number})=>{
+    const session=cloudSession.current;if(!session||cloudInputBusy)return;
+    setCloudInputBusy(true);
+    try {
+      const response=await fetch(cloudEndpoint,{method:'POST',headers:{'content-type':'application/json',Authorization:`Bearer ${session.token}`},
+        body:JSON.stringify({action:'input',lookupId:session.id,address:searchAddress,input}),signal:AbortSignal.timeout(10000)});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||result.message);
+      if(result.status==='expired'){setCloudView(null);setCloudMessage(result.message);cloudSession.current=null;}
+    }catch{setCloudMessage('That tap could not be sent. Try again or open the live browser in a separate tab.');}
+    finally{setCloudInputBusy(false);}
   };
   const submit = async () => {
     if (busy || !confirmed || !rows.length || !text.trim()) return;
@@ -151,15 +222,25 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
           </section>}
           {editing && <>
             <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-950 space-y-3">
-              <p>Open Google, copy the AI Overview’s property details, then return here and paste. Google opens in another tab.</p>
-              <a href={url} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 p-3 font-bold text-white">Search this address <ExternalLink size={16}/></a>
-              <p>Complete any Google verification there. If no AI Overview appears, try again later.</p>
-              <button type="button" disabled={cloudBusy || busy || Boolean(text.trim())} onClick={testCloudLookup} className="w-full min-h-11 rounded-xl border border-blue-200 bg-white p-3 font-bold text-blue-700 disabled:opacity-40">{cloudBusy ? 'Testing cloud lookup…' : 'Test cloud lookup (pilot)'}</button>
-              <p className="text-xs">Works from phone or desktop. Google may block the cloud browser. Results come back for review; nothing is saved automatically. Clear pasted text before testing.</p>
+              <p className="font-bold">1. Use Google on this device</p><p>Complete any verification in the Google tab, copy the property details, then return here and paste. Your open lead stays here. No cloud browser time is used.</p>
+              <a href={url} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 p-3 font-bold text-white">Open Google on this device <ExternalLink size={16}/></a>
+              <p className="text-xs">Google opens in its own tab. If no AI Overview appears, try again later.</p><p className="border-t border-blue-200 pt-3 font-bold">2. Optional cloud browser</p>
+              <button type="button" disabled={cloudBusy || busy || Boolean(text.trim()) || Boolean(cloudView)} onClick={() => void testCloudLookup()} className="w-full min-h-11 rounded-xl border border-blue-200 bg-white p-3 font-bold text-blue-700 disabled:opacity-40">{cloudBusy ? 'Working…' : 'Open cloud lookup (pilot)'}</button>
+              <p className="text-xs">Uses Cloudflare browser time. If Google requests verification, complete it in the live browser. Closes after 60 seconds without interaction, with a five-minute maximum. Matching property details save automatically to the CRM; Google data stays labeled unverified.</p>
               {cloudMessage && <p role="status" className="rounded-lg bg-white p-3 text-sm">{cloudMessage}</p>}
             </div>
+            {cloudView && <section aria-label="Cloud browser verification" className="space-y-3 rounded-xl border border-blue-200 p-3">
+              <h3 className="font-bold">Complete Google verification</h3>
+              <p className="text-sm text-slate-600">Complete verification below. Matching details are detected and saved automatically. Closes after 60 seconds without interaction. Maximum session ends at {new Date(cloudView.expiresAt).toLocaleTimeString()}. No Google sign-in is required by DoorStep.</p>
+              {cloudScreen && <button type="button" aria-label="Interactive Google cloud browser: tap the verification controls" disabled={cloudInputBusy || cloudBusy} className="block w-full overflow-hidden rounded-lg border bg-white disabled:cursor-wait" onClick={event=>{const rect=event.currentTarget.getBoundingClientRect();void sendCloudInput({x:Math.max(0,Math.min(480,(event.clientX-rect.left)*480/rect.width)),y:Math.max(0,Math.min(720,(event.clientY-rect.top)*720/rect.height))});}}><img alt="Live Google verification page" draggable={false} className="block w-full" src={`data:image/jpeg;base64,${cloudScreen}`}/></button>}
+              <p role="status" className="text-xs text-slate-600">{cloudInputBusy?'Sending your tap…':'Tap the image to interact. The screen refreshes every few seconds.'}</p>
+              <div className="flex gap-2"><button type="button" disabled={cloudInputBusy} onClick={()=>void sendCloudInput({scroll:-400})} className="min-h-11 flex-1 rounded-lg border">Scroll up</button><button type="button" disabled={cloudInputBusy} onClick={()=>void sendCloudInput({scroll:400})} className="min-h-11 flex-1 rounded-lg border">Scroll down</button></div>
+              <a href={cloudView.liveViewUrl} target="_blank" rel="noopener noreferrer" className="block min-h-11 py-2 text-sm text-blue-700 underline">Open full live browser for typing or other controls</a>
+              <button type="button" disabled={cloudBusy} onClick={() => void testCloudLookup('resume')} className="w-full min-h-11 rounded-xl bg-blue-600 p-3 font-bold text-white disabled:opacity-40">{cloudBusy?'Reading page…':'Check for property details now'}</button>
+              <button type="button" disabled={cloudBusy} onClick={async()=>{await cancelCloud();setCloudView(null);setCloudMessage('Cloud browser closed.');}} className="w-full min-h-11 rounded-xl border p-3 font-bold">Close cloud browser</button>
+            </section>}
             <label className="block text-sm font-bold text-slate-800">Paste Google property details
-              <textarea disabled={busy || cloudBusy} value={text} maxLength={30000} onChange={e => { setText(e.target.value); setConfirmed(false); }} placeholder="Address: …\nBedrooms: 4\nTotal Interior Area: 2,757 square feet" className="mt-2 w-full min-h-44 rounded-xl border border-slate-300 p-3 text-base font-normal"/>
+              <textarea disabled={busy || cloudBusy || Boolean(cloudView)} value={text} maxLength={30000} onChange={e => { setText(e.target.value); setConfirmed(false); }} placeholder="Address: …\nBedrooms: 4\nTotal Interior Area: 2,757 square feet" className="mt-2 w-full min-h-44 rounded-xl border border-slate-300 p-3 text-base font-normal"/>
             </label>
             {text.trim() && !rows.length && <p role="status" className="text-sm text-amber-800">No labeled property fields found. Copy the bulleted details with labels such as Bedrooms: and Year Built:.</p>}
             {parsed.conflicts.length > 0 && <p className="text-sm text-amber-800">Conflicting duplicate fields were excluded: {parsed.conflicts.join(', ')}.</p>}

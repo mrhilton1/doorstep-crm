@@ -71,3 +71,6 @@ Append-only. Never edit past entries except to fix typos that obscure meaning.
 **Rationale:** Cross-workspace data access and impersonation are high-risk. Starting with scoped, audited RPCs gives the platform owner visibility without exposing service-role credentials or weakening browser-side RLS boundaries.
 **Alternatives considered:** Expose broader direct table policies to platform owners; rejected because platform reporting needs explicit audit events. Implement true login-as immediately; rejected until guardrails, visible banners, reason capture, and backend-only secret handling are specified.
 **Consequences:** New platform APIs must be registered as internal by default. Future impersonation must build on this audit foundation and should be validated in staging before production use.
+
+## 2026-10-01 — Google property import pilot
+Use the user's exact templated query with quoted street and city/state/ZIP. Phone flow is new-tab Google, copy/paste, preview and explicit address confirmation; not an iframe/extension. Reuse workspace-scoped property_info_records and append history; source google_ai_overview, original text and unverified metadata retained. Not found and conflicting duplicates are excluded. Existing locked dependencies retained.

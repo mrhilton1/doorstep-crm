@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { googlePropertyPrompt, googlePropertyUrl, parseGoogleProperty } from '../src/lib/googleProperty.ts';
+const address = '19848 E Raven Dr, Queen Creek, AZ 85142';
+assert.ok(googlePropertyPrompt(address).startsWith('property details for "19848 E Raven Dr" Queen Creek AZ 85142.'));
+assert.equal(new URL(googlePropertyUrl(address)).searchParams.get('q'), googlePropertyPrompt(address));
+const parsed = parseGoogleProperty('• Address: '+address+'\n• Home Type: Single-Family\n• Bedrooms: 4\n• Bathrooms: 2.5 (some records list 3 total baths)\n• Total Interior Area: 2,757 square feet\n• Lot Size: 0.46 acres\n• Year Built: 2006\n• Roof Material: Tile\n• Parking Spaces: 3-car attached garage\n• HOA Fee: $80 monthly\n• Parcel Number: 31404473\n• Tax Assessed Value: $582,700\n• Annual Tax Amount: $2,379');
+assert.equal(Object.keys(parsed.fields).length,12);
+assert.equal(parsed.fields.bathrooms,'2.5 (some records list 3 total baths)');
+assert.equal(parsed.fields.lotSize,'0.46 acres');
+assert.equal(parsed.fields.squareFootage,'2,757 square feet');
+assert.equal(parsed.reportedAddress,address);
+assert.deepEqual(parseGoogleProperty('Bedrooms: Not found | Bathrooms: 0 | Year Built: Not available').fields,{bathrooms:'0'});
+assert.deepEqual(parseGoogleProperty('Bedrooms: 4\nBedrooms: 5').conflicts,['bedrooms']);
+assert.deepEqual(parseGoogleProperty('Bedrooms: 4\nBedrooms: 5').fields,{});
+assert.deepEqual(parseGoogleProperty('Some random search results 42 square feet').fields,{});
+console.log('Google prompt and parser checks passed.');

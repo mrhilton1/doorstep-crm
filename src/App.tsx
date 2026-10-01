@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { GooglePropertyPanel } from './components/GooglePropertyPanel';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
@@ -4595,7 +4596,7 @@ function CrmApp({
         state: parsedData.state || addressParts.state,
         county: parsedData.county || addressParts.county,
         postal_code: addressParts.postalCode,
-        source: 'familytreenow',
+        source: sourceUrl.startsWith('https://www.google.com/search?') ? 'google_ai_overview' : 'familytreenow',
         source_url: sourceUrl,
         raw_text: rawText,
         parsed_data: parsedData,
@@ -6324,6 +6325,7 @@ function PropertyDrawer({
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [isGooglePropertyOpen, setIsGooglePropertyOpen] = useState(false);
   const [isPropertyInfoModalOpen, setIsPropertyInfoModalOpen] = useState(false);
   const [propertyInfoPaste, setPropertyInfoPaste] = useState('');
   const [propertyInfoError, setPropertyInfoError] = useState('');
@@ -7061,6 +7063,14 @@ function PropertyDrawer({
       transition={{ type: "spring", damping: 35, stiffness: 400 }}
       className="fixed top-0 right-0 bottom-0 z-[2000] bg-[#F8FAFC] shadow-2xl border-l border-gray-100 flex flex-col w-full lg:w-[980px] h-full overflow-hidden"
     >
+      {isGooglePropertyOpen && <GooglePropertyPanel key={property.id} address={property.address}
+        searchAddress={[property.address.split(',')[0], parseAddressPartsForPropertyInfo(property.address).city, `${parseAddressPartsForPropertyInfo(property.address).state} ${parseAddressPartsForPropertyInfo(property.address).postalCode || ''}`].join(', ')}
+        close={() => setIsGooglePropertyOpen(false)}
+        load={() => onLoadLatestPropertyInfo(property)}
+        save={(fields, text, url) => onSavePropertyInfo(property, {
+          ...parsePropertyInfoText('', property.address), ...fields,
+          ...{ _googleImport: { verification: 'unverified', addressConfirmedByUser: true, importedAt: new Date().toISOString() } }
+        }, text, url)} />}
       <div className="px-5 pt-5 pb-4 sm:px-8 sm:pt-8">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex justify-between items-start gap-4">
@@ -7097,6 +7107,10 @@ function PropertyDrawer({
               aria-label="Lookup property info"
             >
               <Home className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => setIsGooglePropertyOpen(true)} title="Google property details" aria-label="Google property details"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white transition hover:bg-blue-50">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.33 2.98-7.36Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.41l-3.24-2.51c-.9.6-2.04.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.06v2.59A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.91a6 6 0 0 1 0-3.82V7.5H3.06a10 10 0 0 0 0 9l3.34-2.59Z"/><path fill="#EA4335" d="M12 5.96c1.47 0 2.79.51 3.83 1.51l2.87-2.87A9.62 9.62 0 0 0 12 2a10 10 0 0 0-8.94 5.5l3.34 2.59C7.19 7.72 9.4 5.96 12 5.96Z"/></svg>
             </button>
           </div>
           {cityLine && (

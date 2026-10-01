@@ -917,3 +917,10 @@
 
 ---
 *Wipe entries older than 30 days. This is working memory, not history.*
+
+## 2026-10-01 — Google property import
+Objective: Google icon beside house icon, phone-friendly slide-out, cache-first lookup and reviewed import.
+Assumptions: mobile uses new-tab search and manual paste; no extension or embedded Google reader. Existing workspace-scoped property_info_records is the durable cache.
+Steps: inspect existing save/load; add isolated parser/panel; retain source and raw text; validate parsing/build/types; deploy for phone test.
+
+Validation: npm run verify passed (existing CSS import/chunk-size warnings). Focused prompt/parser checks passed. Local component harness at 390x844 passed paste, preview, address-confirmation gate, simulated save and refresh display, no horizontal overflow. Harness removed. Live authenticated Supabase save still requires user's phone acceptance run.

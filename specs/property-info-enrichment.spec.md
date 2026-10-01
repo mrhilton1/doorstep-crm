@@ -111,3 +111,10 @@ Next to the address on the Unified Address Record, show a house lookup icon. Cli
 
 ## Iteration History
 - 2026-06-23: Spec created from user request and AiStudio parser reference.
+
+## Google import pilot — 2026-10-01
+Current: house button opens existing manual enrichment; latest property rows are loaded from Supabase.
+Acceptance: Google icon immediately right of house; full-width phone slide-out; check latest saved record first; explicit refresh opens Google query `property details bulleted list {full address}` in a new tab. User copies AI Overview, returns, pastes, previews and confirms address before saving. Preserve qualifiers and raw text, label source google_ai_overview and unverified metadata. Empty/unrecognized text cannot save. Failed saves retain input. No iframe, scraping, localStorage, schema change or automatic clipboard access. Older rows remain history.
+
+Search prompt updated per user: property details for "{street}" {city} {state} {ZIP}. Return ONLY a bulleted list using exactly this template: Address: | Home Type: | Bedrooms: | Bathrooms: | Total Interior Area: | Lot Size: | Year Built: | Roof Material: | Parking Spaces: | HOA Fee: | Parcel Number: | Tax Assessed Value: | Annual Tax Amount:. Use "Not found" if unavailable.
+Parser handles bullets or pipe-delimited responses, preserves qualifiers, excludes Not found and conflicting duplicate values.

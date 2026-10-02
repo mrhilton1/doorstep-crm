@@ -26,3 +26,5 @@ assert.ok(prompt.includes('template: Last Sale Price: | Address:'));
 assert.ok(prompt.includes('| Square Footage:'));
 assert.ok(!/formula|formual|\[\]/i.test(prompt));
 console.log('Bid checks passed: inclusive thresholds, ordering, rounding, missing/ambiguous values, validation, JSON persistence shape and Google prompt/import.');
+
+assert.equal(recommendedBid(imported.fields,[{...rules[1],rate:0.06}]).amount,150,'Same saved data recalculates with updated rules without a new import');

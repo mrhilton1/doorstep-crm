@@ -24,6 +24,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [bidRefreshCount, setBidRefreshCount] = useState(0);
   const [countyBusy, setCountyBusy] = useState(false);
   const [countyError, setCountyError] = useState('');
   const [countyRetry, setCountyRetry] = useState(0);
@@ -99,18 +100,28 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close,
         {loading ? <p role="status" className="flex gap-2"><Loader2 className="animate-spin" size={20}/>Checking saved property details…</p> : <>
           {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
           <section aria-label="Bid essentials" className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
-            <div>
-              <h3 className="text-sm font-bold text-blue-950">Square footage for your bid</h3>
-              <p className="mt-1 text-2xl font-black text-slate-900 break-words">{summaryValue('squareFootage')}</p>
-              <p className="mt-1 text-xs text-slate-600">{isGoogleSource ? 'Google AI Overview · unverified' : 'Previously imported property data'}</p>
+            <div className="grid grid-cols-2 gap-3 items-start">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-blue-950">Square footage</h3>
+                <p className="mt-1 text-2xl sm:text-3xl font-black text-slate-900 break-words">{summaryValue('squareFootage')}</p>
+                <p className="mt-1 text-xs text-slate-600">{isGoogleSource ? 'Google AI Overview · unverified' : 'Previously imported property data'}</p>
+              </div>
+              <button type="button" disabled={editing} onClick={() => setBidRefreshCount(count => count + 1)}
+                title={editing ? 'Preview from pasted data' : 'Recalculate using saved property data and current bid rules'}
+                aria-label="Refresh recommended bid from saved data"
+                className="min-w-0 min-h-11 rounded-xl text-left text-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 enabled:hover:bg-emerald-100">
+                <span className="block text-sm font-bold">Recommended bid</span>
+                <span className="mt-1 block text-2xl sm:text-3xl font-black break-words">{bid.amount === null ? '—' : bidCurrency(bid.amount)}</span>
+                <span className="mt-1 block text-xs">{editing ? 'Preview · save to apply' : 'Tap to recalculate'}</span>
+              </button>
             </div>
+            {!editing && bidRefreshCount > 0 && <p key={bidRefreshCount} role="status" className="text-xs text-emerald-800">Recalculated using saved data and current rules.</p>}
             <dl className="grid grid-cols-2 gap-3 border-t border-blue-200 pt-3 text-sm">
               <div className="min-w-0"><dt className="text-slate-600">County</dt><dd className="font-bold text-slate-900 break-words">{summaryValue('county')}</dd></div>
               <div className="min-w-0"><dt className="text-slate-600">Parcel number</dt><dd className="font-bold text-slate-900 break-words">{summaryValue('apnNumber')}</dd></div>
             </dl>
             <div className="border-t border-blue-200 pt-3">
               <p className="text-sm">Last sale price: <strong>{summaryValue('salePrice')}</strong></p>
-              <p className="mt-2 font-bold">Recommended bid: {bid.amount === null ? '—' : bidCurrency(bid.amount)}</p>
               <p className="mt-1 text-xs text-slate-600">{bid.reason}</p>
             </div>
             {assessorUrl ? <>

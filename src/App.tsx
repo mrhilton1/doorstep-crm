@@ -6779,6 +6779,8 @@ function PropertyDrawer({
     }
   };
 
+  const [bidRefreshCount, setBidRefreshCount] = useState(0);
+  useEffect(() => { setBidRefreshCount(0); }, [property.id]);
   const bid = recommendedBid((latestPropertyInfo?.parsedData || {}) as Record<string, unknown>, settings.bidRules);
 
   const primaryDisplayName = `${firstName} ${lastName}`.trim() || businessName || property.address.split(',')[0] || 'Unnamed Lead';
@@ -7074,9 +7076,12 @@ function PropertyDrawer({
             <span className="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white" style={{ backgroundColor: getStageColor(property.stage, settings) }}>
               {stageLabel}
             </span>
-            <span title={bid.reason} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+            <button type="button" title={`${bid.reason} Click to recalculate from saved data.`}
+              onClick={() => setBidRefreshCount(count => count + 1)}
+              className="min-h-11 rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-800 hover:bg-emerald-100">
               Recommended bid: {bid.amount === null ? '—' : bidCurrency(bid.amount)}
-            </span>
+            </button>
+            {bidRefreshCount > 0 && <span key={bidRefreshCount} role="status" className="text-xs text-emerald-800">Recalculated from saved data and current rules.</span>}
             {bid.amount === null && <span className="text-xs text-slate-500">{bid.reason}</span>}
             {property.subStatus && (
               <span

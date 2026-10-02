@@ -1,3 +1,4 @@
+import { readAssessorResponse } from '../lib/assessorResponse';
 import { BidRule, recommendedBid, bidCurrency } from '../lib/recommendedBid';
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
@@ -58,8 +59,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close,
         const response = await fetch('/api/property-assessor', {method:'POST',
           headers:{'content-type':'application/json',Authorization:`Bearer ${sessionData.session.access_token}`},
           body:JSON.stringify({recordId:cached.id}),signal:AbortSignal.timeout(25000)});
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'County lookup failed.');
+        const result = await readAssessorResponse(response);
         if (active) {
           setCached(previous => previous ? {...previous,parsedData:{...previous.parsedData,countyAssessor:result.assessor}} : previous);
           // Refresh the parent address summary after the backend persists the enrichment.

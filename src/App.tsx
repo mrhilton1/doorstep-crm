@@ -2803,8 +2803,31 @@ function AuthScreen() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    const query = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    return query.has('error') || hash.has('error')
+      ? 'Google sign-in was not completed. Please try again and choose the email you use for DoorStep CRM.'
+      : null;
+  });
   const [message, setMessage] = useState<string | null>(null);
+
+  const signInWithGoogle = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: appUrl, queryParams: { prompt: 'select_account' } },
+      });
+      if (oauthError) throw oauthError;
+    } catch {
+      setError('Unable to start Google sign-in. Please try again.');
+      setIsSubmitting(false);
+    }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -2863,6 +2886,21 @@ function AuthScreen() {
             </h1>
           </div>
         </div>
+
+        {mode !== 'reset' && (
+          <div className="mb-5">
+            <button
+              type="button"
+              onClick={signInWithGoogle}
+              disabled={isSubmitting}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {isSubmitting ? 'Working...' : 'Continue with Google'}
+            </button>
+            <p className="mt-2 text-xs text-slate-500">Use the same email as your DoorStep CRM account.</p>
+            <div className="mt-4 text-center text-xs text-slate-400">or sign in with email</div>
+          </div>
+        )}
 
         <div className="space-y-3">
           {mode === 'sign-up' && (

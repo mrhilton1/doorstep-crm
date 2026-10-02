@@ -47,3 +47,8 @@ if(process.env.ASSESSOR_LIVE_CHECK==='1') {
  const live=await fetchMaricopa(address,parcel);console.log(JSON.stringify(live,null,2));assert.equal(live.fields['Lot size'],'17,097 sq ft.');
 }
 console.log('Assessor parsing, address guard, cache, auth, RLS visibility and concurrency checks passed.');
+
+await assert.rejects(fetchMaricopa(address,parcel,async (_input,init)=>{
+ assert.equal(init?.redirect,'manual');
+ return new Response(null,{status:302,headers:{location:'https://example.com/'}});
+}),/redirected unexpectedly/);

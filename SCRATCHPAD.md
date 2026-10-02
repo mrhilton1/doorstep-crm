@@ -982,3 +982,9 @@ Evidence: production and Pages POSTs without auth return JSON401; invalid-token 
 Move recommended bid into large clickable right column beside sqft. Click recalculates from already-loaded saved property fields and current workspace rules, no Google/assessor calls or paste. Contact header bid also clickable with feedback. Existing render-time calculation already runs on contact open and rules changes; preserve that behavior and add regression coverage for changed rates on same saved data. Paste preview stays a preview until save; bid-refresh button disabled during editing to avoid mixing saved and unsaved values. No persistence/API changes.
 
 Validation: recommended-bid fixtures including changed rate against identical saved data passed; npm run verify passed (build/typechecks/artifact) and diff check clean. No request added to either recalculation button; amount derives on each render/open. Phone visual acceptance not exercised in this run.
+
+
+## 2026-10-01 — County 502 root cause
+Remote Cloudflare preview reproduced TypeError before fetch: redirect error mode unsupported at edge. Node fixtures/live local fetch hid this incompatibility. Use manual redirect mode, reject all 3xx explicitly without following; preserve fixed county host, timeout, parcel/address verification and auth. Verify fixed fetch from remote Cloudflare preview plus tests/build, then deploy.
+
+Remote verification: corrected manual fetch returned HTTP200 in540ms; real fetchMaricopa import in remote Cloudflare preview returned partial data with10 fields and matching parcel/address. Preview and production log monitor stopped after checks. Assessor fixtures including redirect rejection and npm run verify passed. Local Node had12 fields, edge returned10; report only verified edge count. Authenticated production save still requires user retry.

@@ -146,3 +146,5 @@ Google opens on the user's device in a new tab. User copies property details, pa
 Google prompt now starts with Last Sale Price, uses Square Footage, and asks for no field explanations. Formula instructions are excluded per user. Preview shows last sale price and the workspace-rule recommendation; the record header derives the same bid from saved fields. See recommended-bid.spec.md. County enrichment remains separate.
 
 County error handling: non-JSON or malformed county endpoint responses must show a readable error with HTTP status and Cloudflare request reference if available, never raw parser errors or HTML. Unexpected application exceptions must return JSON500 with a diagnostic reference; logs contain stage/type only, not tokens, addresses, record IDs, or response bodies. Valid success response must contain assessor fields before display.
+
+Cloudflare runtime compatibility: county fetch uses redirect manual (error mode unsupported on edge), rejects 3xx without following location. Validate remote-runtime request in addition to Node fixtures.

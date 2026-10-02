@@ -74,8 +74,9 @@ export async function boundedText(response: Response, limit = 500000) {
 }
 export async function fetchMaricopa(address: string, parcel: string, fetcher: typeof fetch = fetch) {
   const response = await fetcher(`https://mcassessor.maricopa.gov/mcs/?q=${parcel}`, {
-    headers:{Accept:'text/html'}, redirect:'error', signal:AbortSignal.timeout(15000)
+    headers:{Accept:'text/html'}, redirect:'manual', signal:AbortSignal.timeout(15000)
   });
+  if(response.status >= 300 && response.status < 400) throw new Error('County lookup redirected unexpectedly. No data was saved. Try again later.');
   if(!response.ok) throw new Error(`County retrieval unavailable (HTTP ${response.status}). Try again later.`);
   return parseMaricopaPage(await boundedText(response),address,parcel);
 }

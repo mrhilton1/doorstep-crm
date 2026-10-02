@@ -1,9 +1,11 @@
+import {countyDetails} from './county';
 import { createClient } from '@supabase/supabase-js';
 import { boundedText } from '../../functions/lib/maricopa';
 
 const origin='https://app.clearview.win';
 const json=(body:object,status=200)=>Response.json(body,{status,headers:{'access-control-allow-origin':origin,'vary':'Origin','cache-control':'no-store'}});
 export default {async fetch(request:Request,env:Env){
+ if(new URL(request.url).pathname === '/county-details') return countyDetails(request,env);
  if(request.headers.get('origin') && request.headers.get('origin')!==origin)return json({error:'Origin not allowed'},403);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'POST','access-control-allow-headers':'authorization,content-type','vary':'Origin'}});
  if(request.method!=='POST')return json({error:'POST required'},405);

@@ -59,7 +59,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close,
         if (!sessionData.session) throw new Error('Sign in to load county details.');
         const response = await fetch('/api/property-assessor', {method:'POST',
           headers:{'content-type':'application/json',Authorization:`Bearer ${sessionData.session.access_token}`},
-          body:JSON.stringify({recordId:cached.id}),signal:AbortSignal.timeout(25000)});
+          body:JSON.stringify({recordId:cached.id}),signal:AbortSignal.timeout(60000)});
         const result = await readAssessorResponse(response);
         if (active) {
           setCached(previous => previous ? {...previous,parsedData:{...previous.parsedData,countyAssessor:result.assessor}} : previous);

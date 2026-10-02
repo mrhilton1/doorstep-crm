@@ -41,6 +41,22 @@ async function handleRequest({request,env}: {request:Request;env:Env}, stage: (v
   let assessor;
   try {assessor=await fetchMaricopa(row.display_address,parcel);}
   catch(e) {return json({error:e instanceof Error ? e.message : 'County retrieval failed.'},502);}
+  stage('additional_information');
+  assessor.version=2;
+  try {
+    const response=await fetch('https://doorstep-browser-pilot.steep-field-929d.workers.dev/county-details',{
+      method:'POST',headers:{'content-type':'application/json',Authorization:authorization},
+      body:JSON.stringify({recordId}),redirect:'manual',signal:AbortSignal.timeout(40000)
+    });
+    if(!response.ok)throw new Error('Additional information unavailable');
+    const extra=JSON.parse(await boundedText(response,20000));
+    if(!extra.fields || !['Yes','No'].includes(extra.fields.Pool))throw new Error('Invalid additional information');
+    assessor.fields={...assessor.fields,...extra.fields};
+    assessor.status='complete';
+    assessor.notice='County property details and Additional Information imported. Your original Google square footage and bid inputs are unchanged.';
+  } catch {
+    assessor.notice='Basic county details saved. Additional Information could not be loaded; it will be retried after one hour. Your original square footage is unchanged.';
+  }
   // User's JWT and RLS apply to writes; compare version so concurrent edits cannot be overwritten.
   stage('property_save');
   const {data:updated,error:updateError}=await db.from('property_info_records')

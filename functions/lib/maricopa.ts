@@ -1,7 +1,7 @@
 import { parseDocument } from 'htmlparser2';
 import type { AnyNode, Element } from 'domhandler';
 export type AssessorData = {
-  version: 1; status: 'partial'; source: 'maricopa_assessor'; sourceUrl: string;
+  version: 1 | 2; status: 'partial' | 'complete'; source: 'maricopa_assessor'; sourceUrl: string;
   parcel: string; address: string; fetchedAt: string; fields: Record<string, string>; notice: string;
 };
 export function parcelId(value: unknown) {
@@ -33,7 +33,7 @@ export function parseMaricopaPage(html: string, expectedAddress: string, expecte
   }
   const parcel = elements.find(node => node.attribs.id === 'APN_RAW')?.attribs.value;
   if (!parcel || parcelId(parcel) !== expectedParcel) throw new Error('County returned a different parcel or no parcel record.');
-  const addressNode = elements.find(node => node.name === 'a' && /^https?:\/\/maps\.mcassessor\.maricopa\.gov\/\?esearch=/.test(node.attribs.href || '') && /^\d/.test(clean(node)));
+  const addressNode = elements.find(node => node.name === 'a' && /^https?:\/\/maps\.mcassessor\.maricopa\.gov\/\?esearch=/.test(node.attribs.href || '') && new URL(node.attribs.href).searchParams.get('esearch')?.replace(/[-\s]/g,'').toUpperCase() === expectedParcel && /^\d/.test(clean(node)));
   const address = addressNode ? clean(addressNode) : '';
   if (!address || addressKey(address) !== addressKey(expectedAddress)) throw new Error('County address does not match this house. No county data was saved.');
   const allowed: Record<string,string> = {
@@ -41,12 +41,20 @@ export function parseMaricopaPage(html: string, expectedAddress: string, expecte
     'High School District':'High school district', 'Elementary School District':'Elementary school district',
     'Local Jurisdiction':'Jurisdiction', 'S/T/R':'Section / township / range',
     'Market Area/Neighborhood':'Market area / neighborhood code', 'Deed Number':'Deed number',
-    'Last Deed Date':'Last deed date', 'Sale Date':'Last sale date', 'Sale Price':'Last sale price'
+    'Last Deed Date':'Last deed date', 'Sale Date':'Last sale date', 'Sale Price':'Last sale price',
+    'Construction Year':'Construction year', 'Weighted Construction Year':'Weighted construction year',
+    'Improvement Quality':'Improvement quality', 'Pool':'Pool', 'Main Livable Area':'County living area',
+    'Detached Livable Area':'Detached living area', 'Patios':'Patios', 'Exterior Wall Type':'Exterior wall type',
+    'Roof Type':'Roof type', 'Bath Fixtures':'Bath fixtures', 'Garage Stalls':'Garage stalls',
+    'Carport Stalls':'Carport stalls', 'Locational Characteristics':'Locational characteristics'
   };
+  const additionalReady = ['Yes','No'].includes(clean(elements.find(node => node.attribs.id === 'ResidentialPropertyData_Pool') || {type:'text',data:''} as AnyNode));
+  const basicKeys = new Set(['Subdivision description','Lot size','Lot number','High school district','Elementary school district','Jurisdiction','Section / township / range','Market area / neighborhood code','Deed number','Last deed date','Last sale date','Last sale price']);
   const fields: Record<string,string> = {};
   for (const node of elements) {
     if(!(node.attribs.class || '').split(/\s+/).includes('td-header')) continue;
     const key = allowed[clean(node).replace(/[^a-zA-Z0-9 /#]/g,'').trim()];
+    if(!additionalReady && !basicKeys.has(key)) continue;
     let sibling = node.next;
     while(sibling && sibling.type !== 'tag') sibling = sibling.next;
     if(!key || !sibling || sibling.type !== 'tag' || !(sibling.attribs.class || '').split(/\s+/).includes('td-body')) continue;
@@ -60,8 +68,8 @@ export function parseMaricopaPage(html: string, expectedAddress: string, expecte
 }
 export function cacheMatches(value: any, address: string, parcel: string) {
   const age = Date.now() - Date.parse(value?.fetchedAt || '');
-  return value?.version === 1 && value?.source === 'maricopa_assessor' && value?.parcel === parcel &&
-    typeof value?.address === 'string' && addressKey(value.address) === addressKey(address) && age >= 0 && age < 30*24*60*60*1000;
+  return value?.version === 2 && value?.source === 'maricopa_assessor' && value?.parcel === parcel &&
+    typeof value?.address === 'string' && addressKey(value.address) === addressKey(address) && age >= 0 && age < (value?.status === 'complete' ? 30*24*60*60*1000 : 60*60*1000);
 }
 export async function boundedText(response: Response, limit = 500000) {
   if (!response.body) throw new Error('Empty response.');

@@ -16,7 +16,8 @@ assert.ok(!JSON.stringify(parsed).includes('Private mailing'));
 assert.throws(()=>parseMaricopaPage(page,'19828 E Raven Dr, Queen Creek, AZ 85142',parcel),/does not match/);
 assert.throws(()=>parseMaricopaPage(page,address,'31404473'),/different parcel/);
 assert.equal(addressKey(address),addressKey('19848 E RAVEN DR QUEEN CREEK AZ 85142'));
-assert.ok(cacheMatches(parsed,address,parcel));
+assert.ok(!cacheMatches(parsed,address,parcel),'Old cache refreshes for additional fields');
+assert.ok(cacheMatches({...parsed,version:2,status:'complete'},address,parcel));
 assert.ok(!cacheMatches({...parsed,fetchedAt:'2020-01-01'},address,parcel));
 assert.ok(!cacheMatches(parsed,address,'31404473'));
 await assert.rejects(()=>boundedText(new Response('12345'),3),/too large/);
@@ -32,8 +33,9 @@ globalThis.fetch=async(input:any,init:any)=>{
  if(url.includes('/auth/v1/user')) return Response.json({id:'22222222-2222-4222-8222-222222222222'});
  if(url.includes('/rest/v1/property_info_records')) {
    if(init?.method==='PATCH') { updated=JSON.parse(init.body);return Response.json(concurrent ? null : {id:'11111111-1111-4111-8111-111111111111'}); }
-   return Response.json(allowRow ? {id:'11111111-1111-4111-8111-111111111111',display_address:address,updated_at:'2026-10-01',parsed_data:{county:'Maricopa County',apnNumber:parcel,squareFootage:'2757',countyAssessor:useCache?parsed:undefined}} : null);
+   return Response.json(allowRow ? {id:'11111111-1111-4111-8111-111111111111',display_address:address,updated_at:'2026-10-01',parsed_data:{county:'Maricopa County',apnNumber:parcel,squareFootage:'2757',countyAssessor:useCache?{...parsed,version:2,status:'complete'}:undefined}} : null);
  }
+ if(url.startsWith('https://doorstep-browser-pilot.'))return Response.json({fields:{Pool:'Yes','County living area':'2,501 sq ft.'}});
  if(url.startsWith('https://mcassessor.maricopa.gov/mcs/')) {countyRequests++;return new Response(page);}
  throw new Error('Unexpected URL');
 };
@@ -52,3 +54,9 @@ await assert.rejects(fetchMaricopa(address,parcel,async (_input,init)=>{
  assert.equal(init?.redirect,'manual');
  return new Response(null,{status:302,headers:{location:'https://example.com/'}});
 }),/redirected unexpectedly/);
+
+const rendered = page + '<div class="td-header">Pool</div><div class="td-body" id="ResidentialPropertyData_Pool">No</div><div class="td-header">Garage Stalls</div><div class="td-body">0</div>';
+assert.equal(parseMaricopaPage(rendered,address,parcel).fields.Pool,'No');
+assert.equal(parseMaricopaPage(rendered,address,parcel).fields['Garage stalls'],'0');
+
+assert.equal(parseMaricopaPage(rendered+'<a href="https://maps.mcassessor.maricopa.gov/?esearch=31404473">19828 E RAVEN DR QUEEN CREEK AZ 85142</a>',address,parcel).fields.Pool,'No','Similar-property links must not replace target parcel address');

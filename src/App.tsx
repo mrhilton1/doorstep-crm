@@ -4681,12 +4681,10 @@ function CrmApp({
     if (!data) return null;
 
     const record = propertyInfoRowToRecord(data);
-    updateProperty(property.id, {
-      customData: {
-        ...(property.customData || {}),
-        propertyInfoLatest: record
-      }
-    });
+    // A background county refresh must not restore stale owner/contact metadata.
+    setProperties(previous => previous.map(item => item.id === property.id
+      ? {...item, customData: {...item.customData, propertyInfoLatest: record}}
+      : item));
     return record;
   };
 
@@ -6002,6 +6000,16 @@ function CrmApp({
             onLogEvent={logAddressEvent}
             onAddContact={createAddressContact}
             onSaveContact={upsertNormalizedContactForAddress}
+            onSaveRecordedOwner={async (property, text) => {
+              if (!workspaceId || property.customData?.isDraftActivityAddress) throw new Error('Save property details before adding owner information.');
+              const { data: current, error: readError } = await doorstepDb.from('addresses').select('custom_data,updated_at').eq('id', property.id).eq('workspace_id', workspaceId).single();
+              if (readError) throw new Error(readError.message);
+              const customData = {...current.custom_data, recordedOwner: text};
+              const { data: updated, error: writeError } = await doorstepDb.from('addresses').update({custom_data: customData}).eq('id', property.id).eq('workspace_id', workspaceId).eq('updated_at', current.updated_at).select('id').maybeSingle();
+              if (writeError) throw new Error(writeError.message);
+              if (!updated) throw new Error('The record changed. Please retry saving owner information.');
+              updateProperty(property.id, {customData: {...property.customData, recordedOwner: text}});
+            }}
             onSavePropertyInfo={savePropertyInfoRecord}
             onLoadLatestPropertyInfo={loadLatestPropertyInfoRecord}
             onMoveContacts={handleMoveContactsToAddress}
@@ -6277,6 +6285,7 @@ function PropertyDrawer({
   onLogEvent,
   onAddContact,
   onSaveContact,
+  onSaveRecordedOwner,
   onSavePropertyInfo,
   onLoadLatestPropertyInfo,
   onMoveContacts,
@@ -6294,6 +6303,7 @@ function PropertyDrawer({
   onLogEvent: (propertyId: string, payload: LiveEventPayload) => Promise<Interaction>,
   onAddContact: (property: PropertyContact, idempotencyKey: string) => Promise<Contact>,
   onSaveContact: (property: PropertyContact, contact: Contact, isPrimary: boolean) => Promise<void>,
+  onSaveRecordedOwner: (property: PropertyContact, text: string) => Promise<void>,
   onSavePropertyInfo: (property: PropertyContact, parsedData: ParsedPropertyInfo, rawText: string, sourceUrl: string) => Promise<PropertyInfoRecord>,
   onLoadLatestPropertyInfo: (property: PropertyContact) => Promise<PropertyInfoRecord | null>,
   onMoveContacts: (property: PropertyContact) => void,
@@ -7092,6 +7102,24 @@ function PropertyDrawer({
     >
       {isGooglePropertyOpen && <GooglePropertyPanel key={property.id} address={property.address}
         bidRules={settings.bidRules || []}
+        recordedOwner={property.customData?.recordedOwner || ''}
+        canEditOwner={sectionPermissions.contactsAtAddress.editable}
+        saveOwner={text => {
+          if (!sectionPermissions.contactsAtAddress.editable) return Promise.reject(new Error('You do not have permission to edit contacts.'));
+          return onSaveRecordedOwner(property, text);
+        }}
+        addOwnerContact={async candidate => {
+          if (!sectionPermissions.contactsAtAddress.editable) throw new Error('You do not have permission to edit contacts.');
+          if (property.customData?.isDraftActivityAddress) throw new Error('Save property details before adding a contact.');
+          const sameName = (contact: {firstName?: string; lastName?: string}) =>
+            (contact.firstName || '').trim().toLowerCase() === candidate.firstName.toLowerCase() &&
+            (contact.lastName || '').trim().toLowerCase() === candidate.lastName.toLowerCase();
+          if (sameName(property) || (property.contacts || []).some(sameName)) throw new Error('This contact name is already on the record.');
+          const contact: Contact = {id: candidate.id, firstName: candidate.firstName, lastName: candidate.lastName,
+            isDecisionMaker: false, customData: {recordedOwner: candidate.sourceName, source: 'user_supplied_document'}};
+          await onSaveContact(property, contact, false);
+          updateProperty(property.id, {contacts: [...(property.contacts || []).filter(c => c.id !== contact.id), contact]});
+        }}
         searchAddress={[property.address.split(',')[0], parseAddressPartsForPropertyInfo(property.address).city, `${parseAddressPartsForPropertyInfo(property.address).state} ${parseAddressPartsForPropertyInfo(property.address).postalCode || ''}`].join(', ')}
         close={() => setIsGooglePropertyOpen(false)}
         load={() => onLoadLatestPropertyInfo(property)}
@@ -8129,6 +8157,11 @@ function PropertyDrawer({
                   </button>
                 </div>
 
+                {contact.customData?.recordedOwner && <div className="mb-3 rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs font-bold text-slate-500">Recorded owner</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 break-words">{contact.customData.recordedOwner}</p>
+                  <p className="mt-1 text-xs text-slate-500">Original wording from supplied document</p>
+                </div>}
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <input

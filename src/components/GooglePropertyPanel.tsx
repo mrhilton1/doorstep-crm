@@ -1,3 +1,5 @@
+import { RecordedOwnerCard } from './RecordedOwnerCard';
+import { OwnerContact } from '../lib/recordedOwner';
 import { readAssessorResponse } from '../lib/assessorResponse';
 import { BidRule, recommendedBid, bidCurrency } from '../lib/recommendedBid';
 import React, { useEffect, useRef, useState } from 'react';
@@ -9,13 +11,17 @@ type RecordView = { id?: string; parsedData: object; sourceUrl?: string | null; 
 type Props = {
   key?: string;
   bidRules: BidRule[];
+  recordedOwner: string;
+  canEditOwner: boolean;
+  saveOwner: (text: string) => Promise<void>;
+  addOwnerContact: (contact: OwnerContact & { id: string }) => Promise<void>;
   address: string;
   searchAddress: string;
   load: () => Promise<RecordView | null>;
   save: (fields: Record<string, string>, text: string, url: string, automatic?: boolean) => Promise<RecordView>;
   close: () => void;
 };
-export function GooglePropertyPanel({ address, searchAddress, load, save, close, bidRules }: Props) {
+export function GooglePropertyPanel({ address, searchAddress, load, save, close, bidRules, recordedOwner, saveOwner, addOwnerContact, canEditOwner }: Props) {
   const [cached, setCached] = useState<RecordView | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -99,6 +105,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close,
       <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-5">
         {loading ? <p role="status" className="flex gap-2"><Loader2 className="animate-spin" size={20}/>Checking saved property details…</p> : <>
           {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+          <RecordedOwnerCard canEdit={canEditOwner} value={recordedOwner} save={saveOwner} add={addOwnerContact} onBusy={setBusy}/>
           <section aria-label="Bid essentials" className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3 items-start">
               <div className="min-w-0">
@@ -163,7 +170,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close,
         </>}
       </div>
       {!loading && <footer className="border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        {editing ? <button type="button" disabled={busy || !confirmed || !rows.length} onClick={submit} className="min-h-12 w-full rounded-xl bg-blue-600 p-3 font-bold text-white disabled:opacity-40">{busy ? 'Saving…' : 'Save to CRM'}</button> : <button type="button" onClick={() => { setEditing(true); setSaved(false); setError(''); }} className="min-h-12 w-full rounded-xl border border-blue-200 p-3 font-bold text-blue-700">Refresh from Google</button>}
+        {editing ? <button type="button" disabled={busy || !confirmed || !rows.length} onClick={submit} className="min-h-12 w-full rounded-xl bg-blue-600 p-3 font-bold text-white disabled:opacity-40">{busy ? 'Saving…' : 'Save to CRM'}</button> : <button type="button" disabled={busy} onClick={() => { setEditing(true); setSaved(false); setError(''); }} className="min-h-12 w-full rounded-xl border border-blue-200 p-3 font-bold text-blue-700">Refresh from Google</button>}
       </footer>}
     </div>
   </div>;

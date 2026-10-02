@@ -151,3 +151,12 @@ Cloudflare runtime compatibility: county fetch uses redirect manual (error mode 
 
 ## Rendered Additional Information
 On county cache miss/version1, fetch existing public fields and load normal county page once with existing Cloudflare browser binding. Authenticated worker resolves record under caller RLS, validates Maricopa and parcel; returns only property facts (pool, year, roof/wall, livable area, patio, garage/carport, fixtures, quality, location characteristics). No owner/contact enrichment. Reject mismatched address/APN; ignore Similar Parcels anchors when matching target. Close browser in finally on success/failure with60s idle fallback. Version2 full cache30days, partial1hour; retain basic details when additional lookup fails. Preserve Google fields and bid inputs. Old records upgrade when panel opens.
+
+## Recorded owner from user-provided text — 2026-10-02
+- Show Recorded owner above bid/property details, separate from automatic county enrichment.
+- User enters only the owner-name text from their document; save original wording in address custom_data.recordedOwner. Do not identify occupants or automatically retrieve owner identities.
+- Slash separates people. First word is surname, second is given name; remaining words stay in the original source wording. Organizations (trust/LLC/company etc.) stay intact. Preview is editable before adding.
+- Each Add as contact uses existing workspace-scoped contact persistence, adds alongside existing contacts, and never silently replaces one. Stable IDs on retry; successful names disabled against duplicate clicks.
+- Save/add failures remain visible and preserve input. No schema or dependency changes.
+
+Refinement: every added contact retains custom_data.recordedOwner, visibly labeled in Contacts at Address. Names are editable suggestions only; original wording remains authoritative for this display. Existing contacts remain intact.

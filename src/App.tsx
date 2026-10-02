@@ -1,3 +1,5 @@
+import { BidRulesSettings } from './components/BidRulesSettings';
+import { recommendedBid, bidCurrency } from './lib/recommendedBid';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -500,7 +502,7 @@ const getPropertyInfoDisplayItems = (record: PropertyInfoRecord, settings: AppSe
     }));
 };
 
-type SettingsTabKey = 'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'property' | 'team';
+type SettingsTabKey = 'bids' | 'business' | 'general' | 'targets' | 'contact' | 'catalog' | 'labels' | 'property' | 'team';
 
 type AddressRecordSectionKey =
   | 'addressHeader'
@@ -6777,6 +6779,8 @@ function PropertyDrawer({
     }
   };
 
+  const bid = recommendedBid((latestPropertyInfo?.parsedData || {}) as Record<string, unknown>, settings.bidRules);
+
   const primaryDisplayName = `${firstName} ${lastName}`.trim() || businessName || property.address.split(',')[0] || 'Unnamed Lead';
   const initials = primaryDisplayName
     .split(/\s+/)
@@ -7047,6 +7051,7 @@ function PropertyDrawer({
       className="fixed top-0 right-0 bottom-0 z-[2000] bg-[#F8FAFC] shadow-2xl border-l border-gray-100 flex flex-col w-full lg:w-[980px] h-full overflow-hidden"
     >
       {isGooglePropertyOpen && <GooglePropertyPanel key={property.id} address={property.address}
+        bidRules={settings.bidRules || []}
         searchAddress={[property.address.split(',')[0], parseAddressPartsForPropertyInfo(property.address).city, `${parseAddressPartsForPropertyInfo(property.address).state} ${parseAddressPartsForPropertyInfo(property.address).postalCode || ''}`].join(', ')}
         close={() => setIsGooglePropertyOpen(false)}
         load={() => onLoadLatestPropertyInfo(property)}
@@ -7069,6 +7074,10 @@ function PropertyDrawer({
             <span className="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white" style={{ backgroundColor: getStageColor(property.stage, settings) }}>
               {stageLabel}
             </span>
+            <span title={bid.reason} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+              Recommended bid: {bid.amount === null ? '—' : bidCurrency(bid.amount)}
+            </span>
+            {bid.amount === null && <span className="text-xs text-slate-500">{bid.reason}</span>}
             {property.subStatus && (
               <span
                 className="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white"
@@ -10294,7 +10303,7 @@ function SettingsOverlay({
       </div>
 
       <div className="flex border-b border-[#E2E8F0] overflow-x-auto no-scrollbar">
-        {(['business', 'general', 'targets', 'contact', 'catalog', 'labels', 'property', 'team'] as SettingsTabKey[]).map((tab) => (
+        {(['business', 'bids', 'general', 'targets', 'contact', 'catalog', 'labels', 'property', 'team'] as SettingsTabKey[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveConfig(tab)}
@@ -10303,12 +10312,13 @@ function SettingsOverlay({
               activeConfig === tab ? "border-[#2563EB] text-[#2563EB]" : "border-transparent text-gray-400"
             )}
           >
-            {tab === 'catalog' ? settings.labels.catalog : tab === 'property' ? 'Property Info' : tab}
+            {tab === 'bids' ? 'Bid Rules' : tab === 'catalog' ? settings.labels.catalog : tab === 'property' ? 'Property Info' : tab}
           </button>
         ))}
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC]">
+        {activeConfig === 'bids' && <BidRulesSettings rules={settings.bidRules || []} apply={bidRules => setSettings(previous => ({...previous, bidRules}))} />}
         {activeConfig === 'business' && (
           <div className="space-y-6">
             <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Business Profile</h3>

@@ -1,3 +1,4 @@
+import { BidRule, recommendedBid, bidCurrency } from '../lib/recommendedBid';
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { X, ExternalLink, Loader2 } from 'lucide-react';
@@ -6,13 +7,14 @@ import { countyAssessorUrl, googleFields, googlePropertyUrl, parseGoogleProperty
 type RecordView = { id?: string; parsedData: object; sourceUrl?: string | null; createdAt: number };
 type Props = {
   key?: string;
+  bidRules: BidRule[];
   address: string;
   searchAddress: string;
   load: () => Promise<RecordView | null>;
   save: (fields: Record<string, string>, text: string, url: string, automatic?: boolean) => Promise<RecordView>;
   close: () => void;
 };
-export function GooglePropertyPanel({ address, searchAddress, load, save, close }: Props) {
+export function GooglePropertyPanel({ address, searchAddress, load, save, close, bidRules }: Props) {
   const [cached, setCached] = useState<RecordView | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -38,6 +40,7 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
   const parsed = parseGoogleProperty(text);
   const data = editing ? parsed.fields : (cached?.parsedData || {}) as Record<string, unknown>;
   const rows = googleFields.filter(([key]) => typeof data[key] === 'string' && data[key] !== 'N/A');
+  const bid = recommendedBid(data, bidRules);
   const url = googlePropertyUrl(searchAddress);
   const assessorUrl = countyAssessorUrl(data);
   const otherRows = rows.filter(([key]) => !['squareFootage', 'county', 'apnNumber'].includes(key));
@@ -105,6 +108,11 @@ export function GooglePropertyPanel({ address, searchAddress, load, save, close 
               <div className="min-w-0"><dt className="text-slate-600">County</dt><dd className="font-bold text-slate-900 break-words">{summaryValue('county')}</dd></div>
               <div className="min-w-0"><dt className="text-slate-600">Parcel number</dt><dd className="font-bold text-slate-900 break-words">{summaryValue('apnNumber')}</dd></div>
             </dl>
+            <div className="border-t border-blue-200 pt-3">
+              <p className="text-sm">Last sale price: <strong>{summaryValue('salePrice')}</strong></p>
+              <p className="mt-2 font-bold">Recommended bid: {bid.amount === null ? '—' : bidCurrency(bid.amount)}</p>
+              <p className="mt-1 text-xs text-slate-600">{bid.reason}</p>
+            </div>
             {assessorUrl ? <>
               <a href={assessorUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white border border-blue-200 p-3 font-bold text-blue-700">Open county assessor <ExternalLink size={16}/></a>
               <p className="text-xs text-slate-600">Confirm the address on the county page. County details load separately after saving; your original square footage stays unchanged.</p>

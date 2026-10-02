@@ -111,6 +111,7 @@ export interface BusinessInfo {
 }
 
 export interface Settings {
+  bidRules?: import('./lib/recommendedBid').BidRule[];
   tags: string[];
   contactFields: CustomField[];
   discounts: Discount[];

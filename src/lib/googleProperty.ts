@@ -1,6 +1,6 @@
 export const googlePropertyPrompt = (address: string) => {
   const [street, ...location] = address.replace(/"/g, '').split(',').map(part => part.trim());
-  return `property details for "${street}" ${location.join(' ')}. Return ONLY a bulleted list using exactly this template: Address: | County: | Home Type: | Bedrooms: | Bathrooms: | Total Interior Area: | Lot Size: | Year Built: | Roof Material: | Parking Spaces: | HOA Fee: | Parcel Number: | Neighborhood: | Tax Assessed Value: | Annual Tax Amount:. Use "Not found" if unavailable.`;
+  return `property details for "${street}" ${location.join(' ')}. Return ONLY a bulleted list using exactly this template: Last Sale Price: | Address: | County: | Home Type: | Bedrooms: | Bathrooms: | Square Footage: | Lot Size: | Year Built: | Roof Material: | Parking Spaces: | HOA Fee: | Parcel Number: | Neighborhood: | Tax Assessed Value: | Annual Tax Amount:. Use "Not found" if unavailable. Don't explain any of the fields at all.`;
 };
 export const googlePropertyUrl = (address: string) =>
   `https://www.google.com/search?q=${encodeURIComponent(googlePropertyPrompt(address))}`;
@@ -22,7 +22,7 @@ export const googleFields = [
   ['taxAssessedValue', 'Tax assessed value', ['Tax Assessed Value', 'Assessed Value']],
   ['annualTaxAmount', 'Annual tax', ['Annual Tax Amount', 'Annual Taxes']],
   ['estimatedValue', 'Estimated value', ['Estimated Value', 'Zestimate']],
-  ['salePrice', 'Last sale amount', ['Last Sale Amount', 'Last Sale Price']],
+  ['salePrice', 'Last sale price', ['Last Sale Amount', 'Last Sale Price']],
   ['saleDate', 'Last sale date', ['Last Sale Date']],
 ] as const;
 

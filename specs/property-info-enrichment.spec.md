@@ -141,3 +141,6 @@ Display implementation: hosted Live View did not render in the embedded test. Us
 
 ## Current flow — Google copy/paste primary (supersedes cloud UI)
 Google opens on the user's device in a new tab. User copies property details, pastes, reviews, confirms address and saves. No cloud lookup controls or browser-session requests remain in the panel. Cached-first behavior and existing automatic county assessor lookup after save/on cached record remain unchanged. Prior cloud pilot code is retained separately, unused by current UI.
+
+## Last sale price and bid recommendation — 2026-10-01
+Google prompt now starts with Last Sale Price, uses Square Footage, and asks for no field explanations. Formula instructions are excluded per user. Preview shows last sale price and the workspace-rule recommendation; the record header derives the same bid from saved fields. See recommended-bid.spec.md. County enrichment remains separate.
